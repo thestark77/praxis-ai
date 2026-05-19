@@ -1,0 +1,75 @@
+praxis-ai
+Copyright 2026 sebas
+
+This product builds upon and references work from the following projects.
+None of their source code is forked or modified; they are referenced as
+runtime dependencies, recommended companions, or attributed lifts.
+
+============================================================================
+gentle-ai
+https://github.com/Gentleman-Programming/gentle-ai
+============================================================================
+
+Used as a runtime ecosystem dependency. praxis-ai detects gentle-ai's
+presence and integrates as an additive overlay. No source code from
+gentle-ai is copied, forked, or modified. praxis-ai's overlay is
+implemented entirely via Claude Code's @-import directive and HTML
+markers in CLAUDE.md, mirroring gentle-ai's own marker convention.
+
+============================================================================
+mattpocock/skills
+https://github.com/mattpocock/skills
+MIT License
+============================================================================
+
+Six specific skill files are lifted with attribution:
+  - grill-with-docs
+  - caveman
+  - diagnose
+  - zoom-out
+  - handoff
+  - prototype
+
+Each lifted skill ships with a per-skill NOTICE.md inside its directory
+under ~/.claude/skills/<skill-name>/. The NOTICE.md records:
+  - MIT License notice
+  - Upstream commit SHA
+  - Link to original source
+  - Statement of modifications (frontmatter additions, body rewrites
+    as mechanism rather than ideology)
+
+The bodies of the lifted skills are restructured to be procedural rather
+than philosophical, to prevent contradiction with gentle-ai's autonomous
+orchestrator instructions when both are loaded in context. The procedural
+content remains faithful to the original intent.
+
+============================================================================
+RTK (Rust Token Killer)
+https://github.com/rtk-ai/rtk
+Apache-2.0 License
+============================================================================
+
+Recommended as orthogonal tooling for shell-output compression. Not
+bundled with praxis-ai. praxis-ai detects RTK's presence and adds a
+project-local RTK.md template when initializing a project.
+
+============================================================================
+Research influences (no code copied)
+============================================================================
+
+Design principles distilled from public research and engineering posts by:
+  - Anthropic (Building Effective Agents, Claude Code Best Practices,
+    Trustworthy Agents, Measuring Agent Autonomy)
+  - OpenAI (Model Spec, Practices for Governing Agentic AI Systems,
+    The Instruction Hierarchy)
+  - Google Cloud (Choose a Design Pattern for Agentic AI, Lessons from
+    2025 on Agents and Trust)
+  - Academic: ReAct (Yao et al. 2022), Reflexion (Shinn et al. 2023),
+    Plan-and-Solve (Wang et al. 2023), Lost in the Middle (Liu et al.
+    2023), SWE-agent (Yang et al. 2024)
+  - Practitioners: Matt Pocock, Simon Willison, Andrej Karpathy,
+    Geoffrey Litt, Thorsten Ball, Steve Yegge, Paul Gauthier, swyx
+  - Cognition AI — Don't Build Multi-Agents (2025)
+  - Drew Breunig — How Long Contexts Fail (2025)
+
+See docs/references.md for the full bibliography.

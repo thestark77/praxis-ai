@@ -1,0 +1,79 @@
+import { mkdir, readdir, copyFile, stat, rm } from 'node:fs/promises';
+import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve as resolvePath } from 'node:path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+export const DEFAULT_TEMPLATES_ROOT = resolvePath(__dirname, '..', 'templates', 'praxis-home');
+
+export interface InstallSkeletonOptions {
+  templatesRoot: string;
+  praxisDir: string;
+  overwrite?: boolean;
+}
+
+export interface SkeletonResult {
+  installed: string[];
+  skipped: string[];
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function walkDir(root: string): Promise<string[]> {
+  const out: string[] = [];
+  async function recurse(dir: string): Promise<void> {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await recurse(full);
+      } else if (entry.isFile()) {
+        out.push(full);
+      }
+    }
+  }
+  await recurse(root);
+  return out;
+}
+
+export async function installSkeleton(opts: InstallSkeletonOptions): Promise<SkeletonResult> {
+  const templatesExists = await pathExists(opts.templatesRoot);
+  if (!templatesExists) {
+    throw new Error(`Templates directory not found: ${opts.templatesRoot}`);
+  }
+
+  await mkdir(opts.praxisDir, { recursive: true });
+
+  const sources = await walkDir(opts.templatesRoot);
+  const installed: string[] = [];
+  const skipped: string[] = [];
+
+  for (const source of sources) {
+    const relativeTo = relative(opts.templatesRoot, source);
+    const dest = join(opts.praxisDir, relativeTo);
+    await mkdir(dirname(dest), { recursive: true });
+    if (!opts.overwrite && (await pathExists(dest))) {
+      skipped.push(relativeTo);
+      continue;
+    }
+    await copyFile(source, dest);
+    installed.push(relativeTo);
+  }
+
+  return { installed, skipped };
+}
+
+export async function uninstallSkeleton(praxisDir: string): Promise<void> {
+  if (await pathExists(praxisDir)) {
+    await rm(praxisDir, { recursive: true, force: true });
+  }
+}

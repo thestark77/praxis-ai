@@ -4,14 +4,23 @@ import { detect, installModeFor, type InstallMode } from './detector.js';
 import { createBackup } from './backup.js';
 import { patchClaudeMd } from './claudemd-patcher.js';
 import { patchSettings, unpatchSettings } from './settings-patcher.js';
-import { installSkeleton, uninstallSkeleton, DEFAULT_TEMPLATES_ROOT } from './skeleton-installer.js';
+import {
+  installSkeleton,
+  uninstallSkeleton,
+  installClaudeSkills,
+  uninstallClaudeSkills,
+  DEFAULT_TEMPLATES_ROOT,
+  DEFAULT_CLAUDE_SKILLS_TEMPLATES_ROOT,
+} from './skeleton-installer.js';
 import { unpatchClaudeMd } from './claudemd-patcher.js';
 import { restoreLatestBackup } from './backup.js';
 import { FIREWALL_DEFAULTS, PRAXIS_IMPORT_PATH } from '../data/firewall-defaults.js';
+import { POCOCK_SKILL_NAMES } from '../data/pocock-skills.js';
 
 export interface InstallOptions {
   paths?: PraxisPaths;
   templatesRoot?: string;
+  claudeSkillsTemplatesRoot?: string;
   firewallEntries?: string[];
   importPath?: string;
   dryRun?: boolean;
@@ -23,6 +32,8 @@ export interface InstallResult {
   backupPath: string | null;
   skeletonInstalled: string[];
   skeletonSkipped: string[];
+  claudeSkillsInstalled: string[];
+  claudeSkillsSkipped: string[];
   firewallEntriesAdded: number;
   claudeMdPatched: boolean;
   warnings: string[];
@@ -31,6 +42,8 @@ export interface InstallResult {
 export async function runInstall(opts: InstallOptions = {}): Promise<InstallResult> {
   const paths = opts.paths ?? resolvePaths();
   const templatesRoot = opts.templatesRoot ?? DEFAULT_TEMPLATES_ROOT;
+  const claudeSkillsTemplatesRoot =
+    opts.claudeSkillsTemplatesRoot ?? DEFAULT_CLAUDE_SKILLS_TEMPLATES_ROOT;
   const firewallEntries = opts.firewallEntries ?? FIREWALL_DEFAULTS;
   const importPath = opts.importPath ?? PRAXIS_IMPORT_PATH;
   const dryRun = opts.dryRun ?? false;
@@ -63,6 +76,8 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
       backupPath: null,
       skeletonInstalled: [],
       skeletonSkipped: [],
+      claudeSkillsInstalled: [],
+      claudeSkillsSkipped: [],
       firewallEntriesAdded: 0,
       claudeMdPatched: false,
       warnings,
@@ -80,6 +95,13 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
     overwrite: opts.force,
   });
 
+  const claudeSkills = await installClaudeSkills({
+    templatesRoot: claudeSkillsTemplatesRoot,
+    claudeSkillsDir: paths.claudeSkillsDir,
+    skills: POCOCK_SKILL_NAMES,
+    overwrite: opts.force,
+  });
+
   await patchClaudeMd(paths.claudeMd, importPath);
   await patchSettings(paths.settingsJson, firewallEntries);
 
@@ -88,6 +110,8 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
     backupPath,
     skeletonInstalled: skeleton.installed,
     skeletonSkipped: skeleton.skipped,
+    claudeSkillsInstalled: claudeSkills.installed,
+    claudeSkillsSkipped: claudeSkills.skipped,
     firewallEntriesAdded: firewallEntries.length,
     claudeMdPatched: true,
     warnings,
@@ -98,6 +122,7 @@ export interface UninstallOptions {
   paths?: PraxisPaths;
   firewallEntries?: string[];
   removeSkeleton?: boolean;
+  removeClaudeSkills?: boolean;
   keepBackup?: boolean;
 }
 
@@ -105,6 +130,7 @@ export interface UninstallResult {
   removedClaudeMdBlock: boolean;
   removedFirewallEntries: number;
   removedSkeleton: boolean;
+  removedClaudeSkills: string[];
   restoredFromBackup: string | null;
 }
 
@@ -112,6 +138,7 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<Uninsta
   const paths = opts.paths ?? resolvePaths();
   const firewallEntries = opts.firewallEntries ?? FIREWALL_DEFAULTS;
   const removeSkeleton = opts.removeSkeleton ?? true;
+  const removeClaudeSkillsFlag = opts.removeClaudeSkills ?? true;
 
   const removedClaudeMdBlock = await unpatchClaudeMd(paths.claudeMd);
   await unpatchSettings(paths.settingsJson, firewallEntries);
@@ -120,10 +147,15 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<Uninsta
     await uninstallSkeleton(paths.praxisDir);
   }
 
+  const removedClaudeSkills = removeClaudeSkillsFlag
+    ? await uninstallClaudeSkills(paths.claudeSkillsDir, POCOCK_SKILL_NAMES)
+    : [];
+
   return {
     removedClaudeMdBlock,
     removedFirewallEntries: firewallEntries.length,
     removedSkeleton: removeSkeleton,
+    removedClaudeSkills,
     restoredFromBackup: null,
   };
 }

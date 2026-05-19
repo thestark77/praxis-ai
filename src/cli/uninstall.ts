@@ -5,13 +5,18 @@ export function uninstallCommand(): Command {
   return new Command('uninstall')
     .description('Remove praxis from ~/.claude/. Removes the @-import block and firewall rules.')
     .option('--keep-skeleton', 'leave ~/.praxis/ in place')
-    .action(async (opts: { keepSkeleton?: boolean }) => {
+    .option('--keep-skills', 'leave ~/.claude/skills/ lifted skill dirs in place')
+    .action(async (opts: { keepSkeleton?: boolean; keepSkills?: boolean }) => {
       try {
-        const result = await runUninstall({ removeSkeleton: !opts.keepSkeleton });
+        const result = await runUninstall({
+          removeSkeleton: !opts.keepSkeleton,
+          removeClaudeSkills: !opts.keepSkills,
+        });
         console.log('praxis-ai uninstall');
         console.log(`  CLAUDE.md @-import removed: ${result.removedClaudeMdBlock}`);
         console.log(`  firewall rules removed: ${result.removedFirewallEntries}`);
         console.log(`  ~/.praxis/ removed: ${result.removedSkeleton}`);
+        console.log(`  claude-skills removed: ${result.removedClaudeSkills.length}`);
         if (!opts.keepSkeleton) {
           console.log('');
           console.log('  Tip: `praxis rollback` restores CLAUDE.md and settings.json');

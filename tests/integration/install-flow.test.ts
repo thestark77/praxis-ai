@@ -5,18 +5,10 @@ import { join } from 'node:path';
 import { resolvePaths } from '../../src/lib/paths.js';
 import { createBackup, restoreLatestBackup } from '../../src/lib/backup.js';
 import { patchClaudeMd, unpatchClaudeMd, hasPraxisBlock } from '../../src/lib/claudemd-patcher.js';
-import {
-  patchSettings,
-  unpatchSettings,
-  readSettings,
-} from '../../src/lib/settings-patcher.js';
+import { patchSettings, unpatchSettings, readSettings } from '../../src/lib/settings-patcher.js';
 import { detect, installModeFor } from '../../src/lib/detector.js';
 
-const PRAXIS_DENY_FIXTURE = [
-  'Bash(rm -rf *)',
-  'Bash(git push --force*)',
-  'Bash(*--no-verify*)',
-];
+const PRAXIS_DENY_FIXTURE = ['Bash(rm -rf *)', 'Bash(git push --force*)', 'Bash(*--no-verify*)'];
 
 const PRAXIS_IMPORT = '~/.praxis/main.md';
 

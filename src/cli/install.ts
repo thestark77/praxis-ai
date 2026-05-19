@@ -20,6 +20,9 @@ export function installCommand(): Command {
           console.log(
             `  skeleton: ${result.skeletonInstalled.length} installed, ${result.skeletonSkipped.length} skipped`,
           );
+          console.log(
+            `  claude-skills: ${result.claudeSkillsInstalled.length} installed, ${result.claudeSkillsSkipped.length} skipped`,
+          );
           console.log(`  CLAUDE.md @-import injected: ${result.claudeMdPatched}`);
           console.log(`  firewall rules added: ${result.firewallEntriesAdded}`);
         }

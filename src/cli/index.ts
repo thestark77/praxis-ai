@@ -6,6 +6,7 @@ import { doctorCommand } from './doctor.js';
 import { rollbackCommand } from './rollback.js';
 import { statsCommand } from './stats.js';
 import { contextUsageCommand } from './context-usage.js';
+import { syncPocockCommand } from './sync-pocock.js';
 
 const program = new Command();
 
@@ -23,5 +24,6 @@ program.addCommand(doctorCommand());
 program.addCommand(rollbackCommand());
 program.addCommand(statsCommand());
 program.addCommand(contextUsageCommand());
+program.addCommand(syncPocockCommand());
 
 program.parse(process.argv);

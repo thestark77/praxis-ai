@@ -7,10 +7,24 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export const DEFAULT_TEMPLATES_ROOT = resolvePath(__dirname, '..', 'templates', 'praxis-home');
+export const DEFAULT_CLAUDE_SKILLS_TEMPLATES_ROOT = resolvePath(
+  __dirname,
+  '..',
+  'templates',
+  'claude-skills',
+);
 
 export interface InstallSkeletonOptions {
   templatesRoot: string;
   praxisDir: string;
+  overwrite?: boolean;
+}
+
+export interface InstallClaudeSkillsOptions {
+  templatesRoot: string;
+  claudeSkillsDir: string;
+  /** Restrict to a subset of top-level skill directories. Default: install all. */
+  skills?: string[];
   overwrite?: boolean;
 }
 
@@ -76,4 +90,58 @@ export async function uninstallSkeleton(praxisDir: string): Promise<void> {
   if (await pathExists(praxisDir)) {
     await rm(praxisDir, { recursive: true, force: true });
   }
+}
+
+export async function installClaudeSkills(
+  opts: InstallClaudeSkillsOptions,
+): Promise<SkeletonResult> {
+  const templatesExists = await pathExists(opts.templatesRoot);
+  if (!templatesExists) {
+    throw new Error(`Claude skills templates directory not found: ${opts.templatesRoot}`);
+  }
+
+  await mkdir(opts.claudeSkillsDir, { recursive: true });
+
+  const topLevelEntries = await readdir(opts.templatesRoot, { withFileTypes: true });
+  const installed: string[] = [];
+  const skipped: string[] = [];
+
+  for (const entry of topLevelEntries) {
+    if (!entry.isDirectory()) continue;
+    if (opts.skills && !opts.skills.includes(entry.name)) continue;
+
+    const sourceDir = join(opts.templatesRoot, entry.name);
+    const destDir = join(opts.claudeSkillsDir, entry.name);
+    await mkdir(destDir, { recursive: true });
+
+    const sources = await walkDir(sourceDir);
+    for (const source of sources) {
+      const relativeTo = relative(opts.templatesRoot, source);
+      const dest = join(opts.claudeSkillsDir, relativeTo);
+      await mkdir(dirname(dest), { recursive: true });
+      if (!opts.overwrite && (await pathExists(dest))) {
+        skipped.push(relativeTo);
+        continue;
+      }
+      await copyFile(source, dest);
+      installed.push(relativeTo);
+    }
+  }
+
+  return { installed, skipped };
+}
+
+export async function uninstallClaudeSkills(
+  claudeSkillsDir: string,
+  skills: string[],
+): Promise<string[]> {
+  const removed: string[] = [];
+  for (const name of skills) {
+    const dir = join(claudeSkillsDir, name);
+    if (await pathExists(dir)) {
+      await rm(dir, { recursive: true, force: true });
+      removed.push(name);
+    }
+  }
+  return removed;
 }

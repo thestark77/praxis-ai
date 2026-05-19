@@ -6,6 +6,7 @@ export interface PraxisPaths {
   claudeDir: string;
   claudeMd: string;
   settingsJson: string;
+  claudeSkillsDir: string;
   praxisDir: string;
   backupsDir: string;
   cacheDir: string;
@@ -20,6 +21,7 @@ export function resolvePaths(home: string = homedir()): PraxisPaths {
     claudeDir,
     claudeMd: join(claudeDir, 'CLAUDE.md'),
     settingsJson: join(claudeDir, 'settings.json'),
+    claudeSkillsDir: join(claudeDir, 'skills'),
     praxisDir,
     backupsDir: join(praxisDir, 'backups'),
     cacheDir: join(praxisDir, 'cache'),

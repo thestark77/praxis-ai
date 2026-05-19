@@ -2,7 +2,12 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtemp, mkdir, writeFile, readFile, readdir, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { installSkeleton, uninstallSkeleton } from '../../src/lib/skeleton-installer.js';
+import {
+  installSkeleton,
+  uninstallSkeleton,
+  installClaudeSkills,
+  uninstallClaudeSkills,
+} from '../../src/lib/skeleton-installer.js';
 
 let workDir: string;
 let templatesRoot: string;
@@ -113,5 +118,109 @@ describe('integration: bundled templates resolve at runtime', () => {
     expect(entries).toContain('grilling.md');
     expect(entries).toContain('context-conventions.md');
     expect(entries).toContain('presets');
+  });
+});
+
+describe('installClaudeSkills (HOME sandbox)', () => {
+  let workDir: string;
+  let templatesRoot: string;
+  let claudeSkillsDir: string;
+
+  beforeEach(async () => {
+    workDir = await mkdtemp(join(tmpdir(), 'praxis-claude-skills-test-'));
+    templatesRoot = join(workDir, 'templates', 'claude-skills');
+    claudeSkillsDir = join(workDir, 'home', '.claude', 'skills');
+    await mkdir(templatesRoot, { recursive: true });
+
+    // Build a fake two-skill template tree
+    await mkdir(join(templatesRoot, 'alpha'), { recursive: true });
+    await writeFile(join(templatesRoot, 'alpha', 'SKILL.md'), 'alpha skill', 'utf8');
+    await writeFile(join(templatesRoot, 'alpha', 'NOTICE.md'), 'alpha notice', 'utf8');
+    await mkdir(join(templatesRoot, 'beta'), { recursive: true });
+    await writeFile(join(templatesRoot, 'beta', 'SKILL.md'), 'beta skill', 'utf8');
+    await writeFile(join(templatesRoot, 'beta', 'NOTICE.md'), 'beta notice', 'utf8');
+  });
+
+  it('throws when templates directory does not exist', async () => {
+    await expect(
+      installClaudeSkills({
+        templatesRoot: join(workDir, 'missing'),
+        claudeSkillsDir,
+      }),
+    ).rejects.toThrow(/Claude skills templates directory not found/);
+  });
+
+  it('copies all skill dirs and preserves the per-skill directory structure', async () => {
+    const result = await installClaudeSkills({ templatesRoot, claudeSkillsDir });
+    expect(result.installed.sort()).toEqual(
+      ['alpha/SKILL.md', 'alpha/NOTICE.md', 'beta/SKILL.md', 'beta/NOTICE.md'].sort(),
+    );
+    expect(result.skipped).toEqual([]);
+    const alphaSkill = await readFile(join(claudeSkillsDir, 'alpha', 'SKILL.md'), 'utf8');
+    expect(alphaSkill).toBe('alpha skill');
+  });
+
+  it('restricts installation to the configured skills subset', async () => {
+    const result = await installClaudeSkills({
+      templatesRoot,
+      claudeSkillsDir,
+      skills: ['alpha'],
+    });
+    expect(result.installed.sort()).toEqual(['alpha/NOTICE.md', 'alpha/SKILL.md'].sort());
+    await expect(stat(join(claudeSkillsDir, 'beta'))).rejects.toThrow();
+  });
+
+  it('skips existing destination files when overwrite is false (idempotent)', async () => {
+    await mkdir(join(claudeSkillsDir, 'alpha'), { recursive: true });
+    await writeFile(join(claudeSkillsDir, 'alpha', 'SKILL.md'), 'user-customised', 'utf8');
+    const result = await installClaudeSkills({ templatesRoot, claudeSkillsDir });
+    expect(result.skipped).toContain('alpha/SKILL.md');
+    const preserved = await readFile(join(claudeSkillsDir, 'alpha', 'SKILL.md'), 'utf8');
+    expect(preserved).toBe('user-customised');
+  });
+
+  it('overwrites existing destinations when overwrite is true', async () => {
+    await mkdir(join(claudeSkillsDir, 'alpha'), { recursive: true });
+    await writeFile(join(claudeSkillsDir, 'alpha', 'SKILL.md'), 'user-customised', 'utf8');
+    await installClaudeSkills({ templatesRoot, claudeSkillsDir, overwrite: true });
+    const overwritten = await readFile(join(claudeSkillsDir, 'alpha', 'SKILL.md'), 'utf8');
+    expect(overwritten).toBe('alpha skill');
+  });
+
+  it('uninstallClaudeSkills removes only the named skill dirs', async () => {
+    await installClaudeSkills({ templatesRoot, claudeSkillsDir });
+    const removed = await uninstallClaudeSkills(claudeSkillsDir, ['alpha']);
+    expect(removed).toEqual(['alpha']);
+    await expect(stat(join(claudeSkillsDir, 'alpha'))).rejects.toThrow();
+    const betaSkill = await stat(join(claudeSkillsDir, 'beta'));
+    expect(betaSkill.isDirectory()).toBe(true);
+  });
+
+  it('uninstallClaudeSkills is safe when target dirs do not exist', async () => {
+    const removed = await uninstallClaudeSkills(claudeSkillsDir, ['ghost']);
+    expect(removed).toEqual([]);
+  });
+});
+
+describe('integration: bundled claude-skills resolve at runtime', () => {
+  it('the package ships the six lifted skills with SKILL.md and NOTICE.md', async () => {
+    const pkgRoot = join(import.meta.dirname, '..', '..');
+    const repoSkillsRoot = join(pkgRoot, 'templates', 'claude-skills');
+    const exists = await stat(repoSkillsRoot);
+    expect(exists.isDirectory()).toBe(true);
+    const entries = await readdir(repoSkillsRoot);
+    for (const name of [
+      'grill-with-docs',
+      'caveman',
+      'diagnose',
+      'zoom-out',
+      'prototype',
+      'handoff',
+    ]) {
+      expect(entries).toContain(name);
+      const files = await readdir(join(repoSkillsRoot, name));
+      expect(files, `${name} missing SKILL.md`).toContain('SKILL.md');
+      expect(files, `${name} missing NOTICE.md`).toContain('NOTICE.md');
+    }
   });
 });

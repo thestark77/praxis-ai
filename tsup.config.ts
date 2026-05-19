@@ -1,7 +1,10 @@
 import { defineConfig } from 'tsup';
 
 export default defineConfig({
-  entry: ['src/cli/index.ts'],
+  entry: {
+    index: 'src/cli/index.ts',
+    'ast-hook': 'src/cli/ast-hook.ts',
+  },
   format: ['esm'],
   outDir: 'dist',
   target: 'node18',

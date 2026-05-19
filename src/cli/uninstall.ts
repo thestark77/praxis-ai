@@ -17,6 +17,7 @@ export function uninstallCommand(): Command {
         console.log(`  firewall rules removed: ${result.removedFirewallEntries}`);
         console.log(`  ~/.praxis/ removed: ${result.removedSkeleton}`);
         console.log(`  claude-skills removed: ${result.removedClaudeSkills.length}`);
+        console.log(`  AST PreToolUse hook removed: ${result.removedAstHook}`);
         if (!opts.keepSkeleton) {
           console.log('');
           console.log('  Tip: `praxis rollback` restores CLAUDE.md and settings.json');

@@ -5,7 +5,8 @@
   "type": "module",
   "private": true,
   "bin": {
-    "praxis": "./bin/praxis.js"
+    "praxis": "./bin/praxis.js",
+    "praxis-ast-hook": "./bin/praxis-ast-hook.js"
   },
   "main": "./dist/index.js",
   "files": [

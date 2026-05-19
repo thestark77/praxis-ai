@@ -6,6 +6,14 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Added — M3 AST PreToolUse Hook
+- `praxis-ast-hook` binary — second line of defence against creative bypasses the regex deny list silently misses. Reads Claude Code PreToolUse JSON via stdin, inspects Bash commands, emits a `permissionDecision` JSON on stdout.
+- Custom dependency-light bash tokeniser (`src/lib/ast/tokeniser.ts`) splits on `;`, `&&`, `||`, `|`, `&` while respecting quote and substitution contexts. `$(...)` and backtick bodies are also extracted and rule-checked.
+- Rules: `rm-recursive-force`, `find-delete`, `git-force-push` (incl. `--force-with-lease`), `git-reset-hard`, `no-verify` / `no-gpg-sign`, `sudo-escalation`, `encoded-execution` (base64/xxd/openssl/printf-hex piped into sh/bash/eval), `dd-block-device`, `mkfs`. Each rule maps to a reversibility class (history-rewrite, data-loss, exec-bypass, etc.) the user sees in the deny reason.
+- Hook is auto-registered on `praxis install` via a new `hooks.PreToolUse` block in settings.json with a `#praxis-ast-hook#` marker. Idempotent; existing user hooks preserved. Removed on `praxis uninstall`.
+- 41 new tests (tokeniser 12, rules+inspect 22, settings-patcher hook 7, hook binary 6 — all sandboxed). Total 178/178 passing.
+- New package bin: `praxis-ast-hook` (in addition to `praxis`). tsup config produces two entries.
+
 ### Added — M4 Telemetry Foundation
 - SQLite telemetry at `~/.praxis/telemetry.db` via `better-sqlite3`. Single events table with typed JSON payload (`session_start`, `session_end`, `phase_transition`, `tool_invocation`, `deny_hit`, `context_sample`). WAL mode, schema_version stamping, idempotent migrations.
 - `src/lib/telemetry/` module: `schema.ts` (DDL + event kinds), `db.ts` (lazy open + migration), `events.ts` (typed record helpers), `queries.ts` (`statsSummary`, `latestContextSample`, `resetEvents`).

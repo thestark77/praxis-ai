@@ -3,7 +3,14 @@ import { resolvePaths, type PraxisPaths } from './paths.js';
 import { detect, installModeFor, type InstallMode } from './detector.js';
 import { createBackup } from './backup.js';
 import { patchClaudeMd } from './claudemd-patcher.js';
-import { patchSettings, unpatchSettings } from './settings-patcher.js';
+import {
+  patchSettings,
+  unpatchSettings,
+  addPraxisAstHook,
+  removePraxisAstHook,
+  readSettings,
+  writeSettings,
+} from './settings-patcher.js';
 import {
   installSkeleton,
   uninstallSkeleton,
@@ -23,6 +30,8 @@ export interface InstallOptions {
   claudeSkillsTemplatesRoot?: string;
   firewallEntries?: string[];
   importPath?: string;
+  /** Shell command Claude Code should execute as the AST PreToolUse hook. */
+  astHookCommand?: string;
   dryRun?: boolean;
   force?: boolean;
 }
@@ -36,8 +45,16 @@ export interface InstallResult {
   claudeSkillsSkipped: string[];
   firewallEntriesAdded: number;
   claudeMdPatched: boolean;
+  astHookRegistered: boolean;
   warnings: string[];
 }
+
+/**
+ * Default shell command for the praxis AST PreToolUse hook. Resolves to
+ * the bin shim inside the installed package; users can override via
+ * InstallOptions.astHookCommand.
+ */
+export const DEFAULT_AST_HOOK_COMMAND = 'praxis-ast-hook';
 
 export async function runInstall(opts: InstallOptions = {}): Promise<InstallResult> {
   const paths = opts.paths ?? resolvePaths();
@@ -80,6 +97,7 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
       claudeSkillsSkipped: [],
       firewallEntriesAdded: 0,
       claudeMdPatched: false,
+      astHookRegistered: false,
       warnings,
     };
   }
@@ -105,6 +123,11 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
   await patchClaudeMd(paths.claudeMd, importPath);
   await patchSettings(paths.settingsJson, firewallEntries);
 
+  const astHookCommand = opts.astHookCommand ?? DEFAULT_AST_HOOK_COMMAND;
+  const settingsBeforeHook = await readSettings(paths.settingsJson);
+  const settingsWithHook = addPraxisAstHook(settingsBeforeHook, astHookCommand);
+  await writeSettings(paths.settingsJson, settingsWithHook);
+
   return {
     mode,
     backupPath,
@@ -114,6 +137,7 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
     claudeSkillsSkipped: claudeSkills.skipped,
     firewallEntriesAdded: firewallEntries.length,
     claudeMdPatched: true,
+    astHookRegistered: true,
     warnings,
   };
 }
@@ -131,6 +155,7 @@ export interface UninstallResult {
   removedFirewallEntries: number;
   removedSkeleton: boolean;
   removedClaudeSkills: string[];
+  removedAstHook: boolean;
   restoredFromBackup: string | null;
 }
 
@@ -142,6 +167,14 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<Uninsta
 
   const removedClaudeMdBlock = await unpatchClaudeMd(paths.claudeMd);
   await unpatchSettings(paths.settingsJson, firewallEntries);
+
+  // Remove the praxis AST hook entry from settings.json.
+  const settingsBeforeHook = await readSettings(paths.settingsJson);
+  const settingsWithoutHook = removePraxisAstHook(settingsBeforeHook);
+  const removedAstHook =
+    JSON.stringify(settingsBeforeHook.hooks ?? {}) !==
+    JSON.stringify(settingsWithoutHook.hooks ?? {});
+  await writeSettings(paths.settingsJson, settingsWithoutHook);
 
   if (removeSkeleton) {
     await uninstallSkeleton(paths.praxisDir);
@@ -156,6 +189,7 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<Uninsta
     removedFirewallEntries: firewallEntries.length,
     removedSkeleton: removeSkeleton,
     removedClaudeSkills,
+    removedAstHook,
     restoredFromBackup: null,
   };
 }

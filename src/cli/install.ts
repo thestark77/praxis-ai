@@ -25,6 +25,7 @@ export function installCommand(): Command {
           );
           console.log(`  CLAUDE.md @-import injected: ${result.claudeMdPatched}`);
           console.log(`  firewall rules added: ${result.firewallEntriesAdded}`);
+          console.log(`  AST PreToolUse hook registered: ${result.astHookRegistered}`);
         }
         if (result.warnings.length > 0) {
           console.log('');

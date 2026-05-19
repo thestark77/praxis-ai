@@ -1,8 +1,17 @@
 # Irreversibility firewall
 
-praxis-ai's irreversibility containment is a two-layer system. Layer 1
-is fast, declarative, and easy to audit. Layer 2 is the second line of
-defence against creative bypasses Layer 1 silently misses.
+praxis-ai's irreversibility containment is a two-layer system. Both
+layers are always active when praxis is installed; they catch
+overlapping but not identical sets of dangerous actions, and the order
+in which they fire is determined by Claude Code, not by praxis-ai.
+
+For Bash tool calls, the AST PreToolUse hook fires first because Claude
+Code runs `PreToolUse` hooks before the permission check. If the hook
+returns `deny`, the tool is blocked and the deny list is never consulted
+for that call. If the hook returns `allow`, the deny list is then
+evaluated. The deny list is the fallback for the case where the hook
+crashes or fails open, and it is the primary enforcer for non-Bash
+tool calls (where the AST hook is not invoked).
 
 ## Layer 1 — regex deny list
 

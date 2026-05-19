@@ -15,13 +15,23 @@ export function uninstallCommand(): Command {
         console.log('praxis-ai uninstall');
         console.log(`  CLAUDE.md @-import removed: ${result.removedClaudeMdBlock}`);
         console.log(`  firewall rules removed: ${result.removedFirewallEntries}`);
-        console.log(`  ~/.praxis/ removed: ${result.removedSkeleton}`);
+        if (result.removedSkeleton) {
+          if (result.praxisDirFullyRemoved) {
+            console.log(`  ~/.praxis/ removed: true (no user data was present)`);
+          } else {
+            console.log(
+              `  ~/.praxis/ install artefacts removed; backups preserved for \`praxis rollback\``,
+            );
+          }
+        } else {
+          console.log(`  ~/.praxis/ left in place (--keep-skeleton)`);
+        }
         console.log(`  claude-skills removed: ${result.removedClaudeSkills.length}`);
         console.log(`  AST PreToolUse hook removed: ${result.removedAstHook}`);
-        if (!opts.keepSkeleton) {
+        if (!opts.keepSkeleton && !result.praxisDirFullyRemoved) {
           console.log('');
           console.log('  Tip: `praxis rollback` restores CLAUDE.md and settings.json');
-          console.log('       from the most recent backup if you want a deeper revert.');
+          console.log('       from the most recent preserved backup.');
         }
         process.exit(0);
       } catch (err) {

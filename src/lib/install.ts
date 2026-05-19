@@ -180,7 +180,14 @@ export interface UninstallOptions {
 export interface UninstallResult {
   removedClaudeMdBlock: boolean;
   removedFirewallEntries: number;
+  /** True if praxis-home install artefacts were removed from ~/.praxis/. */
   removedSkeleton: boolean;
+  /**
+   * True when the whole ~/.praxis/ directory is gone after uninstall.
+   * False when the directory still exists because user data (backups/,
+   * telemetry.db) was preserved by uninstallSkeleton.
+   */
+  praxisDirFullyRemoved: boolean;
   removedClaudeSkills: string[];
   removedAstHook: boolean;
   restoredFromBackup: string | null;
@@ -211,10 +218,21 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<Uninsta
     ? await uninstallClaudeSkills(paths.claudeSkillsDir, POCOCK_SKILL_NAMES)
     : [];
 
+  // Was the whole praxis dir actually removed, or did backups/telemetry survive?
+  const { stat } = await import('node:fs/promises');
+  let praxisDirFullyRemoved = false;
+  try {
+    await stat(paths.praxisDir);
+    praxisDirFullyRemoved = false;
+  } catch {
+    praxisDirFullyRemoved = true;
+  }
+
   return {
     removedClaudeMdBlock,
     removedFirewallEntries: firewallEntries.length,
     removedSkeleton: removeSkeleton,
+    praxisDirFullyRemoved,
     removedClaudeSkills,
     removedAstHook,
     restoredFromBackup: null,

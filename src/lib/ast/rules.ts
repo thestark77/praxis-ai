@@ -412,11 +412,75 @@ const pipInstallTarget: Rule = {
   },
 };
 
+// git update-ref against refs/heads/* or refs/tags/* — bypasses the
+// porcelain layer, rewrites a ref to an arbitrary commit, leaves no
+// reflog entry for the previous tip in many cases.
+const gitUpdateRef: Rule = {
+  id: 'git-update-ref',
+  inspect(command) {
+    const toks = tokens(command);
+    if (toks[0] !== 'git' || toks[1] !== 'update-ref') return null;
+    // Look for a ref argument that looks like refs/heads or refs/tags.
+    for (const t of toks.slice(2)) {
+      if (t.startsWith('refs/heads/') || t.startsWith('refs/tags/')) {
+        return {
+          ruleId: 'git-update-ref',
+          reversibilityClass: 'history-rewrite',
+          message:
+            '`git update-ref` against `refs/heads/*` or `refs/tags/*` bypasses the porcelain layer and rewrites a ref to an arbitrary commit. Hard to walk back.',
+        };
+      }
+    }
+    return null;
+  },
+};
+
+// git filter-branch — rewrites every commit on every ref the filter
+// touches. Bulk history rewrite.
+const gitFilterBranch: Rule = {
+  id: 'git-filter-branch',
+  inspect(command) {
+    const toks = tokens(command);
+    if (toks[0] !== 'git' || toks[1] !== 'filter-branch') return null;
+    return {
+      ruleId: 'git-filter-branch',
+      reversibilityClass: 'history-rewrite',
+      message:
+        '`git filter-branch` rewrites every commit on every ref it touches. Recovery requires the reflog to still hold the old tips.',
+    };
+  },
+};
+
+// npm install --force / -f — skips peer-dependency conflict resolution
+// and silently overwrites the lockfile contract. Often used to mask
+// a real dependency-graph problem.
+const npmInstallForce: Rule = {
+  id: 'npm-install-force',
+  inspect(command) {
+    const toks = tokens(command);
+    if (toks[0] !== 'npm' && toks[0] !== 'pnpm' && toks[0] !== 'yarn') return null;
+    if (toks[1] !== 'install' && toks[1] !== 'i' && toks[1] !== 'add') return null;
+    for (const t of toks.slice(2)) {
+      if (t === '--force' || t === '-f') {
+        return {
+          ruleId: 'npm-install-force',
+          reversibilityClass: 'exec-bypass',
+          message:
+            '`npm install --force` (or pnpm/yarn equivalent) skips peer-dependency conflict resolution. Often masks a real dependency-graph problem and writes a lockfile that lies.',
+        };
+      }
+    }
+    return null;
+  },
+};
+
 export const DEFAULT_RULES: Rule[] = [
   rmDangerous,
   findDelete,
   gitForcePush,
   gitResetHard,
+  gitUpdateRef,
+  gitFilterBranch,
   noVerify,
   sudoEscalation,
   encodedExecution,
@@ -427,4 +491,5 @@ export const DEFAULT_RULES: Rule[] = [
   tarAbsolute,
   curlPipeShell,
   pipInstallTarget,
+  npmInstallForce,
 ];

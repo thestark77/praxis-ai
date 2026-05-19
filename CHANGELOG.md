@@ -6,6 +6,55 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Added — M3.10 — three new AST rules
+Extends the L2 rule set from 14 to 17:
+
+- `git-update-ref` (history-rewrite): `git update-ref refs/heads/*` or `refs/tags/*` bypasses the porcelain layer.
+- `git-filter-branch` (history-rewrite): bulk history rewrite across every commit on every touched ref.
+- `npm-install-force` (exec-bypass): `npm install --force`, `npm i -f`, `pnpm install --force`, `yarn add --force`. Skips peer-dependency conflict resolution and writes a misleading lockfile.
+
+14 new tests across the three rules. Total 223/223 passing.
+
+### Fixed — M3.9 — `praxis uninstall` stdout reflects actual filesystem state
+`runUninstall` now returns `praxisDirFullyRemoved` (boolean) which the
+CLI uses to print one of three accurate messages:
+
+- `~/.praxis/ removed: true (no user data was present)`
+- `~/.praxis/ install artefacts removed; backups preserved for `praxis rollback``
+- `~/.praxis/ left in place (--keep-skeleton)`
+
+The rollback Tip is suppressed when no backups remain. Replaces the
+misleading "~/.praxis/ removed: true" that surfaced in alpha.3 even
+when backups survived. Cosmetic-only; functional behaviour unchanged.
+
+### Fixed — M3.8 — `praxis uninstall` preserves `~/.praxis/backups/`
+Caught by scenario T14 (install / uninstall / rollback round-trip).
+
+The previous `uninstall` wiped the whole praxis directory, including
+`backups/`. That orphaned `praxis rollback` — its only data source was
+the directory uninstall had just deleted.
+
+`uninstallSkeleton` now walks the praxis dir and skips a preserve set
+(`backups`, `telemetry.db`). When nothing user-owned remains, the dir
+is removed entirely so the empty-case behaviour is unchanged. P2
+(minimal footprint, reversibility) is restored for the install
+lifecycle.
+
+### Fixed — M3.8 — Rules tokens helper is quote-aware
+Token-based rules (`rm-recursive-force`, `no-verify`, etc.) split on
+whitespace without honouring quotes, so `git commit -m "..."` with
+the dangerous keywords inside the body produced those keywords as
+separate tokens and the rules tripped on the commit message itself.
+
+`stripQuoted` is now applied before whitespace tokenisation.
+Regression tests added for `rm`-pattern and `--no-verify` mentions
+inside `git commit -m "..."` bodies.
+
+### Added — End-to-end test scenarios
+- `tests/scenarios/` directory with 14 scenarios (T1–T14): firewall L1, AST chain bypass, substitution body, git force-push, --no-verify, encoded-execution, allow path, telemetry deny_hit, skill discovery, doctor --verify, F0 TRIVIAL classifier, F0 NON-TRIVIAL classifier, context-usage threshold, install/uninstall/rollback round-trip.
+- `tests/scenarios/results-2026-05-19.md` — aggregate first-run + alpha.3 re-run. 13/14 PASS, 1 ANOMALY (T1 spec-order correction applied), 0 FAIL.
+- `docs/firewall.md` corrected: for Bash tool calls the AST PreToolUse hook fires before the permission check; the regex deny list is the fallback. Both layers remain active.
+
 ### Added — M3.7 + polish
 
 #### M3.7 — encoded-execution rule tightened

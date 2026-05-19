@@ -1,6 +1,6 @@
 {
   "name": "praxis-ai",
-  "version": "0.1.0-alpha.3",
+  "version": "0.1.0-alpha.4",
   "description": "Phased-autonomy harness layer for Claude Code. Indagatory at task start, autonomous in execution, hard-stop at irreversibility.",
   "type": "module",
   "bin": {

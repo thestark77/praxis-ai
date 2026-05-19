@@ -25,6 +25,8 @@
     "dev": "tsup --watch",
     "pretest": "npm run build",
     "test": "vitest run",
+    "test:unit": "vitest run tests/lib tests/cli.test.ts",
+    "test:integration": "vitest run tests/integration",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests",

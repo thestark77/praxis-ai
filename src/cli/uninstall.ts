@@ -1,11 +1,27 @@
 import { Command } from 'commander';
+import { runUninstall } from '../lib/install.js';
 
 export function uninstallCommand(): Command {
   return new Command('uninstall')
-    .description('Remove praxis from ~/.claude/. Restores pre-install state from backup.')
-    .option('--keep-backup', 'leave the most recent backup on disk')
-    .action((_opts) => {
-      console.log('praxis uninstall — not yet implemented (scheduled for M1)');
-      process.exit(0);
+    .description('Remove praxis from ~/.claude/. Removes the @-import block and firewall rules.')
+    .option('--keep-skeleton', 'leave ~/.praxis/ in place')
+    .action(async (opts: { keepSkeleton?: boolean }) => {
+      try {
+        const result = await runUninstall({ removeSkeleton: !opts.keepSkeleton });
+        console.log('praxis-ai uninstall');
+        console.log(`  CLAUDE.md @-import removed: ${result.removedClaudeMdBlock}`);
+        console.log(`  firewall rules removed: ${result.removedFirewallEntries}`);
+        console.log(`  ~/.praxis/ removed: ${result.removedSkeleton}`);
+        if (!opts.keepSkeleton) {
+          console.log('');
+          console.log('  Tip: `praxis rollback` restores CLAUDE.md and settings.json');
+          console.log('       from the most recent backup if you want a deeper revert.');
+        }
+        process.exit(0);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`praxis uninstall failed: ${message}`);
+        process.exit(1);
+      }
     });
 }

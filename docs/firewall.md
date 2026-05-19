@@ -98,9 +98,46 @@ the hook + firewall but keeps `~/.praxis/` and the lifted skills.
 
 ## Tracking
 
-When the hook denies, the event will be recorded as a `deny_hit` in
-the telemetry DB so `praxis stats` can surface aggregate counts. The
-hook → telemetry tie-in lands in M3.5 (v0.2). Until then `praxis stats`
-shows zero `deny_hits` even when the hook is actively blocking; check
-the Claude Code session transcript for the deny reasons in the
-meantime.
+When the hook denies, the event is recorded as a `deny_hit` in the
+telemetry DB so `praxis stats` can surface aggregate counts. The hook
+emits its decision FIRST and only then attempts the telemetry write,
+which is best-effort: any failure opening or writing
+`~/.praxis/telemetry.db` is swallowed so the hook never turns a deny
+into an allow when its own machinery breaks.
+
+Telemetry can be suppressed per-invocation with the
+`PRAXIS_TELEMETRY_DISABLED=1` environment variable.
+
+## Performance
+
+Per-invocation latency (Node 22, WSL2, no warm-up; 50 invocations
+averaged):
+
+| Path | Latency / invocation |
+|---|---|
+| Allow (cold; no DB) | ~41 ms |
+| Allow (warm; DB exists but untouched) | ~43 ms |
+| Deny with telemetry write | ~60 ms |
+| Deny with telemetry disabled | ~39 ms |
+
+The dominant cost on the allow path is Node startup (V8 init, ESM
+module graph). Rule evaluation is sub-millisecond. The deny path adds
+~17 ms for the SQLite open + insert + close cycle.
+
+For most workloads this is acceptable because the hook only fires on
+Bash invocations (not Read, Edit, Grep, etc.) and most Bash invocations
+are short-lived themselves. If you are sensitive to per-call latency on
+very hot loops, set `PRAXIS_TELEMETRY_DISABLED=1` to skip the deny-path
+write and save the ~17 ms.
+
+A future optimisation could move the hook to a long-lived daemon
+listening on a Unix socket, paid for by eliminating per-call Node
+startup. That is a v0.2+ consideration; the current dispatch model is
+chosen for simplicity and zero background processes.
+
+## Verification
+
+After install, run `praxis doctor --verify` to spawn the registered
+hook with a synthetic `rm -rf` payload and assert that it returns a
+deny decision. Useful as a smoke test before relying on the firewall
+in a new environment.

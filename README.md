@@ -64,13 +64,19 @@ bodies that don't fight gentle-ai's autonomous orchestrator.
 ## Installation
 
 ```bash
-# Inside the repo (alpha; not yet on npm)
-git clone https://github.com/thestark77/praxis-ai.git
-cd praxis-ai
-npm install
-npm run build
-node bin/praxis.js install
+npx praxis-ai@latest install
 ```
+
+That's it. The installer:
+
+- Backs up `~/.claude/CLAUDE.md` and `~/.claude/settings.json` to
+  `~/.praxis/backups/<timestamp>/`.
+- Appends a `@-import` block to `CLAUDE.md` (preserves existing content
+  and any gentle-ai blocks).
+- Appends ~30 deny entries to `settings.json` `permissions.deny`.
+- Registers the `praxis-ast-hook` PreToolUse hook on the `Bash` matcher.
+- Installs `~/.praxis/` with the phase model, firewall protocol, presets,
+  and the six lifted skills (into `~/.claude/skills/`).
 
 The installer detects whether
 [gentle-ai](https://github.com/Gentleman-Programming/gentle-ai) is present
@@ -84,11 +90,19 @@ and adapts:
   telemetry, AST hook, and precedence rules work; SDD workflow and engram
   persistence are unavailable.
 
-Once the v0.1 release is on npm, the install will be:
+### Development install (from a local checkout)
 
 ```bash
-npx praxis-ai@latest install
+git clone https://github.com/thestark77/praxis-ai.git
+cd praxis-ai
+npm install
+npm run build
+node bin/praxis.js install
 ```
+
+The local-checkout install registers the AST hook with an absolute
+`node <abs-path>` command so the hook resolves without depending on a
+global `praxis-ast-hook` on PATH.
 
 ## CLI surface
 

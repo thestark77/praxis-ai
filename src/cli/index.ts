@@ -15,7 +15,7 @@ program
   .description(
     'Phased-autonomy harness layer for Claude Code. Indagatory at task start, autonomous in execution, hard-stop at irreversibility.',
   )
-  .version('0.1.0-alpha.1');
+  .version('0.1.0-alpha.2');
 
 program.addCommand(installCommand());
 program.addCommand(uninstallCommand());

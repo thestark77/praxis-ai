@@ -98,6 +98,22 @@ describe('inspectBashCommand — bypass patterns', () => {
     expect(r.hits.some((h) => h.ruleId === 'encoded-execution')).toBe(true);
   });
 
+  it('denies eval of a $() that decodes a payload', () => {
+    const r = inspectBashCommand('eval "$(echo cm0gLXJmIC8= | base64 -d)"');
+    expect(r.decision).toBe('deny');
+    expect(r.hits.some((h) => h.ruleId === 'encoded-execution')).toBe(true);
+  });
+
+  it('allows prose mention of `base64 ... bash` without a pipe relationship (commit messages, docstrings)', () => {
+    // Regression: an earlier regex matched any co-occurrence of decoder
+    // + shell keywords in the command string, blocking commit messages
+    // that discussed the pattern verbatim.
+    expect(
+      inspectBashCommand('git commit -m "Adds detection for base64 piped into bash patterns"')
+        .decision,
+    ).toBe('allow');
+  });
+
   it('denies find -delete', () => {
     expect(inspectBashCommand('find /tmp -name "*.log" -delete').decision).toBe('deny');
   });

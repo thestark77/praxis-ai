@@ -157,14 +157,19 @@ const sudoEscalation: Rule = {
   },
 };
 
-// Encoded execution patterns. Hash detection on the operative tokens.
+// Encoded execution patterns.
+//
+// The rules require an ACTUAL pipe (or eval/exec invocation) between the
+// decoder and the shell — not just keyword co-occurrence anywhere in the
+// command. This prevents prose-level false positives where a commit
+// message or docstring discusses the pattern verbatim. Same tightening
+// applied to curl-pipe-shell in M3.6.
 const encodedExecution: Rule = {
   id: 'encoded-execution',
   inspect(command) {
-    // base64 -d | sh, base64 --decode | bash, xxd -r, etc.
+    // Decoder piped into a shell: base64/base32/xxd/openssl … | (sh|bash|...).
     if (
-      /\b(base64|base32|xxd|openssl)\b/.test(command) &&
-      /\b(sh|bash|zsh|fish|exec|eval)\b/.test(command)
+      /\b(base64|base32|xxd|openssl)\b\s+[^|]*\|\s*(sh|bash|zsh|fish|exec|eval)\b/.test(command)
     ) {
       return {
         ruleId: 'encoded-execution',
@@ -173,11 +178,18 @@ const encodedExecution: Rule = {
           'Decoding a payload (base64/xxd/openssl) into a shell or eval is a deny-list bypass pattern.',
       };
     }
+    // Decoder result passed as the operand of eval/exec/$(...) | sh.
+    // e.g. eval "$(echo cm0gLXJmIC8= | base64 -d)"
+    if (/\b(eval|exec)\s+["']?\$\([^)]*\b(base64|base32|xxd|openssl)\b[^)]*\)/.test(command)) {
+      return {
+        ruleId: 'encoded-execution',
+        reversibilityClass: 'exec-bypass',
+        message:
+          'eval/exec of a command-substitution body that decodes a payload is a deny-list bypass pattern.',
+      };
+    }
     // Hex-encoded printf piped to a shell.
-    if (
-      /\bprintf\s+["']?\\x[0-9a-fA-F]{2}/.test(command) &&
-      /\b(sh|bash|exec|eval)\b/.test(command)
-    ) {
+    if (/\bprintf\s+["']?\\x[0-9a-fA-F]{2}[^|]*\|\s*(sh|bash|exec|eval)\b/.test(command)) {
       return {
         ruleId: 'encoded-execution',
         reversibilityClass: 'exec-bypass',

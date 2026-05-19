@@ -6,6 +6,44 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Added — M3.7 + polish
+
+#### M3.7 — encoded-execution rule tightened
+Same false-positive pattern as the curl-pipe-shell fix in M3.6: the
+encoded-execution rule required only that `base64`/`xxd`/`openssl` AND
+a shell keyword appear anywhere in the command, which triggered on
+prose mentions in commit messages and docstrings.
+
+The rule now requires:
+- a decoder piped into a shell (`base64 ... | bash`), OR
+- `eval`/`exec` of a `$(...)` body containing the decoder, OR
+- hex-encoded printf piped into a shell.
+
+Regression test: a commit message body discussing the pattern verbatim no
+longer triggers the hook.
+
+#### `praxis doctor --verify`
+New flag spawns the registered AST hook with a synthetic `rm -rf`
+payload and asserts deny. Useful smoke test after install. Output
+includes the resolved hook command for debugging.
+
+#### Hook perf audit
+Documented in `docs/firewall.md`:
+| Path | Latency |
+|---|---|
+| Allow (cold) | ~41 ms |
+| Allow (warm) | ~43 ms |
+| Deny + telemetry | ~60 ms |
+| Deny, telemetry disabled | ~39 ms |
+
+Dominant cost is Node startup; rule evaluation is sub-ms. The deny
+path adds ~17 ms for the SQLite open+insert+close. `PRAXIS_TELEMETRY_DISABLED=1`
+skips the DB write for very hot loops.
+
+#### README polish
+Install command is now `npx praxis-ai@latest install`. The local-checkout
+path is preserved as a "development install" section.
+
 ### Added — M3.6 AST rule coverage extension
 - Five new AST PreToolUse rules to close documented coverage gaps:
   - `chmod-recursive-permissive` — `chmod -R 777`, `-R 666`, `-R a+w`, etc. Catches world-writable trees that are hard to walk back without an audit.

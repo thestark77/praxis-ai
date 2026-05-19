@@ -6,6 +6,15 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Added — M5 Docs + version bump
+- README rewritten for alpha state: real install instructions, CLI surface listing, "how it works" overview, status badges.
+- `docs/philosophy.md` — long-form rationale for the 8 operating principles.
+- `docs/architecture.md` — install layout, CLAUDE.md block model, settings.json modifications, module map, tsup build, anti-claims.
+- `docs/firewall.md` — two-layer firewall model: regex deny list + AST PreToolUse hook. Per-rule table with reversibility classes.
+- `docs/coexistence-with-gentle-ai.md` — domain ownership, precedence rules, detection logic, what praxis touches and does not.
+- `docs/references.md` — bibliography of frontier-lab, academic, and practitioner work that shaped the design.
+- Version bumped 0.1.0-alpha.0 → 0.1.0-alpha.1 (pending npm publish; package still has `"private": true`).
+
 ### Added — M3 AST PreToolUse Hook
 - `praxis-ast-hook` binary — second line of defence against creative bypasses the regex deny list silently misses. Reads Claude Code PreToolUse JSON via stdin, inspects Bash commands, emits a `permissionDecision` JSON on stdout.
 - Custom dependency-light bash tokeniser (`src/lib/ast/tokeniser.ts`) splits on `;`, `&&`, `||`, `|`, `&` while respecting quote and substitution contexts. `$(...)` and backtick bodies are also extracted and rule-checked.

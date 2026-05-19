@@ -6,6 +6,26 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Added — Tier 4 end-to-end test runner
+- `tests/scenarios/tier4/` with five Tier 4 scenarios that spawn a real `claude --print` subprocess in a fresh sandbox HOME with `praxis install` applied. Auth is seeded from the real HOME (`.credentials.json` + `.claude.json` only). Scenarios cover TRIVIAL classifier, NON-TRIVIAL classifier, firewall intercept of a real LLM-driven Bash call, skill discovery from a clean install, and `praxis doctor --verify` smoke from a fresh session.
+- New runner script `tests/scenarios/tier4/run.sh` + `npm run test:tier4` opt-in. Defaults to Haiku 4.5 (~$0.05–0.10 per full run) but overridable via `PRAXIS_TIER4_MODEL`.
+- First Tier 4 run (alpha.4 dogfood): **5 / 5 PASS**. Documented in `tests/scenarios/tier4/results-2026-05-19.md`.
+
+### Added — L1 mirrors M3.10 rules
+Three new entries in `FIREWALL_DEFAULTS` matching the L2 AST rules
+added in M3.10: history-rewrite (`git update-ref refs/heads/*`,
+`git update-ref refs/tags/*`, `git filter-branch*`) and package-manager
+lockfile bypass (`npm install --force*`, `npm i -f *`, `pnpm install
+--force*`, `yarn add --force*`).
+
+Defence in depth: L2 catches these via the AST hook; L1 is the fallback
+if the hook crashes or fails open.
+
+### Added — Hook latency benchmark + CI integration
+- `scripts/bench-hook.sh` times the praxis-ast-hook over N invocations across cold-allow, warm-allow, deny-with-telemetry, and deny-without-telemetry paths. Machine-readable `BENCH:<...>` lines per measurement.
+- `npm run bench:hook` for local runs.
+- CI now runs the bench on every matrix cell (ubuntu-latest + macos-latest × Node 18 / 20 / 22), so cross-platform numbers ship on every push without manual runs.
+
 ### Added — M3.10 — three new AST rules
 Extends the L2 rule set from 14 to 17:
 

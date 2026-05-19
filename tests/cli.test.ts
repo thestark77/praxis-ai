@@ -87,7 +87,7 @@ describe('praxis CLI sync-pocock — offline path', () => {
 
   it('prints version', () => {
     const out = runCli('--version').trim();
-    expect(out).toBe('0.1.0-alpha.4');
+    expect(out).toBe('0.1.0-alpha.5');
   });
 });
 

@@ -19,6 +19,19 @@ export const FIREWALL_DEFAULTS: string[] = [
   'Bash(git checkout .*)',
   'Bash(git restore .*)',
   'Bash(git branch -D*)',
+  // History rewrite (mirrored from L2 AST rules: git-update-ref, git-filter-branch)
+  'Bash(git update-ref refs/heads/*)',
+  'Bash(git update-ref refs/tags/*)',
+  'Bash(git filter-branch*)',
+
+  // Package-manager lockfile bypass (mirrored from L2 npm-install-force)
+  'Bash(npm install --force*)',
+  'Bash(npm install -f *)',
+  'Bash(npm i --force*)',
+  'Bash(npm i -f *)',
+  'Bash(pnpm install --force*)',
+  'Bash(pnpm install -f *)',
+  'Bash(yarn add --force*)',
 
   // Bypass de safety hooks
   'Bash(*--no-verify*)',

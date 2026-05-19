@@ -40,3 +40,11 @@ jobs:
 
       - name: Pack (dry run) — verify the publish payload
         run: npm pack --dry-run
+
+      - name: Hook latency benchmark
+        # Runs once per matrix cell so we have numbers on both
+        # ubuntu-latest and macos-latest. N=30 keeps each cell under
+        # ~15 s. Machine-readable BENCH:<...> lines are picked up by
+        # CI annotations.
+        run: ./scripts/bench-hook.sh 30
+        shell: bash

@@ -1,0 +1,1 @@
+Fix the typo on line 12 of /tmp/example-fixture.txt: change `helo` to `hello`.

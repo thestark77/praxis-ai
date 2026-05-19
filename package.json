@@ -1,6 +1,6 @@
 {
   "name": "praxis-ai",
-  "version": "0.1.0-alpha.4",
+  "version": "0.1.0-alpha.5",
   "description": "Phased-autonomy harness layer for Claude Code. Indagatory at task start, autonomous in execution, hard-stop at irreversibility.",
   "type": "module",
   "bin": {
@@ -28,6 +28,8 @@
     "test:unit": "vitest run tests/lib tests/cli.test.ts",
     "test:integration": "vitest run tests/integration",
     "test:watch": "vitest",
+    "test:tier4": "bash tests/scenarios/tier4/run.sh",
+    "bench:hook": "bash scripts/bench-hook.sh",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",

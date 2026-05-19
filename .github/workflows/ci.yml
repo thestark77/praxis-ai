@@ -8,10 +8,11 @@ on:
 
 jobs:
   ci:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest]
         node-version: [18, 20, 22]
     steps:
       - uses: actions/checkout@v4
@@ -36,3 +37,6 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      - name: Pack (dry run) — verify the publish payload
+        run: npm pack --dry-run

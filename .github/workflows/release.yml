@@ -1,0 +1,67 @@
+name: Release
+
+# Publishes to npm when a GitHub Release is published. Requires:
+#   - NPM_TOKEN secret with publish rights on the praxis-ai package
+#   - `package.json` "private" field removed (currently set to true
+#     during alpha; remove before the first public release)
+#
+# Workflow:
+#   1. Cut a release branch, bump version in package.json + src/cli/index.ts
+#      + tests/cli.test.ts, update CHANGELOG to graduate [Unreleased] into
+#      the new version section.
+#   2. Open a PR, get CI green, merge.
+#   3. Tag the merge commit (e.g. `v0.1.0`) and publish a GitHub Release
+#      with auto-generated notes from the tag.
+#   4. This workflow runs, builds, tests, packs (dry-run), and publishes.
+#
+# The workflow refuses to publish if `private` is true to avoid an
+# accidental dispatch before alpha.1 is ready for public release.
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify package is not marked private
+        run: |
+          if node -e "process.exit(require('./package.json').private ? 1 : 0)"; then
+            echo "OK: package.json private flag is unset or false"
+          else
+            echo "::error::package.json still has \"private\": true — remove it before publishing"
+            exit 1
+          fi
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Pack (dry run)
+        run: npm pack --dry-run
+
+      - name: Publish to npm
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -119,30 +119,43 @@ Telemetry can be suppressed per-invocation with the
 
 ## Performance
 
-Per-invocation latency (Node 22, WSL2, no warm-up; 50 invocations
-averaged):
+`scripts/bench-hook.sh` times the hook over N invocations across four
+paths. CI runs the bench on every matrix cell so cross-platform numbers
+ship on every push.
 
-| Path | Latency / invocation |
-|---|---|
-| Allow (cold; no DB) | ~41 ms |
-| Allow (warm; DB exists but untouched) | ~43 ms |
-| Deny with telemetry write | ~60 ms |
-| Deny with telemetry disabled | ~39 ms |
+### Cross-platform per-invocation latency (ms, alpha.5 CI run, N=30)
 
-The dominant cost on the allow path is Node startup (V8 init, ESM
-module graph). Rule evaluation is sub-millisecond. The deny path adds
-~17 ms for the SQLite open + insert + close cycle.
+| Path | ubuntu-18 | ubuntu-20 | ubuntu-22 | macos-18 | macos-20 | macos-22 |
+|------|-----------|-----------|-----------|----------|----------|----------|
+| Allow (cold) | 55.6 | 49.6 | **42.3** | 58.6 | 45.3 | **44.1** |
+| Allow (warm) | 55.1 | 49.6 | **41.6** | 57.5 | 60.2 | **46.5** |
+| Deny + telemetry | 60.3 | 54.9 | **45.8** | 66.2 | 62.6 | **47.8** |
+| Deny, no telemetry | 54.2 | 49.9 | **40.5** | 56.2 | 51.8 | **49.7** |
+
+Bold = current minimum per platform. Patterns:
+
+- The dominant cost is Node startup (V8 init, ESM module graph). Rule
+  evaluation itself is sub-millisecond.
+- Newer Node is faster. Node 22 is ~25 % faster than Node 18.
+- macOS is comparable to ubuntu on Node 22; slightly slower on older
+  Node.
+- The deny path costs an extra 5–10 ms over allow because of the
+  SQLite open + insert + close cycle. `PRAXIS_TELEMETRY_DISABLED=1`
+  brings it back down to allow-path territory.
 
 For most workloads this is acceptable because the hook only fires on
 Bash invocations (not Read, Edit, Grep, etc.) and most Bash invocations
 are short-lived themselves. If you are sensitive to per-call latency on
-very hot loops, set `PRAXIS_TELEMETRY_DISABLED=1` to skip the deny-path
-write and save the ~17 ms.
+very hot loops, set `PRAXIS_TELEMETRY_DISABLED=1`.
 
 A future optimisation could move the hook to a long-lived daemon
 listening on a Unix socket, paid for by eliminating per-call Node
 startup. That is a v0.2+ consideration; the current dispatch model is
 chosen for simplicity and zero background processes.
+
+Run locally with `npm run bench:hook [N]` (default N=50). Look for
+`BENCH:<path>:n=<n>:total_ms=<>:per_ms=<>` lines for machine-readable
+output.
 
 ## Verification
 

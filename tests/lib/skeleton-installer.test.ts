@@ -98,6 +98,26 @@ describe('uninstallSkeleton', () => {
   it('is safe to call when praxis dir does not exist', async () => {
     await expect(uninstallSkeleton(join(workDir, 'missing'))).resolves.not.toThrow();
   });
+
+  it('preserves backups/ so `praxis rollback` survives uninstall (T14 fix)', async () => {
+    await makeTemplate('main.md', 'main');
+    await installSkeleton({ templatesRoot, praxisDir });
+    // Simulate a backup directory that praxis install would have made
+    // alongside the skeleton.
+    await mkdir(join(praxisDir, 'backups', '20260519T000000Z'), { recursive: true });
+    await writeFile(
+      join(praxisDir, 'backups', '20260519T000000Z', 'CLAUDE.md'),
+      'backup body',
+      'utf8',
+    );
+
+    await uninstallSkeleton(praxisDir);
+
+    // Install artefacts gone; backups/ alive.
+    await expect(stat(join(praxisDir, 'main.md'))).rejects.toThrow();
+    const backupStat = await stat(join(praxisDir, 'backups', '20260519T000000Z', 'CLAUDE.md'));
+    expect(backupStat.isFile()).toBe(true);
+  });
 });
 
 describe('integration: bundled templates resolve at runtime', () => {

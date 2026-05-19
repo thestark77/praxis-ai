@@ -114,6 +114,23 @@ describe('inspectBashCommand — bypass patterns', () => {
     ).toBe('allow');
   });
 
+  it('allows a git commit message that mentions `rm -rf` as text (M3.8 quote-aware tokens)', () => {
+    // Regression: the rm-recursive-force rule fired on `rm` and `-rf`
+    // tokens that appeared inside a quoted commit message body, because
+    // the rules tokeniser was not quote-aware.
+    expect(
+      inspectBashCommand('git commit -m "Document the rm -rf pattern detection"').decision,
+    ).toBe('allow');
+  });
+
+  it('allows a git commit message that mentions `--no-verify` as text (M3.8 quote-aware tokens)', () => {
+    // Regression: the no-verify rule fired on the literal token
+    // `--no-verify` inside a quoted commit message body.
+    expect(inspectBashCommand('git commit -m "Block --no-verify via the AST hook"').decision).toBe(
+      'allow',
+    );
+  });
+
   it('denies find -delete', () => {
     expect(inspectBashCommand('find /tmp -name "*.log" -delete').decision).toBe('deny');
   });

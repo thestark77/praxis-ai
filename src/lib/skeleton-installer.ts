@@ -86,8 +86,30 @@ export async function installSkeleton(opts: InstallSkeletonOptions): Promise<Ske
   return { installed, skipped };
 }
 
+/**
+ * Subdirectories of the praxis dir that are USER data, not install
+ * artefacts. They must survive an uninstall — otherwise `praxis
+ * rollback` (which reads from `backups/`) is orphaned by the very
+ * operation it's supposed to recover from. This was caught by the
+ * T14 round-trip scenario.
+ */
+const PRESERVED_ON_UNINSTALL: ReadonlySet<string> = new Set(['backups', 'telemetry.db']);
+
 export async function uninstallSkeleton(praxisDir: string): Promise<void> {
-  if (await pathExists(praxisDir)) {
+  if (!(await pathExists(praxisDir))) return;
+  const entries = await readdir(praxisDir, { withFileTypes: true });
+  let preservedCount = 0;
+  for (const entry of entries) {
+    if (PRESERVED_ON_UNINSTALL.has(entry.name)) {
+      preservedCount++;
+      continue;
+    }
+    const fullPath = join(praxisDir, entry.name);
+    await rm(fullPath, { recursive: true, force: true });
+  }
+  // If nothing user-owned remains, fully remove the dir so the old
+  // "absence after uninstall" expectation still holds in the empty case.
+  if (preservedCount === 0) {
     await rm(praxisDir, { recursive: true, force: true });
   }
 }

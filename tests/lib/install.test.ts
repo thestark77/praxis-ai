@@ -194,8 +194,13 @@ describe('runUninstall', () => {
     const settings = await readSettings(paths.settingsJson);
     expect(settings.permissions?.deny).toEqual(['Read(.env)']);
 
-    const praxisDirExists = await pathExists(paths.praxisDir);
-    expect(praxisDirExists).toBe(false);
+    // Install artefacts must be gone, but `backups/` survives so
+    // `praxis rollback` is not orphaned by the uninstall that motivated
+    // the rollback. See T14 scenario.
+    const mainExists = await pathExists(join(paths.praxisDir, 'main.md'));
+    expect(mainExists).toBe(false);
+    const backupsDirExists = await pathExists(paths.backupsDir);
+    expect(backupsDirExists).toBe(true);
   });
 
   it('keeps skeleton when removeSkeleton is false', async () => {

@@ -29,8 +29,54 @@ export interface Rule {
   inspect(command: string): RuleHit | null;
 }
 
+/**
+ * Strip single- and double-quoted regions from a command string so a
+ * downstream whitespace split sees only the operative tokens.
+ *
+ * Without this, rules like `rm-recursive-force` or `no-verify` fire on
+ * prose tokens inside `git commit -m "..."`: the message body is one
+ * shell word but a naive `split(/\s+/)` treats every space inside it as
+ * a token boundary. The original tokeniser in `tokeniser.ts` already
+ * respects quote contexts; this helper does the same minimal job for
+ * the simpler token-based rules so they aren't fooled by commit
+ * messages or docstrings discussing the dangerous pattern verbatim.
+ */
+function stripQuoted(command: string): string {
+  let out = '';
+  let i = 0;
+  while (i < command.length) {
+    const ch = command[i];
+    if (ch === "'") {
+      const end = command.indexOf("'", i + 1);
+      if (end === -1) {
+        out += ch;
+        i++;
+        continue;
+      }
+      i = end + 1;
+      continue;
+    }
+    if (ch === '"') {
+      let j = i + 1;
+      while (j < command.length) {
+        if (command[j] === '\\' && j + 1 < command.length) {
+          j += 2;
+          continue;
+        }
+        if (command[j] === '"') break;
+        j++;
+      }
+      i = j + 1;
+      continue;
+    }
+    out += ch;
+    i++;
+  }
+  return out;
+}
+
 function tokens(command: string): string[] {
-  return command.split(/\s+/).filter(Boolean);
+  return stripQuoted(command).split(/\s+/).filter(Boolean);
 }
 
 // rm -rf in any form: -rf, -r -f, -fr, -Rf, --recursive --force, etc.

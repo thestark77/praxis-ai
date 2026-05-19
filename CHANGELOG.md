@@ -6,6 +6,14 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Added — M3.5 Hook ↔ Telemetry tie-in
+- `praxis-ast-hook` now writes a `deny_hit` event to `~/.praxis/telemetry.db` for every rule that fires on a denied command. One row per hit (so a chained command that trips multiple rules produces multiple rows). The deny decision is emitted FIRST; telemetry is best-effort after — failure to open or write the DB does not turn a deny into an allow.
+- Honours `PRAXIS_TELEMETRY_DISABLED=1` to suppress writes (useful for tests).
+- `praxis stats` will now show deny-hit counts populated automatically when the hook fires (was zero pending this tie-in).
+
+### Changed — Hook command resolution
+- `praxis install` now resolves the AST hook command to an absolute `node <abs path>` when invoked from a local checkout (sibling `praxis-ast-hook.js` exists next to `process.argv[1]`). When invoked from an npm install, the bare `praxis-ast-hook` PATH lookup is preserved. This fixes a regression where the dogfood install registered a non-resolvable bare name.
+
 ### Added — M5 Docs + version bump
 - README rewritten for alpha state: real install instructions, CLI surface listing, "how it works" overview, status badges.
 - `docs/philosophy.md` — long-form rationale for the 8 operating principles.

@@ -22,8 +22,13 @@
 //   }
 
 import { inspectBashCommand } from '../lib/ast/inspect.js';
+import { resolvePaths } from '../lib/paths.js';
+import { openDatabase, closeDatabase } from '../lib/telemetry/db.js';
+import { recordDenyHit } from '../lib/telemetry/events.js';
+import type { RuleHit } from '../lib/ast/rules.js';
 
 interface HookInput {
+  session_id?: string;
   tool_name?: string;
   tool_input?: { command?: string };
 }
@@ -59,6 +64,37 @@ async function readStdin(): Promise<string> {
   });
 }
 
+/**
+ * Persist a deny_hit telemetry event. Fail-open: any failure here is
+ * swallowed because the hook must NEVER turn a deny into an allow on
+ * its own machinery failure. The deny decision has already been emitted
+ * on stdout by the time this is called.
+ */
+async function tryRecordDenyHit(
+  sessionUuid: string | null,
+  hits: RuleHit[],
+  commandExcerpt: string,
+): Promise<void> {
+  if (process.env.PRAXIS_TELEMETRY_DISABLED === '1') return;
+  if (hits.length === 0) return;
+  try {
+    const paths = resolvePaths();
+    const db = await openDatabase({ path: paths.telemetryDb });
+    try {
+      for (const hit of hits) {
+        recordDenyHit(db, sessionUuid, {
+          rule: hit.ruleId,
+          commandExcerpt: commandExcerpt.slice(0, 200),
+        });
+      }
+    } finally {
+      closeDatabase(db);
+    }
+  } catch {
+    // Telemetry failure must not affect the decision. Already emitted.
+  }
+}
+
 export async function runAstHook(): Promise<void> {
   const raw = await readStdin();
   let parsed: HookInput;
@@ -90,7 +126,9 @@ export async function runAstHook(): Promise<void> {
     emitDecision('allow', '');
     return;
   }
+  // Decision goes out first; telemetry is best-effort after.
   emitDecision('deny', result.reason);
+  await tryRecordDenyHit(parsed.session_id ?? null, result.hits, command);
 }
 
 // Allow `node ast-hook.js` to invoke directly when built. The compiled

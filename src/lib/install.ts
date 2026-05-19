@@ -56,6 +56,33 @@ export interface InstallResult {
  */
 export const DEFAULT_AST_HOOK_COMMAND = 'praxis-ast-hook';
 
+/**
+ * Resolve the hook command for the current install context.
+ *
+ * When praxis-ai is installed via npm, the `praxis-ast-hook` bin is on
+ * PATH and the bare name resolves correctly. When praxis-ai is invoked
+ * from a local checkout (`node bin/praxis.js install`), the bin is NOT
+ * on PATH — Claude Code would fail to spawn it. Detect the local case
+ * by checking for a sibling `praxis-ast-hook.js` next to `process.argv[1]`
+ * and return a `node <abs-path>` command in that case.
+ */
+export async function resolveAstHookCommand(): Promise<string> {
+  const { stat } = await import('node:fs/promises');
+  const { dirname, resolve } = await import('node:path');
+  const script = process.argv[1];
+  if (!script) return DEFAULT_AST_HOOK_COMMAND;
+  const sibling = resolve(dirname(script), 'praxis-ast-hook.js');
+  try {
+    const s = await stat(sibling);
+    if (s.isFile()) {
+      return `node ${sibling}`;
+    }
+  } catch {
+    // Not a local checkout; fall through to the bare command.
+  }
+  return DEFAULT_AST_HOOK_COMMAND;
+}
+
 export async function runInstall(opts: InstallOptions = {}): Promise<InstallResult> {
   const paths = opts.paths ?? resolvePaths();
   const templatesRoot = opts.templatesRoot ?? DEFAULT_TEMPLATES_ROOT;
@@ -123,7 +150,7 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
   await patchClaudeMd(paths.claudeMd, importPath);
   await patchSettings(paths.settingsJson, firewallEntries);
 
-  const astHookCommand = opts.astHookCommand ?? DEFAULT_AST_HOOK_COMMAND;
+  const astHookCommand = opts.astHookCommand ?? (await resolveAstHookCommand());
   const settingsBeforeHook = await readSettings(paths.settingsJson);
   const settingsWithHook = addPraxisAstHook(settingsBeforeHook, astHookCommand);
   await writeSettings(paths.settingsJson, settingsWithHook);

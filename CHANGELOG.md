@@ -6,6 +6,13 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Added — M4 Telemetry Foundation
+- SQLite telemetry at `~/.praxis/telemetry.db` via `better-sqlite3`. Single events table with typed JSON payload (`session_start`, `session_end`, `phase_transition`, `tool_invocation`, `deny_hit`, `context_sample`). WAL mode, schema_version stamping, idempotent migrations.
+- `src/lib/telemetry/` module: `schema.ts` (DDL + event kinds), `db.ts` (lazy open + migration), `events.ts` (typed record helpers), `queries.ts` (`statsSummary`, `latestContextSample`, `resetEvents`).
+- `praxis stats` — real implementation. Reports total events, sessions, tool invocations grouped by outcome, deny hits, phase transitions, context samples, time bounds. `--json` for machine-readable output. `--reset` to truncate events.
+- `praxis context-usage` — real implementation. `--record <used> --budget <budget>` to append a sample, default reads latest sample and warns when usage crosses the balanced-preset 75% threshold. `--json` for machine-readable output.
+- 17 new tests (4 db, 7 events, 6 queries + 5 CLI smoke for telemetry + reset), all sandboxed via `mkdtemp`. Total 130/130 tests passing.
+
 ### Added — M2 Skill Lifts
 - Lifted six skills from `mattpocock/skills` with mechanism-pure body rewrite, per-file blob SHA pin, and per-skill `NOTICE.md`: `grill-with-docs`, `caveman`, `diagnose`, `zoom-out`, `prototype`, `handoff`. Each skill ships with praxis-specific `invocation:` frontmatter (`explicit` for phase-marking skills; `reflex` with objective triggers for `caveman` and `diagnose`).
 - `praxis sync-pocock` command — checks per-file blob SHAs against an upstream ref, reports drift, exits non-zero when any lifted file has changed upstream. Does not auto-rewrite (mechanism-pure rewrites require human review).

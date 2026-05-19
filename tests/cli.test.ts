@@ -91,6 +91,61 @@ describe('praxis CLI sync-pocock — offline path', () => {
   });
 });
 
+describe('praxis CLI telemetry — stats + context-usage (sandboxed HOME)', () => {
+  it('stats on a fresh sandbox reports zero events with a help hint', async () => {
+    const sandboxHome = await makeSandboxHome();
+    const out = runCli('stats', { ...process.env, HOME: sandboxHome });
+    expect(out).toContain('praxis stats');
+    expect(out).toContain('total events:        0');
+    expect(out).toContain('No telemetry recorded yet');
+  });
+
+  it('stats --json on a fresh sandbox returns a parsable empty summary', async () => {
+    const sandboxHome = await makeSandboxHome();
+    const out = runCli('stats --json', { ...process.env, HOME: sandboxHome });
+    const parsed = JSON.parse(out);
+    expect(parsed.totalEvents).toBe(0);
+    expect(parsed.sessions).toBe(0);
+  });
+
+  it('context-usage --record persists a sample and the next stats call sees it', async () => {
+    const sandboxHome = await makeSandboxHome();
+    const recordOut = runCli('context-usage --record 30000 --budget 200000', {
+      ...process.env,
+      HOME: sandboxHome,
+    });
+    expect(recordOut).toContain('recorded: 30000 / 200000');
+
+    const showOut = runCli('context-usage', { ...process.env, HOME: sandboxHome });
+    expect(showOut).toContain('used / budget: 30000 / 200000');
+    expect(showOut).toContain('percent:       15.0%');
+
+    const stats = runCli('stats --json', { ...process.env, HOME: sandboxHome });
+    expect(JSON.parse(stats).contextSamples).toBe(1);
+  });
+
+  it('context-usage warns when usage crosses 75%', async () => {
+    const sandboxHome = await makeSandboxHome();
+    runCli('context-usage --record 160000 --budget 200000', {
+      ...process.env,
+      HOME: sandboxHome,
+    });
+    const out = runCli('context-usage', { ...process.env, HOME: sandboxHome });
+    expect(out).toContain('Above 75% threshold');
+  });
+
+  it('stats --reset truncates events', async () => {
+    const sandboxHome = await makeSandboxHome();
+    runCli('context-usage --record 100 --budget 1000', { ...process.env, HOME: sandboxHome });
+    const before = runCli('stats --json', { ...process.env, HOME: sandboxHome });
+    expect(JSON.parse(before).totalEvents).toBe(1);
+    const reset = runCli('stats --reset', { ...process.env, HOME: sandboxHome });
+    expect(reset).toContain('1 events deleted');
+    const after = runCli('stats --json', { ...process.env, HOME: sandboxHome });
+    expect(JSON.parse(after).totalEvents).toBe(0);
+  });
+});
+
 describe('praxis CLI command wiring (sandboxed HOME)', () => {
   it('install --dry-run produces expected output and writes nothing', async () => {
     const sandboxHome = await makeSandboxHome();

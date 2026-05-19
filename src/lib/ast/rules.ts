@@ -219,6 +219,141 @@ const mkfs: Rule = {
   },
 };
 
+// chmod -R 777 / 666 — recursive world-writable permissions
+const chmodPermissive: Rule = {
+  id: 'chmod-recursive-permissive',
+  inspect(command) {
+    const toks = tokens(command);
+    if (toks[0] !== 'chmod') return null;
+    let recursive = false;
+    let permissive = false;
+    for (const t of toks.slice(1)) {
+      if (t === '-R' || t === '--recursive') recursive = true;
+      else if (t.startsWith('-') && !t.startsWith('--')) {
+        if (t.includes('R')) recursive = true;
+      }
+      // 4-digit (with setuid/sticky) or 3-digit octal modes ending in 6 or 7
+      // for the world byte indicate world-writable.
+      if (/^[0-7]{3,4}$/.test(t)) {
+        const worldDigit = t.slice(-1);
+        if (worldDigit === '6' || worldDigit === '7') permissive = true;
+      }
+      if (t === '777' || t === '666' || t.endsWith(',o+w') || t === 'a+w') permissive = true;
+    }
+    if (recursive && permissive) {
+      return {
+        ruleId: 'chmod-recursive-permissive',
+        reversibilityClass: 'data-loss',
+        message:
+          '`chmod -R` to a world-writable mode (e.g. 777, 666) exposes the tree to any user. Hard to walk back without an audit.',
+      };
+    }
+    return null;
+  },
+};
+
+// chown -R against an unbounded path — risk of catastrophic ownership flip
+const chownRecursive: Rule = {
+  id: 'chown-recursive',
+  inspect(command) {
+    const toks = tokens(command);
+    if (toks[0] !== 'chown') return null;
+    let recursive = false;
+    let rootlikeTarget = false;
+    for (const t of toks.slice(1)) {
+      if (t === '-R' || t === '--recursive') recursive = true;
+      else if (t.startsWith('-') && !t.startsWith('--')) {
+        if (t.includes('R')) recursive = true;
+      }
+      // Catch unbounded targets that flip ownership of the world.
+      if (t === '/' || t === '/*' || t === '/usr' || t === '/etc' || t === '/var') {
+        rootlikeTarget = true;
+      }
+    }
+    if (recursive && rootlikeTarget) {
+      return {
+        ruleId: 'chown-recursive',
+        reversibilityClass: 'data-loss',
+        message:
+          '`chown -R` against `/`, `/usr`, `/etc`, or `/var` rewrites system ownership. Hard to recover without a known-good backup.',
+      };
+    }
+    return null;
+  },
+};
+
+// tar with --absolute-names / -P / -C / over an unsafe directory
+const tarAbsolute: Rule = {
+  id: 'tar-absolute-names',
+  inspect(command) {
+    const toks = tokens(command);
+    if (toks[0] !== 'tar') return null;
+    let absolute = false;
+    let extracting = false;
+    for (const t of toks.slice(1)) {
+      if (t === '--absolute-names' || t === '-P') absolute = true;
+      // -x or any flag bundle containing x means extract
+      if (t === '-x' || t === '--extract' || t === '--get') extracting = true;
+      else if (t.startsWith('-') && !t.startsWith('--')) {
+        if (t.includes('x')) extracting = true;
+        if (t.includes('P')) absolute = true;
+      }
+    }
+    if (absolute && extracting) {
+      return {
+        ruleId: 'tar-absolute-names',
+        reversibilityClass: 'data-loss',
+        message:
+          '`tar -x --absolute-names` writes outside the current working directory at archive-controlled paths. Path-traversal risk.',
+      };
+    }
+    return null;
+  },
+};
+
+// curl | sh and wget | sh — remote-code-execution patterns.
+// The regex requires whitespace + at least one non-pipe arg after
+// curl/wget/fetch so prose mentions of the pattern (e.g. in commit
+// messages or docstrings) like `curl|sh` are not false-positives.
+const curlPipeShell: Rule = {
+  id: 'curl-pipe-shell',
+  inspect(command) {
+    if (/\b(curl|wget|fetch)\s+[^|]+\|\s*(sh|bash|zsh|fish|exec|eval)\b/.test(command)) {
+      return {
+        ruleId: 'curl-pipe-shell',
+        reversibilityClass: 'exec-bypass',
+        message:
+          'Piping a download (curl/wget/fetch) directly into a shell executes remote code without inspection.',
+      };
+    }
+    return null;
+  },
+};
+
+// pip install --target /
+const pipInstallTarget: Rule = {
+  id: 'pip-install-target-root',
+  inspect(command) {
+    const toks = tokens(command);
+    if (toks[0] !== 'pip' && toks[0] !== 'pip3') return null;
+    if (toks[1] !== 'install') return null;
+    for (let i = 2; i < toks.length; i++) {
+      const t = toks[i];
+      if ((t === '--target' || t === '-t') && toks[i + 1]) {
+        const dest = toks[i + 1];
+        if (dest === '/' || dest.startsWith('/usr') || dest.startsWith('/etc')) {
+          return {
+            ruleId: 'pip-install-target-root',
+            reversibilityClass: 'data-loss',
+            message: '`pip install --target` to `/`, `/usr`, or `/etc` overwrites system files.',
+          };
+        }
+      }
+    }
+    return null;
+  },
+};
+
 export const DEFAULT_RULES: Rule[] = [
   rmDangerous,
   findDelete,
@@ -229,4 +364,9 @@ export const DEFAULT_RULES: Rule[] = [
   encodedExecution,
   ddDevice,
   mkfs,
+  chmodPermissive,
+  chownRecursive,
+  tarAbsolute,
+  curlPipeShell,
+  pipInstallTarget,
 ];

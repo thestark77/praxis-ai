@@ -6,6 +6,16 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Added — M3.6 AST rule coverage extension
+- Five new AST PreToolUse rules to close documented coverage gaps:
+  - `chmod-recursive-permissive` — `chmod -R 777`, `-R 666`, `-R a+w`, etc. Catches world-writable trees that are hard to walk back without an audit.
+  - `chown-recursive` — `chown -R user /`, `/usr`, `/etc`, `/var`. Catches catastrophic ownership flips of system trees.
+  - `tar-absolute-names` — `tar -x --absolute-names` or `tar -xPf` (extract with `-P`). Catches path-traversal extraction.
+  - `curl-pipe-shell` — `curl | sh`, `wget | bash`, etc. RCE pattern over the network.
+  - `pip-install-target-root` — `pip install --target /` / `/usr` / `/etc`. Overwrites system files.
+- Total rules now 14 (was 9). All rules ship with a reversibility class surfaced in the deny reason.
+- 21 new tests covering pass + fail per rule. Total 203/203 passing (was 182).
+
 ### Added — M3.5 Hook ↔ Telemetry tie-in
 - `praxis-ast-hook` now writes a `deny_hit` event to `~/.praxis/telemetry.db` for every rule that fires on a denied command. One row per hit (so a chained command that trips multiple rules produces multiple rows). The deny decision is emitted FIRST; telemetry is best-effort after — failure to open or write the DB does not turn a deny into an allow.
 - Honours `PRAXIS_TELEMETRY_DISABLED=1` to suppress writes (useful for tests).

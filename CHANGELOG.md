@@ -6,6 +6,37 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Added — Plug-and-play gentle-ai bootstrap (`praxis install`)
+`praxis install` no longer just *detects* gentle-ai — it installs and
+configures the whole stack from gentle-ai's source of truth, then layers
+the praxis overlay. Opt-out with `--no-gentle-ai`.
+
+- `src/lib/gentle-ai-bootstrap.ts` drives, in order:
+  1. gentle-ai `scripts/install.sh` (fetched at runtime, executed, discarded — never vendored). Skipped when the binary is present, unless `--force`.
+  2. `gentle-ai install --agents claude-code --persona neutral --preset full-gentleman` (9 components incl. engram; balanced models by default).
+  3. `gentle-ai sync --agents claude-code --strict-tdd` (Strict TDD; `install` does not expose it, `sync` does).
+- Respects an existing gentle-ai config (skips bootstrap unless `--force`). Idempotent — doubles as an updater.
+- Non-fatal: bootstrap failures become warnings; the praxis overlay still installs.
+- New CLI flags: `--no-gentle-ai`, `--force`, `--ga-persona`, `--ga-preset`, `--ga-agents`, `--no-strict-tdd`.
+- Library `runInstall` defaults `bootstrapGentleAi` to false (test hermeticity); the CLI flips it true.
+
+### Added — Dependency preflight
+`src/lib/dependency-check.ts` verifies `git`, `curl`, `bash`, `node`, `npm`
+before any install side-effect when the gentle-ai bootstrap will run (Go is
+optional). If a required tool is missing, `praxis install` **aborts** with
+the exact tools and their install links/commands — no half-finished state.
+`--no-gentle-ai` only requires `node` + `npm`. Documented in
+[docs/dependencies.md](docs/dependencies.md).
+
+### Documentation refresh
+- `docs/dependencies.md` (new) — required/optional deps, who installs what, error example.
+- `docs/coexistence-with-gentle-ai.md` — plug-and-play bootstrap, applied config table, respecting existing config, failure handling.
+- `docs/architecture.md` — install orchestration phases + new modules.
+- README — plug-and-play install flow, full sequence, install flags, adaptive modes.
+
+### Tests
+- 15 new tests: `gentle-ai-bootstrap` (mocked runner: ordering, skip-when-configured, force, overrides, graceful failure) and `dependency-check` (required/optional gating, abort message). Total 238/238 passing. CLI install test pinned to `--no-gentle-ai` for hermeticity.
+
 ### Added — Tier 4 end-to-end test runner
 - `tests/scenarios/tier4/` with five Tier 4 scenarios that spawn a real `claude --print` subprocess in a fresh sandbox HOME with `praxis install` applied. Auth is seeded from the real HOME (`.credentials.json` + `.claude.json` only). Scenarios cover TRIVIAL classifier, NON-TRIVIAL classifier, firewall intercept of a real LLM-driven Bash call, skill discovery from a clean install, and `praxis doctor --verify` smoke from a fresh session.
 - New runner script `tests/scenarios/tier4/run.sh` + `npm run test:tier4` opt-in. Defaults to Haiku 4.5 (~$0.05–0.10 per full run) but overridable via `PRAXIS_TIER4_MODEL`.

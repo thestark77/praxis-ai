@@ -41,25 +41,45 @@ the long-form rationale lives in [docs/philosophy.md](docs/philosophy.md).
 
 ## How it works
 
-praxis-ai installs three things into your `~/.claude/`:
+`praxis install` is **plug-and-play**. With a single command it bootstraps
+the whole stack and then layers its own overlay:
 
-1. **A CLAUDE.md block** at the end of your existing `CLAUDE.md`, imported
-   via Claude Code's `@-import` directive. This loads the phase model,
-   skill-invocation policy, irreversibility firewall protocol, and the
-   chosen preset (default: `balanced`).
-2. **A `permissions.deny` list extension** in `settings.json` — 30 deny
-   patterns covering destructive `rm`, force-push, history rewrite,
-   `--no-verify` bypasses, secrets paths, and credential locations. Your
-   existing deny entries are preserved and praxis entries are appended.
-3. **A PreToolUse hook** in `settings.json` (`praxis-ast-hook`) that
-   inspects every Bash command via a token-aware AST walker. Catches
-   chain bypasses (`safe && rm -rf /tmp/x`), encoded payloads
-   (`base64 -d | bash`), substitution payloads (`$(rm -rf /)`), and more.
+1. **Dependency preflight** — verifies `git`, `curl`, `bash`, `node`, `npm`
+   are present (Go is optional). If any required tool is missing, the
+   install aborts with the exact tools and their install links — no
+   half-finished state. See [docs/dependencies.md](docs/dependencies.md).
+2. **gentle-ai bootstrap** (unless `--no-gentle-ai`) — installs/updates
+   gentle-ai from its **official source** and configures it headlessly:
+   - Binary via gentle-ai's `scripts/install.sh` (downloaded at runtime,
+     never vendored here).
+   - `gentle-ai install --agents claude-code --persona neutral --preset full-gentleman`
+     — installs the 9 ecosystem components, including **engram** (persistent
+     memory), with **balanced** model assignments (gentle-ai's default).
+   - `gentle-ai sync --agents claude-code --strict-tdd` — enables Strict TDD.
+   - If gentle-ai is already configured, this step is skipped to respect
+     your existing choices (use `--force` to reapply praxis defaults).
+3. **praxis overlay** into `~/.claude/`:
+   - A marker-bounded `@-import` block at the end of `CLAUDE.md` (loads the
+     phase model, skill-invocation policy, irreversibility firewall
+     protocol, and the balanced preset). Existing content and gentle-ai
+     blocks are preserved.
+   - ~40 `permissions.deny` patterns in `settings.json` (destructive `rm`,
+     force-push, history rewrite, `--no-verify` bypasses, package-manager
+     `--force`, secrets paths, and more). Your existing deny entries are
+     preserved.
+   - The `praxis-ast-hook` PreToolUse hook — inspects every Bash command
+     via a token-aware AST walker. Catches chain bypasses
+     (`safe && rm -rf /tmp/x`), encoded payloads (`base64 -d | bash`),
+     substitution payloads (`$(rm -rf /)`), and more (17 rules).
+   - Six skills lifted from mattpocock/skills into `~/.claude/skills/`
+     (`grill-with-docs`, `caveman`, `diagnose`, `zoom-out`, `prototype`,
+     `handoff`) with per-skill `NOTICE.md` attribution and mechanism-pure
+     bodies that don't fight gentle-ai's autonomous orchestrator.
 
-Plus six skills lifted from mattpocock/skills into `~/.claude/skills/`
-(`grill-with-docs`, `caveman`, `diagnose`, `zoom-out`, `prototype`,
-`handoff`) with per-skill `NOTICE.md` attribution and mechanism-pure
-bodies that don't fight gentle-ai's autonomous orchestrator.
+Nothing external is vendored: the gentle-ai binary comes from its official
+installer, its components are downloaded by gentle-ai itself, and the
+mattpocock skill lifts are mechanism-pure rewrites refreshed from upstream
+via `praxis sync-pocock`.
 
 ## Installation
 
@@ -67,28 +87,65 @@ bodies that don't fight gentle-ai's autonomous orchestrator.
 npx praxis-ai@latest install
 ```
 
-That's it. The installer:
+That's it — gentle-ai, engram, the firewall, and the lifted skills are all
+set up and configured. The installer also doubles as an **updater**:
+re-running it updates each piece from its source.
 
-- Backs up `~/.claude/CLAUDE.md` and `~/.claude/settings.json` to
-  `~/.praxis/backups/<timestamp>/`.
-- Appends a `@-import` block to `CLAUDE.md` (preserves existing content
-  and any gentle-ai blocks).
-- Appends ~30 deny entries to `settings.json` `permissions.deny`.
-- Registers the `praxis-ast-hook` PreToolUse hook on the `Bash` matcher.
-- Installs `~/.praxis/` with the phase model, firewall protocol, presets,
-  and the six lifted skills (into `~/.claude/skills/`).
+### What the install does (full sequence)
 
-The installer detects whether
-[gentle-ai](https://github.com/Gentleman-Programming/gentle-ai) is present
-and adapts:
+1. Dependency preflight (abort with links if anything required is missing).
+2. Back up `~/.claude/CLAUDE.md` + `~/.claude/settings.json` to
+   `~/.praxis/backups/<timestamp>/`.
+3. Bootstrap + configure gentle-ai (binary + 9 components + engram +
+   strict TDD), unless `--no-gentle-ai`.
+4. Patch `CLAUDE.md` with the praxis `@-import` block.
+5. Append the firewall deny list + register the AST hook in
+   `settings.json`.
+6. Install `~/.praxis/` skeleton + the six lifted skills into
+   `~/.claude/skills/`.
 
-- **gentle-ai present, sdd-init done**: full overlay mode (the recommended
-  path).
-- **gentle-ai present, sdd-init missing**: praxis installs; `praxis doctor`
-  reports the missing pieces.
-- **gentle-ai absent**: standalone mode — firewall, lifted skills,
-  telemetry, AST hook, and precedence rules work; SDD workflow and engram
-  persistence are unavailable.
+### Install flags
+
+```text
+--no-gentle-ai          install the praxis overlay only (skip the bootstrap)
+--force                 overwrite ~/.praxis/ + reapply gentle-ai praxis defaults
+--ga-persona <p>        gentle-ai persona: gentleman | neutral | custom   (default neutral)
+--ga-preset <p>         gentle-ai preset: full-gentleman | ecosystem-only | minimal | custom
+                        (default full-gentleman)
+--ga-agents <csv>       gentle-ai agents                                  (default claude-code)
+--no-strict-tdd         do not enable gentle-ai Strict TDD
+--dry-run               preview without writing (skips the bootstrap)
+```
+
+### Adaptive modes
+
+The installer detects gentle-ai state and adapts:
+
+- **gentle-ai present + configured**: full overlay mode. Bootstrap is
+  skipped (your config is respected); use `--force` to reapply defaults.
+- **gentle-ai present, not configured**: bootstrap configures it
+  (persona/preset/models/TDD), then the overlay installs.
+- **gentle-ai absent**: bootstrap installs and configures it from scratch.
+  With `--no-gentle-ai` praxis runs in standalone mode — firewall, lifted
+  skills, telemetry, AST hook, and precedence rules work; SDD workflow and
+  engram persistence are unavailable.
+
+### Reconfiguring gentle-ai later
+
+The bootstrap applies a sensible default config (neutral persona,
+full-gentleman preset, balanced models, strict TDD). You can change any of
+it at any time by launching gentle-ai's own interactive TUI:
+
+```bash
+gentle-ai
+```
+
+This opens gentle-ai's installer/configurator where you re-pick the
+persona, ecosystem preset, per-phase Claude model assignments, Strict TDD,
+and which agents are managed — the same screens praxis automated for you.
+praxis does not lock any of these; gentle-ai stays fully in control of its
+own configuration. Re-run `praxis install --force` if you instead want to
+reset to the praxis defaults.
 
 ### Development install (from a local checkout)
 

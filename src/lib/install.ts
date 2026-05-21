@@ -23,6 +23,12 @@ import { unpatchClaudeMd } from './claudemd-patcher.js';
 import { restoreLatestBackup } from './backup.js';
 import { FIREWALL_DEFAULTS, PRAXIS_IMPORT_PATH } from '../data/firewall-defaults.js';
 import { POCOCK_SKILL_NAMES } from '../data/pocock-skills.js';
+import {
+  bootstrapGentleAi,
+  type GentleAiBootstrapOptions,
+  type GentleAiBootstrapResult,
+} from './gentle-ai-bootstrap.js';
+import { checkDependencies, formatMissingDependencies, type DepProbe } from './dependency-check.js';
 
 export interface InstallOptions {
   paths?: PraxisPaths;
@@ -34,6 +40,19 @@ export interface InstallOptions {
   astHookCommand?: string;
   dryRun?: boolean;
   force?: boolean;
+  /**
+   * Plug-and-play bootstrap of gentle-ai (binary + ecosystem + strict TDD)
+   * before the praxis overlay. Defaults to false in the library so tests
+   * stay hermetic; the CLI flips it to true unless `--no-gentle-ai`.
+   */
+  bootstrapGentleAi?: boolean;
+  /** Config overrides forwarded to the gentle-ai bootstrap. */
+  gentleAiConfig?: Pick<
+    GentleAiBootstrapOptions,
+    'agents' | 'persona' | 'preset' | 'strictTdd' | 'run' | 'fetchInstallScript'
+  >;
+  /** Injectable PATH probe for the dependency preflight (tests). */
+  depProbe?: DepProbe;
 }
 
 export interface InstallResult {
@@ -46,6 +65,7 @@ export interface InstallResult {
   firewallEntriesAdded: number;
   claudeMdPatched: boolean;
   astHookRegistered: boolean;
+  gentleAiBootstrap: GentleAiBootstrapResult | null;
   warnings: string[];
 }
 
@@ -92,8 +112,8 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
   const importPath = opts.importPath ?? PRAXIS_IMPORT_PATH;
   const dryRun = opts.dryRun ?? false;
 
-  const report = await detect(paths);
-  const mode = installModeFor(report);
+  let report = await detect(paths);
+  let mode = installModeFor(report);
   const warnings: string[] = [];
 
   if (mode === 'no-claude-code') {
@@ -101,6 +121,73 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
       `Claude Code config dir not found at ${paths.claudeDir}. ` +
         'Run `claude` once to initialise it, then retry praxis install.',
     );
+  }
+
+  if (dryRun) {
+    if (mode === 'standalone') {
+      warnings.push(
+        'gentle-ai is not installed. Praxis runs in standalone mode without SDD or Strict TDD.',
+      );
+    } else if (mode === 'partial-overlay') {
+      warnings.push(
+        'gentle-ai binary found but its CLAUDE.md markers are missing. ' +
+          'Run `gentle-ai install` and `/sdd-init` for full overlay mode.',
+      );
+    }
+    return {
+      mode,
+      backupPath: null,
+      skeletonInstalled: [],
+      skeletonSkipped: [],
+      claudeSkillsInstalled: [],
+      claudeSkillsSkipped: [],
+      firewallEntriesAdded: 0,
+      claudeMdPatched: false,
+      astHookRegistered: false,
+      gentleAiBootstrap: null,
+      warnings,
+    };
+  }
+
+  // Dependency preflight. When the gentle-ai bootstrap will run, require
+  // git/curl/bash/node/npm and abort early with actionable install hints
+  // if any are missing — gentle-ai itself does not install system deps.
+  if (opts.bootstrapGentleAi) {
+    const deps = checkDependencies({ includeBootstrap: true, probe: opts.depProbe });
+    if (!deps.ok) {
+      throw new Error(formatMissingDependencies(deps.missingRequired));
+    }
+    for (const dep of deps.missingOptional) {
+      warnings.push(`optional dependency not found: ${dep.name} (${dep.hint})`);
+    }
+  }
+
+  await mkdir(paths.backupsDir, { recursive: true });
+  const backupPath = await createBackup([paths.claudeMd, paths.settingsJson], {
+    backupsDir: paths.backupsDir,
+  });
+
+  // Plug-and-play: bootstrap gentle-ai (binary + ecosystem + strict TDD)
+  // from its official source before layering the praxis overlay. Failures
+  // are non-fatal — they become warnings so the overlay still installs.
+  let gentleAiBootstrap: GentleAiBootstrapResult | null = null;
+  if (opts.bootstrapGentleAi) {
+    gentleAiBootstrap = await bootstrapGentleAi({
+      ...opts.gentleAiConfig,
+      force: opts.force,
+      binaryPresent: report.gentleAi.binaryPresent,
+      alreadyConfigured: report.gentleAi.markersFound.length > 0,
+    });
+    for (const w of gentleAiBootstrap.warnings) {
+      warnings.push(`gentle-ai: ${w}`);
+    }
+    if (gentleAiBootstrap.skipped && gentleAiBootstrap.skipReason) {
+      warnings.push(`gentle-ai: ${gentleAiBootstrap.skipReason}`);
+    }
+    // Re-detect so the reported mode reflects the freshly bootstrapped
+    // gentle-ai state.
+    report = await detect(paths);
+    mode = installModeFor(report);
   }
 
   if (mode === 'standalone') {
@@ -113,26 +200,6 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
         'Run `gentle-ai install` and `/sdd-init` for full overlay mode.',
     );
   }
-
-  if (dryRun) {
-    return {
-      mode,
-      backupPath: null,
-      skeletonInstalled: [],
-      skeletonSkipped: [],
-      claudeSkillsInstalled: [],
-      claudeSkillsSkipped: [],
-      firewallEntriesAdded: 0,
-      claudeMdPatched: false,
-      astHookRegistered: false,
-      warnings,
-    };
-  }
-
-  await mkdir(paths.backupsDir, { recursive: true });
-  const backupPath = await createBackup([paths.claudeMd, paths.settingsJson], {
-    backupsDir: paths.backupsDir,
-  });
 
   const skeleton = await installSkeleton({
     templatesRoot,
@@ -165,6 +232,7 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
     firewallEntriesAdded: firewallEntries.length,
     claudeMdPatched: true,
     astHookRegistered: true,
+    gentleAiBootstrap,
     warnings,
   };
 }

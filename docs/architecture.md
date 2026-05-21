@@ -85,6 +85,8 @@ src/
 │   ├── settings-patcher.ts # deny entries + PreToolUse hook
 │   ├── skeleton-installer.ts # praxis-home + claude-skills templates
 │   ├── install.ts          # orchestrator for runInstall / runUninstall / runRollback
+│   ├── dependency-check.ts # preflight: required/optional deps + install hints
+│   ├── gentle-ai-bootstrap.ts # drives gentle-ai install.sh + install + sync --strict-tdd
 │   ├── pocock-sync.ts      # drift detector core
 │   ├── telemetry/
 │   │   ├── schema.ts
@@ -93,12 +95,29 @@ src/
 │   │   └── queries.ts
 │   └── ast/
 │       ├── tokeniser.ts    # quote-aware bash tokeniser
-│       ├── rules.ts        # 9 deny rules
+│       ├── rules.ts        # 17 deny rules
 │       └── inspect.ts      # orchestrator
 └── data/
-    ├── firewall-defaults.ts  # the 30 deny entries
+    ├── firewall-defaults.ts  # ~40 deny entries
     └── pocock-skills.ts      # 6 skill manifest with blob SHAs
 ```
+
+## Install orchestration (runInstall)
+
+`runInstall` (in `lib/install.ts`) runs these phases in order:
+
+1. **Detect** Claude Code / gentle-ai / engram state; compute mode.
+2. **Dependency preflight** (when bootstrapping) — abort with links if a
+   required tool is missing.
+3. **Backup** `CLAUDE.md` + `settings.json`.
+4. **gentle-ai bootstrap** (when `bootstrapGentleAi`) — binary + ecosystem
+   + strict TDD, from gentle-ai's source. Non-fatal on failure. Re-detect
+   afterward so the reported mode reflects the new state.
+5. **Skeleton + skills** into `~/.praxis/` and `~/.claude/skills/`.
+6. **Patch** `CLAUDE.md` `@-import` + `settings.json` deny list + AST hook.
+
+The library defaults `bootstrapGentleAi` to **false** so unit/integration
+tests stay hermetic; the CLI flips it to **true** unless `--no-gentle-ai`.
 
 ## tsup build
 

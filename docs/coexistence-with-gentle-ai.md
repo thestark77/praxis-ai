@@ -19,6 +19,55 @@ patch, no shared mutable state. This document explains the boundaries.
 The two systems are orthogonal. praxis defines **when** to plan and
 **when** to stop; gentle-ai defines **how** to execute the plan.
 
+## Plug-and-play bootstrap
+
+As of 0.1.0-alpha.6, `praxis install` does not merely *detect* gentle-ai —
+it **installs and configures it** so a single command leaves the user with
+a fully working stack. This is opt-out via `--no-gentle-ai`.
+
+praxis never vendors gentle-ai. It drives gentle-ai's own source-of-truth
+tooling:
+
+1. **Binary** — downloads gentle-ai's `scripts/install.sh` at runtime and
+   runs it (brew tap or GitHub Releases binary). The script is fetched
+   from the canonical raw URL, executed, and discarded. Skipped if the
+   binary is already on PATH (unless `--force`).
+2. **Ecosystem** — `gentle-ai install --agents claude-code --persona
+   neutral --preset full-gentleman`. The `full-gentleman` preset pulls in
+   all nine components: claude-theme, context7, persona, **engram**, gga,
+   opencode-logo, permissions, sdd, skills. Model assignments default to
+   **balanced** (gentle-ai's default when no model flags are passed: opus
+   for architecture, sonnet for most phases, haiku for archiving).
+3. **Strict TDD** — `gentle-ai sync --agents claude-code --strict-tdd`.
+   The `install` subcommand does not expose a TDD flag; `sync` owns it, so
+   praxis runs it as a second step.
+
+### Applied configuration
+
+| Setting | Value | How |
+|---------|-------|-----|
+| Agents | `claude-code` | `--agents` (override with `--ga-agents`) |
+| Persona | `neutral` | `--persona` (override with `--ga-persona`) |
+| Preset | `full-gentleman` | `--preset` (override with `--ga-preset`) |
+| Models | `balanced` | gentle-ai default (no model flags) |
+| Strict TDD | enabled | `gentle-ai sync --strict-tdd` (disable with `--no-strict-tdd`) |
+
+### Respecting an existing configuration
+
+If gentle-ai is already configured (its markers are present in
+`CLAUDE.md`), the bootstrap is **skipped** so your existing persona,
+preset, model, and TDD choices are untouched. Re-run with `--force` to
+reapply the praxis defaults above. The bootstrap is also fully idempotent:
+gentle-ai's `install`/`sync` are safe to re-run as updates.
+
+### Failure handling
+
+A gentle-ai bootstrap failure is **non-fatal**. Each step's failure is
+collected as a warning and the praxis overlay still installs, so you are
+never left without the firewall. The dependency preflight (see
+[dependencies.md](dependencies.md)) runs first and aborts cleanly if a
+required tool is missing — before any install side-effect.
+
 ## Mechanical precedence
 
 praxis-ai's CLAUDE.md block is inserted **after** gentle-ai's blocks.

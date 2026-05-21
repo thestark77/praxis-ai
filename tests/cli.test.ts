@@ -87,7 +87,7 @@ describe('praxis CLI sync-pocock — offline path', () => {
 
   it('prints version', () => {
     const out = runCli('--version').trim();
-    expect(out).toBe('0.1.0-alpha.5');
+    expect(out).toBe('0.1.0-alpha.6');
   });
 });
 
@@ -156,7 +156,10 @@ describe('praxis CLI command wiring (sandboxed HOME)', () => {
 
   it('install copies the six lifted skills into sandboxed ~/.claude/skills', async () => {
     const sandboxHome = await makeSandboxHome();
-    const out = runCli('install', { ...process.env, HOME: sandboxHome });
+    // --no-gentle-ai keeps the test hermetic: no network, no gentle-ai
+    // binary install. The praxis overlay (skills, firewall, hook) still
+    // installs in full.
+    const out = runCli('install --no-gentle-ai', { ...process.env, HOME: sandboxHome });
     expect(out).toContain('praxis-ai install');
     expect(out).toContain('claude-skills:');
 

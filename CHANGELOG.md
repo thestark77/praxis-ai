@@ -6,6 +6,19 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Fixed — `npx praxis-ai@latest install` (could not determine executable to run)
+The package exposes two bins (`praxis`, `praxis-ast-hook`), neither
+matching the package name. npx's `getBinFromManifest` refuses to run a
+multi-bin package when no bin matches the package name, so the
+README's primary command `npx praxis-ai@latest install` failed with
+`could not determine executable to run` on any machine without a prior
+global install. (Global `npm install -g` was unaffected, which is why
+it went unnoticed.)
+
+Fix: added a `praxis-ai` bin alias pointing to the same shim as
+`praxis`. `npx praxis-ai@latest install` now resolves. A regression
+test asserts the package always exposes a bin matching its name.
+
 ### Added — Plug-and-play gentle-ai bootstrap (`praxis install`)
 `praxis install` no longer just *detects* gentle-ai — it installs and
 configures the whole stack from gentle-ai's source of truth, then layers

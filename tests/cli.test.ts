@@ -59,6 +59,19 @@ describe('praxis CLI surface', () => {
     expect(out).toContain('--ref');
     expect(out).toContain('--against-lift');
   });
+
+  it('exposes a bin matching the package name so `npx praxis-ai install` resolves', async () => {
+    // Regression guard for the alpha.7 fix: npx (`getBinFromManifest`)
+    // refuses to run when a package has multiple bins and none matches
+    // the package name. praxis-ai has `praxis` + `praxis-ast-hook`, so
+    // without a `praxis-ai` bin alias `npx praxis-ai@latest install`
+    // fails with "could not determine executable to run".
+    const pkgRaw = await import('node:fs/promises').then((m) =>
+      m.readFile(resolve(__dirname, '..', 'package.json'), 'utf8'),
+    );
+    const pkg = JSON.parse(pkgRaw) as { name: string; bin: Record<string, string> };
+    expect(Object.keys(pkg.bin)).toContain(pkg.name);
+  });
 });
 
 describe('praxis CLI sync-pocock — offline path', () => {
@@ -87,7 +100,7 @@ describe('praxis CLI sync-pocock — offline path', () => {
 
   it('prints version', () => {
     const out = runCli('--version').trim();
-    expect(out).toBe('0.1.0-alpha.6');
+    expect(out).toBe('0.1.0-alpha.7');
   });
 });
 

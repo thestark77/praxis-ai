@@ -8,7 +8,7 @@ This skill is lifted from `mattpocock/skills` and adapted for praxis-ai.
 - License: MIT
 - Path: `skills/productivity/caveman/SKILL.md`
 - Blob SHA at lift: `85770a38992a7c74d2b3467b03fe5bd4b1287fe6`
-- Repo commit at lift: `67bce91c80cd1020a4f068ced32d0281656842ad`
+- Repo commit at lift: `b8be62ffacb0118fa3eaa29a0923c87c8c11985c`
 - Author: Matt Pocock
 
 ## Modifications from upstream

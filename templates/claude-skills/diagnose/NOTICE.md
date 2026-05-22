@@ -8,7 +8,7 @@ This skill is lifted from `mattpocock/skills` and adapted for praxis-ai.
 - License: MIT
 - Path: `skills/engineering/diagnose/SKILL.md`
 - Blob SHA at lift: `ed55bda2fdb0d690ea3b80a1cf28bf848c5ad2b5`
-- Repo commit at lift: `67bce91c80cd1020a4f068ced32d0281656842ad`
+- Repo commit at lift: `b8be62ffacb0118fa3eaa29a0923c87c8c11985c`
 - Author: Matt Pocock
 
 ## Modifications from upstream

@@ -6,6 +6,38 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Added — `praxis update` command
+Updates the external pieces praxis depends on, modularly, **without
+touching the rest of the praxis overlay** (CLAUDE.md block, firewall,
+AST hook, telemetry, `~/.praxis/` skeleton are untouched).
+
+- **gentle-ai** — updated via gentle-ai's own config-preserving
+  primitives: `gentle-ai upgrade` (binary self-update; brew installs
+  get a `brew upgrade` note) + `gentle-ai sync` (re-applies all
+  components incl. **engram** for installed agents, from persisted
+  state, so persona / preset / model assignments are preserved). Strict
+  TDD is preserved by reading the current state and passing
+  `--strict-tdd` only when it is already enabled. Skipped with guidance
+  if gentle-ai is not installed.
+- **skills** — the six lifted mattpocock skills are refreshed from the
+  praxis-ai repo (the canonical source of the lifted, mechanism-pure
+  artifacts). Only the six praxis-managed skill dirs are overwritten;
+  any other skill in `~/.claude/skills/` is left alone. "Latest" means
+  the latest re-lift on praxis-ai `main`, so a mattpocock change reaches
+  users as soon as we re-lift + push — no npm release required.
+- Modular flags: `praxis update --gentle-ai`, `praxis update --skills`.
+  No flag = update both.
+- New module `src/lib/update.ts` + 11 tests (mocked runner + fetcher).
+
+### Changed — handoff skill re-lifted from upstream
+mattpocock updated the `handoff` skill. Re-lifted mechanism-pure: saves
+to the OS temp directory (not the workspace), adds an explicit
+redaction step (no API keys / passwords / tokens / PII in the handoff),
+and frames suggested skills as a dedicated section. Manifest blob SHA
+and repo commit refreshed in `src/data/pocock-skills.ts`; all eight
+lifted files are back in sync with upstream (`praxis sync-pocock` →
+in-sync 8, changed 0).
+
 ### Fixed — `npx praxis-ai@latest install` (could not determine executable to run)
 The package exposes two bins (`praxis`, `praxis-ast-hook`), neither
 matching the package name. npx's `getBinFromManifest` refuses to run a

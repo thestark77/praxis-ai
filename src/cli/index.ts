@@ -7,6 +7,7 @@ import { rollbackCommand } from './rollback.js';
 import { statsCommand } from './stats.js';
 import { contextUsageCommand } from './context-usage.js';
 import { syncPocockCommand } from './sync-pocock.js';
+import { updateCommand } from './update.js';
 
 const program = new Command();
 
@@ -15,7 +16,7 @@ program
   .description(
     'Phased-autonomy harness layer for Claude Code. Indagatory at task start, autonomous in execution, hard-stop at irreversibility.',
   )
-  .version('0.1.0-alpha.7');
+  .version('0.1.0-alpha.8');
 
 program.addCommand(installCommand());
 program.addCommand(uninstallCommand());
@@ -25,5 +26,6 @@ program.addCommand(rollbackCommand());
 program.addCommand(statsCommand());
 program.addCommand(contextUsageCommand());
 program.addCommand(syncPocockCommand());
+program.addCommand(updateCommand());
 
 program.parse(process.argv);

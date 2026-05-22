@@ -8,7 +8,7 @@ This skill is lifted from `mattpocock/skills` and adapted for praxis-ai.
 - License: MIT
 - Path: `skills/engineering/zoom-out/SKILL.md`
 - Blob SHA at lift: `1e7a5dc728fed0a85a28c9dfb6e78ce5a81da7db`
-- Repo commit at lift: `67bce91c80cd1020a4f068ced32d0281656842ad`
+- Repo commit at lift: `b8be62ffacb0118fa3eaa29a0923c87c8c11985c`
 - Author: Matt Pocock
 
 ## Modifications from upstream

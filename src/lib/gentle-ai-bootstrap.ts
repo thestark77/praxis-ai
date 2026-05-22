@@ -85,7 +85,7 @@ async function defaultFetchInstallScript(): Promise<string> {
   return res.text();
 }
 
-const defaultRunner: CommandRunner = async (command, args) => {
+export const defaultCommandRunner: CommandRunner = async (command, args) => {
   const { spawn } = await import('node:child_process');
   return new Promise<CommandResult>((resolve) => {
     const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -97,6 +97,7 @@ const defaultRunner: CommandRunner = async (command, args) => {
     child.on('close', (code) => resolve({ code: code ?? 0, stdout, stderr }));
   });
 };
+const defaultRunner = defaultCommandRunner;
 
 /**
  * Bootstrap gentle-ai with the praxis-recommended configuration.

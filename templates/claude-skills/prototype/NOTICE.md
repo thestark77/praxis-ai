@@ -8,7 +8,7 @@ and adapted for praxis-ai.
 - Repository: https://github.com/mattpocock/skills
 - License: MIT
 - Path: `skills/engineering/prototype/`
-- Repo commit at lift: `67bce91c80cd1020a4f068ced32d0281656842ad`
+- Repo commit at lift: `b8be62ffacb0118fa3eaa29a0923c87c8c11985c`
 - Author: Matt Pocock
 
 ## Per-file blob SHAs at lift

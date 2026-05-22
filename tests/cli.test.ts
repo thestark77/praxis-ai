@@ -40,7 +40,7 @@ async function makeSandboxHome(): Promise<string> {
 }
 
 describe('praxis CLI surface', () => {
-  it('prints help with all 8 commands', () => {
+  it('prints help with all commands', () => {
     const out = runCli('--help');
     expect(out).toContain('praxis');
     expect(out).toContain('install');
@@ -51,6 +51,7 @@ describe('praxis CLI surface', () => {
     expect(out).toContain('stats');
     expect(out).toContain('context-usage');
     expect(out).toContain('sync-pocock');
+    expect(out).toContain('update');
   });
 
   it('sync-pocock --help describes drift checking', () => {
@@ -100,7 +101,7 @@ describe('praxis CLI sync-pocock — offline path', () => {
 
   it('prints version', () => {
     const out = runCli('--version').trim();
-    expect(out).toBe('0.1.0-alpha.7');
+    expect(out).toBe('0.1.0-alpha.8');
   });
 });
 

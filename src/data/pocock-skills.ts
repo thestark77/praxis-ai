@@ -14,7 +14,7 @@ export const POCOCK_UPSTREAM_URL = 'https://github.com/mattpocock/skills';
 export const POCOCK_LICENSE = 'MIT';
 
 // Commit SHA of mattpocock/skills@main at the time of the lift.
-export const POCOCK_REPO_COMMIT = '67bce91c80cd1020a4f068ced32d0281656842ad';
+export const POCOCK_REPO_COMMIT = 'b8be62ffacb0118fa3eaa29a0923c87c8c11985c';
 
 export interface PocockSkillFile {
   /** Relative path within the upstream repo, e.g. `skills/engineering/diagnose/SKILL.md`. */
@@ -97,7 +97,7 @@ export const POCOCK_SKILLS: PocockSkill[] = [
     files: [
       {
         upstreamPath: 'skills/productivity/handoff/SKILL.md',
-        blobSha: '28bfb3ab133fe58fd6da8a2a13b3ed2450a2f8b2',
+        blobSha: '0aa5b99300da27b50e80db53f880e422204faedd',
       },
     ],
   },

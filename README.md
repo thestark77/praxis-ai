@@ -117,6 +117,31 @@ re-running it updates each piece from its source.
 --dry-run               preview without writing (skips the bootstrap)
 ```
 
+## Updating
+
+`praxis install` doubles as an updater, but the dedicated `praxis update`
+command updates the external dependencies **modularly without touching
+the rest of the praxis overlay** (your CLAUDE.md block, firewall, AST
+hook, telemetry, and `~/.praxis/` skeleton are left alone):
+
+```bash
+praxis update              # update both gentle-ai and the lifted skills
+praxis update --gentle-ai  # only gentle-ai (binary + components + engram)
+praxis update --skills     # only the six lifted mattpocock skills
+```
+
+- **gentle-ai** is updated through its own config-preserving primitives
+  (`gentle-ai upgrade` for the binary, `gentle-ai sync` for components +
+  engram). Your persona, preset, model assignments, and Strict TDD
+  setting are preserved. (Homebrew installs update the binary via
+  `brew upgrade gentle-ai`.)
+- **skills** are refreshed from the praxis-ai repo — the canonical source
+  of the mechanism-pure lifts. Only the six praxis-managed skill dirs are
+  overwritten; any other skill you have is left untouched.
+
+To also update praxis-ai itself: `npm install -g praxis-ai@latest`
+(or `npx praxis-ai@latest ...`).
+
 ### Adaptive modes
 
 The installer detects gentle-ai state and adapts:

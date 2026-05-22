@@ -12,16 +12,12 @@ without rebuilding context from scratch.
 
 ## Procedure
 
-1. Generate a temporary path:
+1. Write the handoff to a file in the **operating system's temporary
+   directory** — not the current workspace (it is scratch state, not a
+   project artifact). Use the OS temp location (`$TMPDIR` / `/tmp` /
+   `%TEMP%`), e.g. a `handoff-<timestamp>.md` file there.
 
-   ```
-   mktemp -t handoff-XXXXXX.md
-   ```
-
-   Read the file before writing to it (the temp file already exists and
-   may contain a placeholder).
-
-2. Write the handoff into that path. The document must contain:
+2. The document must contain:
 
    - **Goal**: one sentence on what the session was trying to achieve.
    - **State**: what is currently in flight (branch name, in-progress
@@ -31,18 +27,22 @@ without rebuilding context from scratch.
    - **Open questions**: anything the next agent must resolve.
    - **Suggested next steps**: the smallest next action that unblocks
      progress.
-   - **Suggested skills**: which praxis-ai or other skills the next
-     session is likely to need.
+   - **Suggested skills**: a section naming which praxis-ai or other
+     skills the next session should invoke.
 
 3. Do not duplicate content that already lives in a durable artifact
    (PRDs, plans, ADRs, issues, commits, diffs). Reference by path or
    URL.
 
-4. If the user passed an argument via `argument-hint`, treat it as the
+4. **Redact sensitive information** — API keys, passwords, tokens, and
+   personally identifiable information must never appear in the handoff
+   document.
+
+5. If the user passed an argument via `argument-hint`, treat it as the
    description of the next session's focus and shape the document
    accordingly.
 
-5. Surface the handoff path to the user so it can be shared with the
+6. Surface the handoff path to the user so it can be shared with the
    next agent.
 
 ## What goes in, what stays out

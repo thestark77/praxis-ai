@@ -1,0 +1,34 @@
+# Line endings are normalised to LF in the repository AND in every working
+# tree, on every platform. This is not cosmetic.
+#
+# Without it, a Windows checkout with `core.autocrlf=true` rewrites text files
+# to CRLF, and that breaks real behaviour:
+#   - Frontmatter parsing tests `content.startsWith('---\n')`, which is false
+#     when the file begins with `---\r\n`, so every field parses as undefined.
+#   - The bash scenario runners under tests/scenarios expect LF scripts.
+#   - Templates are copied verbatim into agent config dirs; shipping CRLF there
+#     propagates the same parsing failure to the installed overlay.
+#
+# `eol=lf` overrides a user's global core.autocrlf, so contributors do not have
+# to configure anything locally.
+* text=auto eol=lf
+
+# Explicitly LF: consumed by shells and by frontmatter parsers.
+*.sh   text eol=lf
+*.bash text eol=lf
+*.md   text eol=lf
+*.json text eol=lf
+*.ts   text eol=lf
+*.js   text eol=lf
+
+# Never transform binaries.
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.pdf    binary
+*.db     binary
+*.sqlite binary
+*.woff   binary
+*.woff2  binary

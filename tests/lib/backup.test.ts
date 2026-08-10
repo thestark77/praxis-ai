@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtemp, mkdir, writeFile, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
 import {
   createBackup,
   listBackups,
@@ -67,7 +67,10 @@ describe('restoreBackup', () => {
 
   it('restores a file to its destination path', async () => {
     const dir = await createBackup([claudeMd], { backupsDir });
-    const ts = dir.split('/').pop()!;
+    // basename(), not split('/'): createBackup returns a host-native path, so
+    // on Windows split('/') finds nothing to split and pop() hands back the
+    // whole path as if it were the timestamp.
+    const ts = basename(dir);
     await writeFile(claudeMd, 'corrupted content');
     await restoreBackup(ts, { 'CLAUDE.md': claudeMd }, { backupsDir });
     const restored = await readFile(claudeMd, 'utf8');

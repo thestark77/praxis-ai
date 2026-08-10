@@ -1,7 +1,20 @@
 import { mkdir, readdir, copyFile, stat, rm } from 'node:fs/promises';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve as resolvePath } from 'node:path';
+
+/**
+ * Render a relative path as a stable, platform-independent identifier.
+ *
+ * `relative()` emits the host separator, so the same install reports
+ * `caveman/SKILL.md` on Linux and `caveman\SKILL.md` on Windows. These strings
+ * are identifiers — printed in install output and asserted by tests — not
+ * paths handed to the filesystem, so they must not vary by host. Filesystem
+ * work keeps using the native form.
+ */
+function toPosixId(relativePath: string): string {
+  return sep === '/' ? relativePath : relativePath.split(sep).join('/');
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -76,11 +89,11 @@ export async function installSkeleton(opts: InstallSkeletonOptions): Promise<Ske
     const dest = join(opts.praxisDir, relativeTo);
     await mkdir(dirname(dest), { recursive: true });
     if (!opts.overwrite && (await pathExists(dest))) {
-      skipped.push(relativeTo);
+      skipped.push(toPosixId(relativeTo));
       continue;
     }
     await copyFile(source, dest);
-    installed.push(relativeTo);
+    installed.push(toPosixId(relativeTo));
   }
 
   return { installed, skipped };
@@ -142,11 +155,11 @@ export async function installClaudeSkills(
       const dest = join(opts.claudeSkillsDir, relativeTo);
       await mkdir(dirname(dest), { recursive: true });
       if (!opts.overwrite && (await pathExists(dest))) {
-        skipped.push(relativeTo);
+        skipped.push(toPosixId(relativeTo));
         continue;
       }
       await copyFile(source, dest);
-      installed.push(relativeTo);
+      installed.push(toPosixId(relativeTo));
     }
   }
 

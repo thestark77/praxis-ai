@@ -84,7 +84,7 @@ describe('praxis CLI sync-pocock — offline path', () => {
     const sandboxHome = await mkdtemp(join(tmpdir(), 'praxis-cli-test-'));
     const env = {
       ...process.env,
-      HOME: sandboxHome,
+      HOME: sandboxHome, PRAXIS_HOME: sandboxHome,
       // node 18+ allows overriding via undici dispatcher / env, but the
       // simplest hermetic check is just to assert the CLI surfaces an
       // error exit code if the network is unreachable. We do that by
@@ -108,7 +108,7 @@ describe('praxis CLI sync-pocock — offline path', () => {
 describe('praxis CLI telemetry — stats + context-usage (sandboxed HOME)', () => {
   it('stats on a fresh sandbox reports zero events with a help hint', async () => {
     const sandboxHome = await makeSandboxHome();
-    const out = runCli('stats', { ...process.env, HOME: sandboxHome });
+    const out = runCli('stats', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
     expect(out).toContain('praxis stats');
     expect(out).toContain('total events:        0');
     expect(out).toContain('No telemetry recorded yet');
@@ -116,7 +116,7 @@ describe('praxis CLI telemetry — stats + context-usage (sandboxed HOME)', () =
 
   it('stats --json on a fresh sandbox returns a parsable empty summary', async () => {
     const sandboxHome = await makeSandboxHome();
-    const out = runCli('stats --json', { ...process.env, HOME: sandboxHome });
+    const out = runCli('stats --json', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
     const parsed = JSON.parse(out);
     expect(parsed.totalEvents).toBe(0);
     expect(parsed.sessions).toBe(0);
@@ -126,15 +126,15 @@ describe('praxis CLI telemetry — stats + context-usage (sandboxed HOME)', () =
     const sandboxHome = await makeSandboxHome();
     const recordOut = runCli('context-usage --record 30000 --budget 200000', {
       ...process.env,
-      HOME: sandboxHome,
+      HOME: sandboxHome, PRAXIS_HOME: sandboxHome,
     });
     expect(recordOut).toContain('recorded: 30000 / 200000');
 
-    const showOut = runCli('context-usage', { ...process.env, HOME: sandboxHome });
+    const showOut = runCli('context-usage', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
     expect(showOut).toContain('used / budget: 30000 / 200000');
     expect(showOut).toContain('percent:       15.0%');
 
-    const stats = runCli('stats --json', { ...process.env, HOME: sandboxHome });
+    const stats = runCli('stats --json', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
     expect(JSON.parse(stats).contextSamples).toBe(1);
   });
 
@@ -142,20 +142,20 @@ describe('praxis CLI telemetry — stats + context-usage (sandboxed HOME)', () =
     const sandboxHome = await makeSandboxHome();
     runCli('context-usage --record 160000 --budget 200000', {
       ...process.env,
-      HOME: sandboxHome,
+      HOME: sandboxHome, PRAXIS_HOME: sandboxHome,
     });
-    const out = runCli('context-usage', { ...process.env, HOME: sandboxHome });
+    const out = runCli('context-usage', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
     expect(out).toContain('Above 75% threshold');
   });
 
   it('stats --reset truncates events', async () => {
     const sandboxHome = await makeSandboxHome();
-    runCli('context-usage --record 100 --budget 1000', { ...process.env, HOME: sandboxHome });
-    const before = runCli('stats --json', { ...process.env, HOME: sandboxHome });
+    runCli('context-usage --record 100 --budget 1000', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
+    const before = runCli('stats --json', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
     expect(JSON.parse(before).totalEvents).toBe(1);
-    const reset = runCli('stats --reset', { ...process.env, HOME: sandboxHome });
+    const reset = runCli('stats --reset', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
     expect(reset).toContain('1 events deleted');
-    const after = runCli('stats --json', { ...process.env, HOME: sandboxHome });
+    const after = runCli('stats --json', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
     expect(JSON.parse(after).totalEvents).toBe(0);
   });
 });
@@ -163,7 +163,7 @@ describe('praxis CLI telemetry — stats + context-usage (sandboxed HOME)', () =
 describe('praxis CLI command wiring (sandboxed HOME)', () => {
   it('install --dry-run produces expected output and writes nothing', async () => {
     const sandboxHome = await makeSandboxHome();
-    const out = runCli('install --dry-run', { ...process.env, HOME: sandboxHome });
+    const out = runCli('install --dry-run', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
     expect(out).toContain('praxis-ai install');
     expect(out).toContain('--dry-run: no changes were written');
   });
@@ -173,7 +173,7 @@ describe('praxis CLI command wiring (sandboxed HOME)', () => {
     // --no-gentle-ai keeps the test hermetic: no network, no gentle-ai
     // binary install. The praxis overlay (skills, firewall, hook) still
     // installs in full.
-    const out = runCli('install --no-gentle-ai', { ...process.env, HOME: sandboxHome });
+    const out = runCli('install --no-gentle-ai', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
     expect(out).toContain('praxis-ai install');
     expect(out).toContain('claude-skills:');
 
@@ -197,20 +197,20 @@ describe('praxis CLI command wiring (sandboxed HOME)', () => {
 
   it('doctor reports overlay-not-installed on a fresh sandbox', async () => {
     const sandboxHome = await makeSandboxHome();
-    const out = runCli('doctor', { ...process.env, HOME: sandboxHome });
+    const out = runCli('doctor', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
     expect(out).toContain('praxis-ai doctor');
     expect(out).toContain('overlay installed:  false');
   });
 
   it('rollback --list reports no backups on a fresh sandbox', async () => {
     const sandboxHome = await makeSandboxHome();
-    const out = runCli('rollback --list', { ...process.env, HOME: sandboxHome });
+    const out = runCli('rollback --list', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
     expect(out).toContain('no backups found');
   });
 
   it('uninstall on fresh sandbox reports no praxis block removed', async () => {
     const sandboxHome = await makeSandboxHome();
-    const out = runCli('uninstall', { ...process.env, HOME: sandboxHome });
+    const out = runCli('uninstall', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
     expect(out).toContain('praxis-ai uninstall');
     expect(out).toContain('CLAUDE.md @-import removed: false');
   });

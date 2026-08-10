@@ -21,7 +21,7 @@ function runHook(input: unknown, env: NodeJS.ProcessEnv = {}): string {
   return execSync(`node ${hookBin}`, {
     input: typeof input === 'string' ? input : JSON.stringify(input),
     encoding: 'utf8',
-    env: { ...process.env, HOME: sandboxHome, ...env },
+    env: { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome, ...env },
   });
 }
 

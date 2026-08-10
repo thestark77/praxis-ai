@@ -29,9 +29,10 @@ export function statsSummary(db: Db): StatsSummary {
   ).c;
 
   const outcomeRows = db
-    .prepare<
-      [string]
-    >("SELECT json_extract(payload, '$.outcome') AS outcome, COUNT(*) AS c " + 'FROM events WHERE kind = ? GROUP BY outcome')
+    .prepare<[string]>(
+      "SELECT json_extract(payload, '$.outcome') AS outcome, COUNT(*) AS c " +
+        'FROM events WHERE kind = ? GROUP BY outcome',
+    )
     .all(EVENT_KINDS.TOOL_INVOCATION) as Array<{ outcome: string; c: number }>;
   const toolInvocationsByOutcome: Record<string, number> = {};
   for (const r of outcomeRows) {
@@ -45,9 +46,10 @@ export function statsSummary(db: Db): StatsSummary {
   ).c;
 
   const phaseRows = db
-    .prepare<
-      [string]
-    >("SELECT json_extract(payload, '$.to') AS to_phase, COUNT(*) AS c " + 'FROM events WHERE kind = ? GROUP BY to_phase')
+    .prepare<[string]>(
+      "SELECT json_extract(payload, '$.to') AS to_phase, COUNT(*) AS c " +
+        'FROM events WHERE kind = ? GROUP BY to_phase',
+    )
     .all(EVENT_KINDS.PHASE_TRANSITION) as Array<{ to_phase: string; c: number }>;
   const phaseTransitionsByPhase: Record<string, number> = {};
   for (const r of phaseRows) {
@@ -92,8 +94,7 @@ export function latestContextSample(db: Db): LatestContextSample | null {
         'WHERE kind = ? ORDER BY ts DESC LIMIT 1',
     )
     .get(EVENT_KINDS.CONTEXT_SAMPLE) as
-    | { ts: number; sessionUuid: string | null; payload: string }
-    | undefined;
+    { ts: number; sessionUuid: string | null; payload: string } | undefined;
   if (!row) return null;
   const parsed = JSON.parse(row.payload) as { used: number; budget: number };
   const percent = parsed.budget > 0 ? (parsed.used / parsed.budget) * 100 : 0;

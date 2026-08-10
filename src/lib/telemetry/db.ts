@@ -30,8 +30,7 @@ export async function openDatabase(opts: OpenDatabaseOptions): Promise<Db> {
     db.exec(SCHEMA_DDL_V1);
 
     const row = db.prepare('SELECT MAX(version) AS v FROM schema_version').get() as
-      | { v: number | null }
-      | undefined;
+      { v: number | null } | undefined;
     const currentVersion = row?.v ?? 0;
     if (currentVersion < SCHEMA_VERSION) {
       db.prepare('INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (?, ?)').run(

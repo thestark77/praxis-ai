@@ -1,11 +1,13 @@
 import { Command } from 'commander';
 import { resolvePaths } from '../lib/paths.js';
 import { listBackups, restoreBackup } from '../lib/backup.js';
-import { runRollback } from '../lib/install.js';
+import { runRollback, rollbackDestinations } from '../lib/install.js';
 
 export function rollbackCommand(): Command {
   return new Command('rollback')
-    .description('Restore CLAUDE.md and settings.json from the most recent praxis backup.')
+    .description(
+      'Restore CLAUDE.md, settings.json and opencode.json from the most recent praxis backup.',
+    )
     .option('--list', 'show available backups without restoring')
     .option('--to <timestamp>', 'restore a specific backup by timestamp')
     .action(async (opts: { list?: boolean; to?: string }) => {
@@ -27,14 +29,9 @@ export function rollbackCommand(): Command {
       try {
         let restored: string | null;
         if (opts.to) {
-          await restoreBackup(
-            opts.to,
-            {
-              'CLAUDE.md': paths.claudeMd,
-              'settings.json': paths.settingsJson,
-            },
-            { backupsDir: paths.backupsDir },
-          );
+          await restoreBackup(opts.to, rollbackDestinations(paths), {
+            backupsDir: paths.backupsDir,
+          });
           restored = opts.to;
         } else {
           restored = await runRollback({ paths });

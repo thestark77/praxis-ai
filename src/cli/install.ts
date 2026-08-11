@@ -1,11 +1,17 @@
 import { Command } from 'commander';
 import { runInstall } from '../lib/install.js';
+import { parseAgentSelector } from '../lib/agents.js';
 
 export function installCommand(): Command {
   return new Command('install')
     .description(
-      'Install praxis overlay into ~/.claude/. Plug-and-play: also bootstraps ' +
-        'gentle-ai (binary + ecosystem + engram + strict TDD) unless --no-gentle-ai.',
+      'Install praxis overlay into ~/.claude/ and/or ~/.config/opencode/. Plug-and-play: ' +
+        'also bootstraps gentle-ai (binary + ecosystem + engram + strict TDD) unless --no-gentle-ai.',
+    )
+    .option(
+      '--agent <agent>',
+      'target harness: auto | both | claude-code | opencode (auto installs into every harness present)',
+      'auto',
     )
     .option('--dry-run', 'preview changes without writing')
     .option('--force', 'overwrite ~/.praxis/ skeleton + reapply gentle-ai praxis defaults')
@@ -20,6 +26,7 @@ export function installCommand(): Command {
     .option('--no-strict-tdd', 'do not enable gentle-ai Strict TDD during the bootstrap')
     .action(
       async (opts: {
+        agent?: string;
         dryRun?: boolean;
         force?: boolean;
         gentleAi?: boolean;
@@ -33,6 +40,7 @@ export function installCommand(): Command {
           // opts.strictTdd=false for --no-strict-tdd; both default true.
           const bootstrap = opts.gentleAi !== false && !opts.dryRun;
           const result = await runInstall({
+            agents: parseAgentSelector(opts.agent),
             dryRun: opts.dryRun,
             force: opts.force,
             bootstrapGentleAi: bootstrap,
@@ -45,6 +53,7 @@ export function installCommand(): Command {
           });
           console.log('praxis-ai install');
           console.log(`  mode: ${result.mode}`);
+          console.log(`  agents: ${result.agents.join(', ')}`);
           if (opts.dryRun) {
             console.log('  --dry-run: no changes were written');
           } else {
@@ -70,6 +79,24 @@ export function installCommand(): Command {
             console.log(`  CLAUDE.md @-import injected: ${result.claudeMdPatched}`);
             console.log(`  firewall rules added: ${result.firewallEntriesAdded}`);
             console.log(`  AST PreToolUse hook registered: ${result.astHookRegistered}`);
+            if (result.opencode) {
+              const oc = result.opencode;
+              console.log('');
+              console.log('  opencode');
+              console.log(`    config: ${oc.configFile}`);
+              console.log(
+                `    permission denies: ${oc.permissionRulesAdded} added, ` +
+                  `${oc.permissionRulesUpgraded} raised to deny, ` +
+                  `${oc.permissionRulesAlreadyDenied} already denied`,
+              );
+              console.log(`    instructions -> ~/.praxis/main.md: ${oc.instructionsPatched}`);
+              console.log(
+                `    firewall plugin: ${oc.firewallModulePath ? oc.pluginPath : '(not emitted)'}`,
+              );
+              console.log(
+                `    skills: ${oc.skillsInstalled.length} installed, ${oc.skillsSkipped.length} skipped`,
+              );
+            }
           }
           if (result.warnings.length > 0) {
             console.log('');

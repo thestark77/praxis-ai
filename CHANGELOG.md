@@ -6,6 +6,59 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Added — OpenCode support (`--agent`)
+
+praxis is no longer Claude-Code-only. `install`, `uninstall` and `doctor`
+take `--agent auto | both | claude-code | opencode`; `auto` (the default)
+targets every harness initialised on the machine, so a dual-harness box is
+covered by the same single command and a Claude-Code-only box behaves
+exactly as before.
+
+The overlay is the same design expressed in OpenCode's vocabulary:
+
+- **Layer 1** — the firewall deny list is translated into the native
+  `permission` block of `opencode.json` (`bash` / `read` / `edit` maps of
+  glob → `deny`). `FIREWALL_DEFAULTS` stays the single source: the
+  translation lives in `src/lib/opencode/permissions.ts`, so a new rule is
+  still written once.
+- **Layer 2** — `~/.config/opencode/plugins/praxis-firewall.ts`, generated
+  at install time, hooks `tool.execute.before` and throws to block. It
+  **imports** the built engine (`dist/firewall.js`, a new side-effect-free
+  bundle entry) rather than forking the rules — one AST rule set for both
+  harnesses.
+- **Layer 3** — `instructions[]` points at `~/.praxis/main.md`, OpenCode's
+  analogue of the CLAUDE.md `@-import`: the overlay content stays in
+  `~/.praxis/`, so `praxis update` never has to re-patch the config.
+- The six lifted skills are installed into `~/.config/opencode/skills/`.
+
+Merging, not overwriting: `opencode.json` is shared with gentle-ai (agents,
+MCP servers, its own permission entries) and all of it survives install and
+uninstall. A praxis pattern found at a weaker `ask` is raised to `deny` and
+reported in the install output. `opencode.json` is now backed up with
+`CLAUDE.md` and `settings.json`, so `praxis rollback` restores the
+pre-praxis config byte for byte.
+
+`praxis doctor --agent opencode --verify` loads the engine module the
+emitted plugin imports and asserts a synthetic `rm -rf` is denied — a
+plugin whose import target has gone missing loads as a silent no-op inside
+OpenCode, so the check executes it instead of trusting the file's presence.
+
+Verified against a real OpenCode 1.18.16 session driven by a local
+OpenAI-compatible stub: layer 1 denies `rm -rf <dir>` through OpenCode's
+own permission engine, layer 2 blocks `echo hi && rm -rf <dir>` (the chained
+form layer 1's globs cannot match) with the target directory intact, and an
+ordinary command still runs. 69 new tests (325 total).
+
+### Fixed — praxis-ai is installable again on machines without a C++ toolchain
+
+`better-sqlite3` is back on `^12.11.1`. The 13.x line publishes **no**
+prebuilt binaries (0 release assets, versus 138 for 12.11.1), so `npm i -g
+praxis-ai` fell back to `node-gyp rebuild` and failed on any machine
+without Visual Studio Build Tools or Xcode CLT — that is, on most of the
+Windows users an install tool exists to serve. Reproduced locally: a clean
+`npm ci` on Windows/Node 22 aborts at `Could not find any Visual Studio
+installation to use`; with 12.11.1 it downloads the prebuild and succeeds.
+
 ### Added — `praxis update` command
 Updates the external pieces praxis depends on, modularly, **without
 touching the rest of the praxis overlay** (CLAUDE.md block, firewall,

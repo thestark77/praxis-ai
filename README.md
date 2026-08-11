@@ -1,6 +1,6 @@
 # praxis-ai
 
-> Phased-autonomy harness layer for Claude Code.
+> Phased-autonomy harness layer for Claude Code and OpenCode.
 > **Indagatory** at task start. **Autonomous** in execution. **Hard-stop** at irreversibility.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -75,11 +75,44 @@ the whole stack and then layers its own overlay:
      (`grill-with-docs`, `caveman`, `diagnose`, `zoom-out`, `prototype`,
      `handoff`) with per-skill `NOTICE.md` attribution and mechanism-pure
      bodies that don't fight gentle-ai's autonomous orchestrator.
+4. **praxis overlay** into `~/.config/opencode/` — the same three layers
+   expressed in OpenCode's own vocabulary (see below).
 
 Nothing external is vendored: the gentle-ai binary comes from its official
 installer, its components are downloaded by gentle-ai itself, and the
 mattpocock skill lifts are mechanism-pure rewrites refreshed from upstream
 via `praxis sync-pocock`.
+
+## Harnesses: Claude Code and OpenCode
+
+praxis installs into whichever harnesses are initialised on the machine.
+Select explicitly with `--agent auto | both | claude-code | opencode`
+(`auto` is the default) on `install`, `uninstall` and `doctor`.
+
+The overlay is one design expressed twice, never two implementations:
+
+| Layer                | Claude Code                          | OpenCode                                        |
+| -------------------- | ------------------------------------ | ----------------------------------------------- |
+| Overlay instructions | `@~/.praxis/main.md` in `CLAUDE.md`  | `instructions[]` → `~/.praxis/main.md`          |
+| Firewall layer 1     | `permissions.deny` in settings.json  | `permission` block in `opencode.json`           |
+| Firewall layer 2     | `praxis-ast-hook` PreToolUse hook    | `plugins/praxis-firewall.ts` (`tool.execute.before`) |
+| Lifted skills        | `~/.claude/skills/`                  | `~/.config/opencode/skills/`                    |
+
+Layer 2 is the same engine in both: the emitted OpenCode plugin **imports**
+`dist/firewall.js` — the exact rule set the Claude Code hook runs — instead
+of re-implementing it. One place to add a rule, both harnesses get it.
+
+Everything is merged, never overwritten: `opencode.json` is shared with
+gentle-ai (agents, MCP servers, its own `permission` entries) and those
+survive install, uninstall and re-install untouched. Where praxis finds one
+of its own patterns already set to a weaker `ask`, it raises it to `deny`
+and says so in the install output; `praxis rollback` restores the previous
+config byte for byte, because `opencode.json` is backed up alongside
+`CLAUDE.md` and `settings.json`.
+
+`praxis doctor --agent opencode --verify` loads the engine module the
+plugin imports and asserts it denies a synthetic `rm -rf`, so a plugin
+whose import target went missing is reported instead of silently no-oping.
 
 ## Installation
 
@@ -107,6 +140,7 @@ re-running it updates each piece from its source.
 ### Install flags
 
 ```text
+--agent <a>             auto | both | claude-code | opencode              (default auto)
 --no-gentle-ai          install the praxis overlay only (skip the bootstrap)
 --force                 overwrite ~/.praxis/ + reapply gentle-ai praxis defaults
 --ga-persona <p>        gentle-ai persona: gentleman | neutral | custom   (default neutral)
@@ -189,10 +223,12 @@ global `praxis-ast-hook` on PATH.
 ## CLI surface
 
 ```text
-praxis install [--dry-run] [--force]   Install overlay; idempotent.
-praxis uninstall [--keep-skeleton]     Remove block + firewall + skills.
+praxis install [--agent <a>]           Install overlay; idempotent.
+               [--dry-run] [--force]
+praxis uninstall [--agent <a>]         Remove block + firewall + skills.
+                 [--keep-skeleton]
                  [--keep-skills]
-praxis doctor                          Diagnose install + mode.
+praxis doctor [--agent <a>] [--verify] Diagnose install + mode.
 praxis rollback [--list]               Restore from the latest backup.
 praxis stats [--json] [--reset]        Read local telemetry.
 praxis context-usage --record <used>   Record a context-usage sample.

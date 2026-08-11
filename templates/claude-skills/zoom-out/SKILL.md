@@ -2,6 +2,7 @@
 name: zoom-out
 description: Ask the agent to zoom out and produce a higher-level map of the surrounding code. Use when you are unfamiliar with a section of code or need to understand how it fits the bigger picture.
 invocation: explicit
+disable-model-invocation: true
 ---
 
 # zoom-out — Mechanism

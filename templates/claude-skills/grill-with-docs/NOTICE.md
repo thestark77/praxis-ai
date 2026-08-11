@@ -21,7 +21,9 @@ constraints are preserved. The original intent is faithful.
 Specific changes:
 
 - Added `invocation: explicit` frontmatter per
-  `~/.praxis/skill-invocation-policy.md`. This skill is phase-marking and
+  `~/.praxis/skill-invocation-policy.md`, plus Claude Code's native
+  `disable-model-invocation: true` so the policy is enforced by the
+  harness rather than only documented. This skill is phase-marking and
   must never auto-invoke; the user invokes it via `/grill-with-docs`.
 - Body restructured into Inputs → Procedure → ADR criteria → Stop
   conditions, in alignment with praxis-ai's `grilling.md` overlay module.

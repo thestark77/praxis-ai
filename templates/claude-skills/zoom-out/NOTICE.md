@@ -20,10 +20,15 @@ preserving the upstream's minimalist intent.
 
 Specific changes:
 
-- The upstream `disable-model-invocation: true` declaration is replaced
-  with praxis-ai's `invocation: explicit` field. They are functionally
-  equivalent — the skill is phase-marking and never auto-invokes — but
-  praxis-ai uses a unified `invocation:` vocabulary.
+- The upstream `disable-model-invocation: true` declaration is kept
+  **alongside** praxis-ai's `invocation: explicit` field. An earlier lift
+  replaced it, treating the two as equivalent; they are not. `invocation:
+  explicit` is a praxis vocabulary field that only the overlay prose
+  enforces, while `disable-model-invocation` is enforced by Claude Code
+  itself ("prevent Claude from automatically loading this skill", skills
+  reference). A phase-marking skill must not depend on the model choosing
+  to obey, so both are declared: the native key enforces, the praxis
+  field keeps the policy readable across harnesses.
 - Procedure expanded to define "one layer outward" precisely (function
   → module → package → bounded context), to prevent the agent from
   leaping to whole-system diagrams.

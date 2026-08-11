@@ -167,9 +167,18 @@ export async function readPluginStatus(pluginPath: string): Promise<PluginStatus
   };
 }
 
-/** Path of the package's own `package.json`, used to stamp the version. */
+/**
+ * Read praxis's own version, used to stamp the emitted plugin.
+ *
+ * The candidates cover both layouts this code runs in: bundled, where this
+ * module is `<pkg>/dist/index.js` and the manifest is one level up, and a
+ * source checkout, where it is `<pkg>/src/lib/opencode/plugin.ts` and the
+ * manifest is three. Missing `<pkg>/package.json` from the bundled case is
+ * how installs ended up stamped `v0.0.0`.
+ */
 export async function readPackageVersion(fallback = '0.0.0'): Promise<string> {
   const candidates = [
+    resolve(__dirname, '..', 'package.json'),
     resolve(__dirname, '..', '..', '..', 'package.json'),
     resolve(__dirname, '..', '..', 'package.json'),
     join(__dirname, 'package.json'),

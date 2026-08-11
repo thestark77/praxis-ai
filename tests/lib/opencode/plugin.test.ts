@@ -9,6 +9,7 @@ import {
   removeFirewallPlugin,
   readPluginStatus,
   resolveFirewallModulePath,
+  readPackageVersion,
   PRAXIS_PLUGIN_MARKER,
 } from '../../../src/lib/opencode/plugin.js';
 
@@ -110,6 +111,20 @@ describe('resolveFirewallModulePath', () => {
   it('finds the built engine from a source checkout', async () => {
     // `npm test` builds first, so dist/firewall.js is on disk here.
     expect(await resolveFirewallModulePath()).toBe(engine);
+  });
+});
+
+describe('readPackageVersion', () => {
+  it('finds praxis-ai own version rather than falling back', async () => {
+    // Regression guard: the bundled layout (`<pkg>/dist/index.js`) was not
+    // in the candidate list, so real installs stamped the plugin `v0.0.0`.
+    const pkg = JSON.parse(
+      await readFile(
+        resolve(fileURLToPath(import.meta.url), '..', '..', '..', '..', 'package.json'),
+        'utf8',
+      ),
+    ) as { version: string };
+    expect(await readPackageVersion()).toBe(pkg.version);
   });
 });
 

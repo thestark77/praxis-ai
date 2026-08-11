@@ -130,16 +130,19 @@ sidebar from C" — that is the actual design.
 
 ### 6. Capture the answer and clean up
 
-Once a variant has won, record which one and why (commit message, ADR,
-issue, or `NOTES.md` next to the prototype). Then:
+Once a variant has won, record which one and why (implementation issue,
+commit message, or ADR), then capture the prototype as
+[SKILL.md](SKILL.md) describes. Then:
 
-- **Sub-shape A** — delete the losing variants and the switcher; fold
-  the winner into the existing page.
-- **Sub-shape B** — promote the winning variant to a real route; delete
-  the throwaway route and the switcher.
+- **Sub-shape A** — fold the winner into the existing page; drop the
+  losing variants and the switcher from the main branch.
+- **Sub-shape B** — promote the winning variant to a real route; drop the
+  throwaway route and the switcher from the main branch.
 
-Do not leave variant components or the switcher lying around. They rot
-fast and confuse the next reader.
+The full variant set is the primary source, so it lands on the throwaway
+branch rather than the bin. What must not survive is variant components
+and a switcher left in the main branch: they rot fast and confuse the
+next reader.
 
 ## Anti-patterns
 

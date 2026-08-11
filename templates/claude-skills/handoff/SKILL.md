@@ -2,6 +2,7 @@
 name: handoff
 description: Compact the current conversation into a handoff document so a fresh agent can pick up the work. Use when the user invokes /handoff or asks to "hand off", "pass this off", "summarise for the next agent".
 invocation: explicit
+disable-model-invocation: true
 argument-hint: "What will the next session be used for?"
 ---
 
@@ -31,7 +32,7 @@ without rebuilding context from scratch.
      skills the next session should invoke.
 
 3. Do not duplicate content that already lives in a durable artifact
-   (PRDs, plans, ADRs, issues, commits, diffs). Reference by path or
+   (specs, plans, ADRs, issues, commits, diffs). Reference by path or
    URL.
 
 4. **Redact sensitive information** — API keys, passwords, tokens, and

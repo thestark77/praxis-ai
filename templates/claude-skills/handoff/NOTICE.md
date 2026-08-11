@@ -7,8 +7,8 @@ This skill is lifted from `mattpocock/skills` and adapted for praxis-ai.
 - Repository: https://github.com/mattpocock/skills
 - License: MIT
 - Path: `skills/productivity/handoff/SKILL.md`
-- Blob SHA at lift: `0aa5b99300da27b50e80db53f880e422204faedd`
-- Repo commit at lift: `b8be62ffacb0118fa3eaa29a0923c87c8c11985c`
+- Blob SHA at lift: `043d9e13dc7eca3002a47d3ab9865c568f647863`
+- Repo commit at lift: `84fdeffd12f2ee307994d1eb6feb48173b6e0502`
 - Author: Matt Pocock
 
 ## Modifications from upstream
@@ -34,6 +34,11 @@ Re-lifted from the upstream revision that:
 - Adds an explicit redaction step (no API keys, passwords, tokens, or
   PII in the handoff document).
 - Frames the suggested skills as a dedicated document section.
+- Adds `disable-model-invocation: true`, Claude Code's native
+  enforcement of what praxis already declared with `invocation:
+  explicit`. Both are kept: the native key stops auto-invocation, the
+  praxis field keeps the policy readable across harnesses.
+- Says "specs" where it said "PRDs" in the do-not-duplicate list.
 
 ## License notice
 

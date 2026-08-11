@@ -3,7 +3,7 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
-import { POCOCK_SKILLS, POCOCK_LICENSE, POCOCK_REPO_COMMIT } from '../../src/data/pocock-skills.js';
+import { POCOCK_SKILLS, POCOCK_LICENSE, repoCommitFor } from '../../src/data/pocock-skills.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -13,6 +13,7 @@ interface Frontmatter {
   name?: string;
   description?: string;
   invocation?: string;
+  disableModelInvocation?: string;
   triggers?: unknown;
 }
 
@@ -35,6 +36,7 @@ function parseFrontmatter(content: string): Frontmatter {
     if (key === 'name') out.name = val.trim();
     else if (key === 'description') out.description = val.trim();
     else if (key === 'invocation') out.invocation = val.trim();
+    else if (key === 'disable-model-invocation') out.disableModelInvocation = val.trim();
     else if (key === 'triggers') out.triggers = true;
   }
   return out;
@@ -74,6 +76,18 @@ describe('templates/claude-skills — SKILL.md frontmatter', () => {
     }
   });
 
+  it('explicit skills disable model invocation natively, not just by policy', async () => {
+    // `invocation: explicit` is praxis vocabulary that only the overlay prose
+    // enforces. `disable-model-invocation` is enforced by Claude Code itself,
+    // and a phase-marking skill must not depend on the model choosing to obey.
+    for (const skill of POCOCK_SKILLS) {
+      if (skill.invocation !== 'explicit') continue;
+      const content = await readFile(join(SKILLS_ROOT, skill.name, 'SKILL.md'), 'utf8');
+      const fm = parseFrontmatter(content);
+      expect(fm.disableModelInvocation, `${skill.name}: disable-model-invocation`).toBe('true');
+    }
+  });
+
   it('reflex skills declare a triggers block', async () => {
     for (const skill of POCOCK_SKILLS) {
       if (skill.invocation !== 'reflex') continue;
@@ -90,7 +104,7 @@ describe('templates/claude-skills — NOTICE.md attribution', () => {
       const content = await readFile(join(SKILLS_ROOT, skill.name, 'NOTICE.md'), 'utf8');
       expect(content, `${skill.name}: MIT label`).toContain(POCOCK_LICENSE);
       expect(content, `${skill.name}: upstream URL`).toContain('mattpocock/skills');
-      expect(content, `${skill.name}: repo commit`).toContain(POCOCK_REPO_COMMIT);
+      expect(content, `${skill.name}: repo commit`).toContain(repoCommitFor(skill));
       for (const file of skill.files) {
         expect(content, `${skill.name}: blob SHA for ${file.upstreamPath}`).toContain(file.blobSha);
       }

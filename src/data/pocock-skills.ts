@@ -61,8 +61,20 @@ export interface PocockSkill {
   name: string;
   /** invocation declaration per praxis-ai skill-invocation-policy. */
   invocation: 'explicit' | 'reflex' | 'contextual';
+  /**
+   * Repo commit this skill was last lifted from, when it differs from
+   * `POCOCK_REPO_COMMIT`. Skills are re-lifted one at a time as upstream
+   * changes them, so a single global commit would have to either lie about
+   * the skills that were not re-lifted or block the ones that were.
+   */
+  repoCommit?: string;
   /** Files lifted from the upstream skill directory. */
   files: PocockSkillFile[];
+}
+
+/** The commit a given skill's NOTICE.md must attribute. */
+export function repoCommitFor(skill: PocockSkill): string {
+  return skill.repoCommit ?? POCOCK_REPO_COMMIT;
 }
 
 export const POCOCK_SKILLS: PocockSkill[] = [
@@ -131,28 +143,30 @@ export const POCOCK_SKILLS: PocockSkill[] = [
   {
     name: 'prototype',
     invocation: 'explicit',
+    repoCommit: '84fdeffd12f2ee307994d1eb6feb48173b6e0502',
     files: [
       {
         upstreamPath: 'skills/engineering/prototype/SKILL.md',
-        blobSha: '64f3e61117b49c305e8d85b9c8543dcdfbb7d2c2',
+        blobSha: '094571156140f5993cce8557dc31383c82817f3e',
       },
       {
         upstreamPath: 'skills/engineering/prototype/LOGIC.md',
-        blobSha: '526ecb18fb9a179dbb32392356b0e3ed3556911c',
+        blobSha: '5f5a3fd5a8cbd69c029854e9881ddc6e87ae5093',
       },
       {
         upstreamPath: 'skills/engineering/prototype/UI.md',
-        blobSha: 'f3b6e640222bf50c0a888136f2fbe595f2ff2b60',
+        blobSha: '76c0f6012b016af04d6105fa696a9a0e29dfa53a',
       },
     ],
   },
   {
     name: 'handoff',
     invocation: 'explicit',
+    repoCommit: '84fdeffd12f2ee307994d1eb6feb48173b6e0502',
     files: [
       {
         upstreamPath: 'skills/productivity/handoff/SKILL.md',
-        blobSha: '0aa5b99300da27b50e80db53f880e422204faedd',
+        blobSha: '043d9e13dc7eca3002a47d3ab9865c568f647863',
       },
     ],
   },

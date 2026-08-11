@@ -49,6 +49,41 @@ own permission engine, layer 2 blocks `echo hi && rm -rf <dir>` (the chained
 form layer 1's globs cannot match) with the target directory intact, and an
 ordinary command still runs. 69 new tests (325 total).
 
+### Changed — re-lifted `prototype` and `handoff` from upstream
+
+The four files `praxis sync-pocock` had been reporting as drifted are
+re-lifted, so the drift report is back to 0 changed / 0 removed.
+
+- **prototype** — the LOGIC branch is no longer a terminal app. It is now a
+  single self-contained HTML demo: free-play buttons plus tabbed guided
+  walkthroughs, so a non-developer can drive the state model. The purity
+  boundary is unchanged, only restated ("no terminal code in the module"
+  becomes "no DOM in the module"), and the run rule widens from "one
+  command" to "trivial to run" because the two branches now start
+  differently. Both branches now treat the prototype as a **primary
+  source**: the validated decision is absorbed, the prototype itself goes
+  to a throwaway branch with a pointer from the implementation issue,
+  rather than being deleted.
+- **handoff** — "PRDs" becomes "specs" in the do-not-duplicate list, and
+  upstream's `disable-model-invocation: true` is adopted.
+
+`PocockSkill` gained an optional `repoCommit`. Skills are re-lifted one at
+a time, so a single global commit SHA would have to either lie about the
+skills that were not re-lifted or block the ones that were.
+
+### Fixed — explicit skills now refuse auto-invocation natively
+
+The four `invocation: explicit` skills (`grill-with-docs`, `handoff`,
+`prototype`, `zoom-out`) also declare Claude Code's
+`disable-model-invocation: true`. An earlier lift had dropped that field
+on the grounds that praxis's own `invocation:` vocabulary said the same
+thing — but `invocation: explicit` is only enforced by overlay prose,
+while `disable-model-invocation` is enforced by the harness ("prevent
+Claude from automatically loading this skill"). A phase-marking skill must
+not depend on the model choosing to obey. Both are kept: the native key
+enforces, the praxis field keeps the policy readable across harnesses, and
+a test now asserts the pairing.
+
 ### Fixed — praxis-ai is installable again on machines without a C++ toolchain
 
 `better-sqlite3` is back on `^12.11.1`. The 13.x line publishes **no**

@@ -12,8 +12,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
-        node-version: [18, 20, 22]
+        # windows-latest is not optional. Its absence is why CRLF mangling,
+        # native path separators and an inert HOME sandbox all shipped
+        # undetected: every one of them passes on Linux and macOS.
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        # commander 15 needs >=22.12, eslint 10 needs ^22.13, so 18 and 20
+        # can no longer install the toolchain.
+        node-version: [22, 24]
     steps:
       - uses: actions/checkout@v4
 

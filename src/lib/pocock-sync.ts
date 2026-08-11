@@ -1,4 +1,9 @@
-import { POCOCK_SKILLS, POCOCK_UPSTREAM_REPO, type PocockSkill } from '../data/pocock-skills.js';
+import {
+  POCOCK_SKILLS,
+  POCOCK_UPSTREAM_REPO,
+  type PocockSkill,
+  type PocockUpstreamStatus,
+} from '../data/pocock-skills.js';
 
 /**
  * Fetcher abstraction. Tests inject a fake fetcher; production passes a
@@ -18,7 +23,12 @@ export interface DriftEntry {
   path: string;
   recordedSha: string;
   upstreamSha: string | null;
-  status: 'in-sync' | 'changed' | 'removed';
+  status: 'in-sync' | 'changed' | 'removed' | 'acknowledged';
+  /**
+   * Present when the manifest already records a terminal or structural fact
+   * about this path, so the report can separate settled history from work.
+   */
+  acknowledged?: PocockUpstreamStatus;
 }
 
 export interface DriftReport {
@@ -27,6 +37,8 @@ export interface DriftReport {
   changed: DriftEntry[];
   removed: DriftEntry[];
   inSync: DriftEntry[];
+  /** Settled: upstream deleted or moved the path and the manifest says so. */
+  acknowledged: DriftEntry[];
 }
 
 /**
@@ -42,6 +54,43 @@ export async function detectDrift(
 
   for (const skill of skills) {
     for (const file of skill.files) {
+      const ack = file.upstreamStatus;
+
+      // Deleted upstream and recorded as such. Still verified rather than
+      // assumed: a path that reappears is news, not settled history.
+      if (ack?.kind === 'removed') {
+        const upstream = await fetcher.fetchBlobSha(file.upstreamPath, ref);
+        entries.push({
+          skill: skill.name,
+          path: file.upstreamPath,
+          recordedSha: file.blobSha,
+          upstreamSha: upstream,
+          status: upstream === null ? 'acknowledged' : 'changed',
+          acknowledged: ack,
+        });
+        continue;
+      }
+
+      // Upstream reorganised: the mechanism lives under a new path, so drift
+      // is measured there. Otherwise a pure move reads as a deleted skill.
+      if (ack?.kind === 'relocated' && ack.movedTo) {
+        const baseline = ack.movedToBlobSha ?? file.blobSha;
+        const upstream = await fetcher.fetchBlobSha(ack.movedTo, ref);
+        let status: DriftEntry['status'];
+        if (upstream === null) status = 'removed';
+        else if (upstream === baseline) status = 'acknowledged';
+        else status = 'changed';
+        entries.push({
+          skill: skill.name,
+          path: ack.movedTo,
+          recordedSha: baseline,
+          upstreamSha: upstream,
+          status,
+          acknowledged: ack,
+        });
+        continue;
+      }
+
       const upstream = await fetcher.fetchBlobSha(file.upstreamPath, ref);
       let status: DriftEntry['status'];
       if (upstream === null) {
@@ -67,6 +116,7 @@ export async function detectDrift(
     changed: entries.filter((e) => e.status === 'changed'),
     removed: entries.filter((e) => e.status === 'removed'),
     inSync: entries.filter((e) => e.status === 'in-sync'),
+    acknowledged: entries.filter((e) => e.status === 'acknowledged'),
   };
 }
 
@@ -110,7 +160,8 @@ export function formatDriftReport(report: DriftReport): string {
   lines.push(`praxis sync-pocock — drift report against ${POCOCK_UPSTREAM_REPO}@${report.ref}`);
   lines.push('');
   lines.push(
-    `  in-sync: ${report.inSync.length}, changed: ${report.changed.length}, removed: ${report.removed.length}`,
+    `  in-sync: ${report.inSync.length}, changed: ${report.changed.length}, ` +
+      `removed: ${report.removed.length}, settled: ${report.acknowledged.length}`,
   );
   lines.push('');
 
@@ -132,8 +183,21 @@ export function formatDriftReport(report: DriftReport): string {
     lines.push('');
   }
 
+  // Settled history is reported, but below the actionable sections and
+  // without next steps: there is no work here, and mixing it in is what made
+  // earlier runs look permanently dirty.
+  if (report.acknowledged.length > 0) {
+    lines.push('  Settled (recorded in the manifest, no action):');
+    for (const e of report.acknowledged) {
+      const kind = e.acknowledged?.kind === 'relocated' ? 'moved' : 'deleted';
+      lines.push(`    [${e.skill}] ${kind}: ${e.path}`);
+      if (e.acknowledged?.note) lines.push(`      ${e.acknowledged.note}`);
+    }
+    lines.push('');
+  }
+
   if (report.changed.length === 0 && report.removed.length === 0) {
-    lines.push('  ✓ All lifted files match the recorded SHAs. No action needed.');
+    lines.push('  ✓ Every live lifted file matches its recorded SHA. No action needed.');
   } else {
     lines.push('  Next steps:');
     lines.push('    1. Review the upstream diff for each changed file.');

@@ -1,5 +1,17 @@
 import { mkdir } from 'node:fs/promises';
-import { resolvePaths, type PraxisPaths } from './paths.js';
+import {
+  resolvePaths,
+  resolveOpenCodePaths,
+  type PraxisPaths,
+  type OpenCodePaths,
+} from './paths.js';
+import { resolveAgents, type AgentId, type AgentSelector } from './agents.js';
+import {
+  runOpenCodeInstall,
+  runOpenCodeUninstall,
+  type OpenCodeInstallResult,
+  type OpenCodeUninstallResult,
+} from './opencode/install.js';
 import { detect, installModeFor, type InstallMode } from './detector.js';
 import { createBackup } from './backup.js';
 import { patchClaudeMd } from './claudemd-patcher.js';
@@ -32,6 +44,12 @@ import { checkDependencies, formatMissingDependencies, type DepProbe } from './d
 
 export interface InstallOptions {
   paths?: PraxisPaths;
+  opencodePaths?: OpenCodePaths;
+  /**
+   * Which harnesses to install into. Defaults to `auto`: every harness
+   * initialised on this machine.
+   */
+  agents?: AgentSelector;
   templatesRoot?: string;
   claudeSkillsTemplatesRoot?: string;
   firewallEntries?: string[];
@@ -57,6 +75,8 @@ export interface InstallOptions {
 
 export interface InstallResult {
   mode: InstallMode;
+  /** Harnesses this run actually touched. */
+  agents: AgentId[];
   backupPath: string | null;
   skeletonInstalled: string[];
   skeletonSkipped: string[];
@@ -65,6 +85,8 @@ export interface InstallResult {
   firewallEntriesAdded: number;
   claudeMdPatched: boolean;
   astHookRegistered: boolean;
+  /** Present only when OpenCode was one of the targets. */
+  opencode: OpenCodeInstallResult | null;
   gentleAiBootstrap: GentleAiBootstrapResult | null;
   warnings: string[];
 }
@@ -105,18 +127,22 @@ export async function resolveAstHookCommand(): Promise<string> {
 
 export async function runInstall(opts: InstallOptions = {}): Promise<InstallResult> {
   const paths = opts.paths ?? resolvePaths();
+  const opencodePaths = opts.opencodePaths ?? resolveOpenCodePaths(paths.home);
+  const agents = await resolveAgents(opts.agents ?? 'auto', { paths, opencodePaths });
   const templatesRoot = opts.templatesRoot ?? DEFAULT_TEMPLATES_ROOT;
   const claudeSkillsTemplatesRoot =
     opts.claudeSkillsTemplatesRoot ?? DEFAULT_CLAUDE_SKILLS_TEMPLATES_ROOT;
   const firewallEntries = opts.firewallEntries ?? FIREWALL_DEFAULTS;
   const importPath = opts.importPath ?? PRAXIS_IMPORT_PATH;
   const dryRun = opts.dryRun ?? false;
+  const wantsClaudeCode = agents.includes('claude-code');
+  const wantsOpenCode = agents.includes('opencode');
 
   let report = await detect(paths);
   let mode = installModeFor(report);
   const warnings: string[] = [];
 
-  if (mode === 'no-claude-code') {
+  if (wantsClaudeCode && mode === 'no-claude-code') {
     throw new Error(
       `Claude Code config dir not found at ${paths.claudeDir}. ` +
         'Run `claude` once to initialise it, then retry praxis install.',
@@ -136,6 +162,7 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
     }
     return {
       mode,
+      agents,
       backupPath: null,
       skeletonInstalled: [],
       skeletonSkipped: [],
@@ -144,6 +171,7 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
       firewallEntriesAdded: 0,
       claudeMdPatched: false,
       astHookRegistered: false,
+      opencode: null,
       gentleAiBootstrap: null,
       warnings,
     };
@@ -163,7 +191,13 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
   }
 
   await mkdir(paths.backupsDir, { recursive: true });
-  const backupPath = await createBackup([paths.claudeMd, paths.settingsJson], {
+  const backupTargets = [paths.claudeMd, paths.settingsJson];
+  if (wantsOpenCode) {
+    // opencode.json is shared with gentle-ai, so it must be recoverable by
+    // `praxis rollback` exactly like settings.json is.
+    backupTargets.push(opencodePaths.opencodeJson, opencodePaths.opencodeJsonc);
+  }
+  const backupPath = await createBackup(backupTargets, {
     backupsDir: paths.backupsDir,
   });
 
@@ -207,31 +241,48 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
     overwrite: opts.force,
   });
 
-  const claudeSkills = await installClaudeSkills({
-    templatesRoot: claudeSkillsTemplatesRoot,
-    claudeSkillsDir: paths.claudeSkillsDir,
-    skills: POCOCK_SKILL_NAMES,
-    overwrite: opts.force,
-  });
+  const claudeSkills = wantsClaudeCode
+    ? await installClaudeSkills({
+        templatesRoot: claudeSkillsTemplatesRoot,
+        claudeSkillsDir: paths.claudeSkillsDir,
+        skills: POCOCK_SKILL_NAMES,
+        overwrite: opts.force,
+      })
+    : { installed: [], skipped: [] };
 
-  await patchClaudeMd(paths.claudeMd, importPath);
-  await patchSettings(paths.settingsJson, firewallEntries);
+  if (wantsClaudeCode) {
+    await patchClaudeMd(paths.claudeMd, importPath);
+    await patchSettings(paths.settingsJson, firewallEntries);
 
-  const astHookCommand = opts.astHookCommand ?? (await resolveAstHookCommand());
-  const settingsBeforeHook = await readSettings(paths.settingsJson);
-  const settingsWithHook = addPraxisAstHook(settingsBeforeHook, astHookCommand);
-  await writeSettings(paths.settingsJson, settingsWithHook);
+    const astHookCommand = opts.astHookCommand ?? (await resolveAstHookCommand());
+    const settingsBeforeHook = await readSettings(paths.settingsJson);
+    const settingsWithHook = addPraxisAstHook(settingsBeforeHook, astHookCommand);
+    await writeSettings(paths.settingsJson, settingsWithHook);
+  }
+
+  let opencode: OpenCodeInstallResult | null = null;
+  if (wantsOpenCode) {
+    opencode = await runOpenCodeInstall({
+      paths: opencodePaths,
+      firewallEntries,
+      skillsTemplatesRoot: claudeSkillsTemplatesRoot,
+      force: opts.force,
+    });
+    warnings.push(...opencode.warnings);
+  }
 
   return {
     mode,
+    agents,
     backupPath,
     skeletonInstalled: skeleton.installed,
     skeletonSkipped: skeleton.skipped,
     claudeSkillsInstalled: claudeSkills.installed,
     claudeSkillsSkipped: claudeSkills.skipped,
-    firewallEntriesAdded: firewallEntries.length,
-    claudeMdPatched: true,
-    astHookRegistered: true,
+    firewallEntriesAdded: wantsClaudeCode ? firewallEntries.length : 0,
+    claudeMdPatched: wantsClaudeCode,
+    astHookRegistered: wantsClaudeCode,
+    opencode,
     gentleAiBootstrap,
     warnings,
   };
@@ -239,6 +290,8 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
 
 export interface UninstallOptions {
   paths?: PraxisPaths;
+  opencodePaths?: OpenCodePaths;
+  agents?: AgentSelector;
   firewallEntries?: string[];
   removeSkeleton?: boolean;
   removeClaudeSkills?: boolean;
@@ -246,6 +299,7 @@ export interface UninstallOptions {
 }
 
 export interface UninstallResult {
+  agents: AgentId[];
   removedClaudeMdBlock: boolean;
   removedFirewallEntries: number;
   /** True if praxis-home install artefacts were removed from ~/.praxis/. */
@@ -258,33 +312,51 @@ export interface UninstallResult {
   praxisDirFullyRemoved: boolean;
   removedClaudeSkills: string[];
   removedAstHook: boolean;
+  /** Present only when OpenCode was one of the targets. */
+  opencode: OpenCodeUninstallResult | null;
   restoredFromBackup: string | null;
 }
 
 export async function runUninstall(opts: UninstallOptions = {}): Promise<UninstallResult> {
   const paths = opts.paths ?? resolvePaths();
+  const opencodePaths = opts.opencodePaths ?? resolveOpenCodePaths(paths.home);
+  const agents = await resolveAgents(opts.agents ?? 'auto', { paths, opencodePaths });
   const firewallEntries = opts.firewallEntries ?? FIREWALL_DEFAULTS;
   const removeSkeleton = opts.removeSkeleton ?? true;
   const removeClaudeSkillsFlag = opts.removeClaudeSkills ?? true;
+  const wantsClaudeCode = agents.includes('claude-code');
 
-  const removedClaudeMdBlock = await unpatchClaudeMd(paths.claudeMd);
-  await unpatchSettings(paths.settingsJson, firewallEntries);
+  let removedClaudeMdBlock = false;
+  let removedAstHook = false;
+  if (wantsClaudeCode) {
+    removedClaudeMdBlock = await unpatchClaudeMd(paths.claudeMd);
+    await unpatchSettings(paths.settingsJson, firewallEntries);
 
-  // Remove the praxis AST hook entry from settings.json.
-  const settingsBeforeHook = await readSettings(paths.settingsJson);
-  const settingsWithoutHook = removePraxisAstHook(settingsBeforeHook);
-  const removedAstHook =
-    JSON.stringify(settingsBeforeHook.hooks ?? {}) !==
-    JSON.stringify(settingsWithoutHook.hooks ?? {});
-  await writeSettings(paths.settingsJson, settingsWithoutHook);
+    // Remove the praxis AST hook entry from settings.json.
+    const settingsBeforeHook = await readSettings(paths.settingsJson);
+    const settingsWithoutHook = removePraxisAstHook(settingsBeforeHook);
+    removedAstHook =
+      JSON.stringify(settingsBeforeHook.hooks ?? {}) !==
+      JSON.stringify(settingsWithoutHook.hooks ?? {});
+    await writeSettings(paths.settingsJson, settingsWithoutHook);
+  }
+
+  const opencode = agents.includes('opencode')
+    ? await runOpenCodeUninstall({
+        paths: opencodePaths,
+        firewallEntries,
+        removeSkills: removeClaudeSkillsFlag,
+      })
+    : null;
 
   if (removeSkeleton) {
     await uninstallSkeleton(paths.praxisDir);
   }
 
-  const removedClaudeSkills = removeClaudeSkillsFlag
-    ? await uninstallClaudeSkills(paths.claudeSkillsDir, POCOCK_SKILL_NAMES)
-    : [];
+  const removedClaudeSkills =
+    removeClaudeSkillsFlag && wantsClaudeCode
+      ? await uninstallClaudeSkills(paths.claudeSkillsDir, POCOCK_SKILL_NAMES)
+      : [];
 
   // Was the whole praxis dir actually removed, or did backups/telemetry survive?
   const { stat } = await import('node:fs/promises');
@@ -297,24 +369,41 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<Uninsta
   }
 
   return {
+    agents,
     removedClaudeMdBlock,
-    removedFirewallEntries: firewallEntries.length,
+    removedFirewallEntries: wantsClaudeCode ? firewallEntries.length : 0,
     removedSkeleton: removeSkeleton,
     praxisDirFullyRemoved,
     removedClaudeSkills,
     removedAstHook,
+    opencode,
     restoredFromBackup: null,
   };
 }
 
-export async function runRollback(opts: { paths?: PraxisPaths } = {}): Promise<string | null> {
+/**
+ * Backup basename → where it is restored to. One definition so `rollback`
+ * and `rollback --to` can never drift apart; files absent from a given
+ * backup are skipped by the restore.
+ */
+export function rollbackDestinations(
+  paths: PraxisPaths,
+  opencodePaths: OpenCodePaths = resolveOpenCodePaths(paths.home),
+): Record<string, string> {
+  return {
+    'CLAUDE.md': paths.claudeMd,
+    'settings.json': paths.settingsJson,
+    'opencode.json': opencodePaths.opencodeJson,
+    'opencode.jsonc': opencodePaths.opencodeJsonc,
+  };
+}
+
+export async function runRollback(
+  opts: { paths?: PraxisPaths; opencodePaths?: OpenCodePaths } = {},
+): Promise<string | null> {
   const paths = opts.paths ?? resolvePaths();
-  const restored = await restoreLatestBackup(
-    {
-      'CLAUDE.md': paths.claudeMd,
-      'settings.json': paths.settingsJson,
-    },
-    { backupsDir: paths.backupsDir },
-  );
-  return restored;
+  const opencodePaths = opts.opencodePaths ?? resolveOpenCodePaths(paths.home);
+  return await restoreLatestBackup(rollbackDestinations(paths, opencodePaths), {
+    backupsDir: paths.backupsDir,
+  });
 }

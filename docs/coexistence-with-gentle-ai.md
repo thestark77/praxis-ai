@@ -19,6 +19,46 @@ patch, no shared mutable state. This document explains the boundaries.
 The two systems are orthogonal. praxis defines **when** to plan and
 **when** to stop; gentle-ai defines **how** to execute the plan.
 
+## Receipt-driven development is gentle-ai's, and it is the user's
+
+gentle-ai 2.4 added receipt-driven development: a bounded review that has
+to produce a receipt before a change is delivered, plus a kill switch the
+user owns (`gentle-ai review mode enable|disable|status`). It is opt-in
+and off by default.
+
+This is the one place where the two systems could be mistaken for each
+other, because both sit between "the work is written" and "the work
+ships". They stop different things and must not be merged:
+
+- The praxis firewall is a **hard stop on an irreversible action**, at the
+  moment the action is attempted. It has no receipt, no lifecycle, and no
+  opinion about whether the change is good. It cannot be satisfied, only
+  authorised by a human.
+- RDD is a **review gate on a delivery**, with a lifecycle and a receipt.
+  It can be satisfied by review, and it can be switched off.
+
+So praxis never enables, disables, inspects, or works around RDD. A user
+who turns RDD off still has the firewall; a user who turns it on does not
+get a second, praxis-flavoured review. If delivery reports
+`disabled/unmanaged`, that is the switch doing its job, not a fault for
+praxis to diagnose.
+
+## Versions this was verified against
+
+The flags praxis drives are checked against a real installation, not
+inferred from documentation. Last verified 2026-09-03:
+
+| Component | Verified against |
+|-----------|------------------|
+| gentle-ai | 2.4.0 installed, 2.5.0 latest |
+| engram    | 1.20.0 installed, 2.0.0-rc latest |
+
+`install --agents/--persona/--preset` and `sync --strict-tdd` are all
+present and unchanged. gentle-ai has since grown `--channel`,
+`--scope`, `--sdd-mode` and `--dry-run`, which praxis does not pass: they
+select a release channel and an install scope, and those are the user's
+choices to make directly, not defaults for an overlay to impose.
+
 ## Plug-and-play bootstrap
 
 As of 0.1.0-alpha.6, `praxis install` does not merely *detect* gentle-ai —

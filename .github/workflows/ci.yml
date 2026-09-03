@@ -16,9 +16,15 @@ jobs:
         # native path separators and an inert HOME sandbox all shipped
         # undetected: every one of them passes on Linux and macOS.
         os: [ubuntu-latest, macos-latest, windows-latest]
-        # commander 15 needs >=22.12, eslint 10 needs ^22.13, so 18 and 20
+        # commander 15 needs >=22.12 and eslint 10 needs ^22.13, so 18 and 20
         # can no longer install the toolchain.
-        node-version: [22, 24]
+        #
+        # 22 and 24 are the LTS lines; 26 is current, and it is here because
+        # `engines` admits it and nothing was proving it. Node 23 is left out
+        # deliberately: better-sqlite3 publishes no prebuild for its ABI
+        # (131), so it would need a C++ toolchain. `engines` excludes it for
+        # the same reason.
+        node-version: [22, 24, 26]
     steps:
       - uses: actions/checkout@v4
 

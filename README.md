@@ -5,7 +5,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Status: alpha](https://img.shields.io/badge/status-alpha-yellow.svg)](#)
-[![Node](https://img.shields.io/badge/node-%3E%3D22.13-brightgreen.svg)](#)
+[![Node](https://img.shields.io/badge/node-22.13%2B%20%7C%2024%20%7C%2026-brightgreen.svg)](#)
 [![CI](https://github.com/thestark77/praxis-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/thestark77/praxis-ai/actions)
 
 praxis-ai is an additive overlay for Claude Code that fuses three things no

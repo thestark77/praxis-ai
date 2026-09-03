@@ -212,9 +212,22 @@ describe('detectOpenCode', () => {
     const paths = await sandbox();
     const report = await detectOpenCode(paths);
     expect(report.configDirExists).toBe(true);
-    expect(report.activeRules).toBe(0);
     expect(report.instructionsPresent).toBe(false);
     expect(report.plugin.present).toBe(false);
+    // `activeRules` counts praxis rules currently in force, not rules
+    // praxis installed. gentle-ai already denies `**/.env`, which is one of
+    // them, so a gentle-ai box satisfies one before praxis arrives. The two
+    // layers above are what say whether praxis is installed.
+    expect(report.activeRules).toBeLessThan(report.totalRules);
+  });
+
+  it('does not strip a foreign deny rule from a box praxis never touched', async () => {
+    const paths = await sandbox();
+    const result = await runOpenCodeUninstall({ paths });
+    expect(result.permissionRulesRemoved).toBe(0);
+    const config = await readOpenCodeConfig(paths.opencodeJson);
+    // gentle-ai wrote this one. praxis leaving it behind is the point.
+    expect((config.permission?.read as Record<string, string>)['**/.env']).toBe('deny');
   });
 
   it('reports every praxis rule active after an install', async () => {

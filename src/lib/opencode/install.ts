@@ -1,5 +1,10 @@
 import { mkdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
+import {
+  opencodeRulesToRemove,
+  type OwnedOpenCodeRule,
+  type OwnershipLedger,
+} from '../ownership.js';
 import { resolveOpenCodePaths, type OpenCodePaths } from '../paths.js';
 import {
   readOpenCodeConfig,
@@ -119,6 +124,12 @@ export interface OpenCodeInstallOptions {
 export interface OpenCodeInstallResult {
   configFile: string;
   permissionRulesAdded: number;
+  /**
+   * The rules this run actually wrote, for the ownership ledger. Upgraded
+   * and already-denied rules are excluded: praxis did not create those, so
+   * uninstall must not take them away.
+   */
+  rulesAdded: OwnedOpenCodeRule[];
   permissionRulesUpgraded: number;
   permissionRulesAlreadyDenied: number;
   instructionsPatched: boolean;
@@ -206,6 +217,7 @@ export async function runOpenCodeInstall(
   return {
     configFile,
     permissionRulesAdded: merged.added.length,
+    rulesAdded: merged.added.map((r) => ({ tool: r.tool, pattern: r.pattern })),
     permissionRulesUpgraded: merged.upgraded.length,
     permissionRulesAlreadyDenied: merged.unchanged.length,
     instructionsPatched: true,
@@ -222,6 +234,12 @@ export interface OpenCodeUninstallOptions {
   home?: string;
   firewallEntries?: string[];
   removeSkills?: boolean;
+  /**
+   * What praxis recorded having added. Absent or null means authorship is
+   * unknown, and every praxis rule currently set to deny is removed, which
+   * is how uninstall behaved before the ledger existed.
+   */
+  ledger?: OwnershipLedger | null;
 }
 
 export interface OpenCodeUninstallResult {
@@ -242,11 +260,23 @@ export async function runOpenCodeUninstall(
   const configFile = await resolveConfigFile(paths);
   const configExists = await pathExists(configFile);
 
+  // Did praxis ever touch this config? Without a ledger that is the only
+  // thing separating "installed before ledgers existed" from "never
+  // installed at all", and the difference matters: praxis and gentle-ai
+  // want several of the same denies, so a blind sweep of the rule set
+  // would strip protection from a box praxis had never been near.
+  const praxisFootprint =
+    (await pathExists(paths.firewallPlugin)) ||
+    (configExists && hasPraxisInstructions(await readOpenCodeConfig(configFile)));
+
   let permissionRulesRemoved = 0;
   let instructionsRemoved = false;
   if (configExists) {
     const config = await readOpenCodeConfig(configFile);
-    const rules = praxisOpenCodeRules(firewallEntries);
+    const rules =
+      opts.ledger || praxisFootprint
+        ? opencodeRulesToRemove(opts.ledger ?? null, praxisOpenCodeRules(firewallEntries))
+        : [];
     const stripped = removePraxisPermissions(config.permission, rules);
     permissionRulesRemoved = stripped.removed.length;
     const next: OpenCodeConfig = { ...config };

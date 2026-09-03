@@ -1,6 +1,6 @@
 {
   "name": "praxis-ai",
-  "version": "0.1.0-alpha.9",
+  "version": "0.1.0-alpha.10",
   "description": "Phased-autonomy harness layer for Claude Code. Indagatory at task start, autonomous in execution, hard-stop at irreversibility.",
   "type": "module",
   "bin": {
@@ -37,7 +37,7 @@
     "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\""
   },
   "dependencies": {
-    "better-sqlite3": "^12.11.1",
+    "better-sqlite3": "^13.0.3",
     "commander": "^15.0.0"
   },
   "devDependencies": {
@@ -49,7 +49,7 @@
     "prettier": "^3.3.0",
     "tsup": "^8.2.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "vitest": "^5.0.0"
   },
   "keywords": [
     "claude-code",

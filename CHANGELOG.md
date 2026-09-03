@@ -6,6 +6,71 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Fixed — an upgrade from a pre-ledger version could never uninstall
+
+Shipped in alpha.9 and found by driving real installs rather than the
+units underneath them.
+
+An alpha.8 machine has the overlay installed and no ownership ledger. On
+upgrade, `praxis install` runs again, finds all 70 deny entries already
+present, claims none of them, and writes a ledger saying it owns nothing.
+The absent-ledger fallback never fires, because the file now exists. The
+following `praxis uninstall` removed 0 rules and reported 70 preserved,
+leaving a firewall with no supported way to take it off. Every user
+upgrading from alpha.8 hits this.
+
+An install that finds praxis present but no ledger to inherit now marks
+the ledger as inherited, and uninstall sweeps the full list for it -
+exactly what the pre-ledger versions did. The mark is sticky, because a
+later install cannot recover authorship the older version never wrote
+down. A clean uninstall followed by a fresh install produces a precise
+ledger again.
+
+`removedFirewallEntries` also stops reporting the whole list length and
+reports what was really removed, alongside a new
+`preservedFirewallEntries` count so a rule surviving uninstall reads as a
+decision rather than a leak.
+
+Eight integration tests now drive whole installs through the clean,
+coexisting and upgrade paths.
+
+### Changed — dependency majors, taken after checking each one
+
+- **better-sqlite3 12 to 13.** A resilience win rather than a routine
+  bump: 12 depends on the deprecated `prebuild-install`, which downloads
+  a per-Node-ABI binary from GitHub during install, so a new Node release
+  or an offline machine falls back to needing a compiler. 13 ships eight
+  Node-API prebuilds inside the tarball (macOS, Linux, Linux-musl and
+  Windows, x64 and arm64), has no install script, and is ABI-stable
+  across Node versions. It also adds Windows on ARM, which 12 never had.
+- **vitest 4 to 5.** Installs clean and the suite passes unchanged.
+- **TypeScript 7 deliberately not taken.** typescript-eslint refuses it
+  outright (`typescript-eslint does not support TS 7.0`; its peer range
+  is `>=4.8.4 <6.1.0`, tracked upstream as typescript-eslint#10940 for TS
+  >=7.1). `tsc --noEmit`, the build and the whole suite pass under TS 7,
+  so this is a lint-toolchain block and nothing more; it reopens when
+  typescript-eslint ships support.
+
+The remaining low-severity esbuild advisory is not reachable here. It
+concerns esbuild's development server; esbuild arrives only through tsup
+and vite, and praxis runs neither as a server.
+
+### Verified against the upstream sources
+
+- **gentle-ai.** `scripts/install.sh` is byte-identical between 2.4.0 and
+  2.5.0, and none of the 300 files that changed touch praxis's
+  integration surface. `full-gentleman` is still the default preset with
+  the same nine components. Both commands praxis drives were dry-run
+  against the real binary and plan correctly.
+- **mattpocock/skills.** At `6654f6b` all five live lifted files differ
+  editorially only.
+- **The published package.** alpha.9 was installed from npm into a clean
+  sandbox and its hook binary driven the way Claude Code drives it: ten
+  cases, all correct, native module and telemetry working without a
+  compiler.
+
+## [0.1.0-alpha.9] - 2026-09-03
+
 ### Fixed — the AST hook could be walked past with a newline
 
 Replaying the deny spool of a live install turned up two structural gaps

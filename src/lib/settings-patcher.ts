@@ -69,10 +69,21 @@ export async function writeSettings(path: string, settings: ClaudeSettings): Pro
   await writeFile(path, json + '\n', 'utf8');
 }
 
-export async function patchSettings(path: string, denyAdditions: string[]): Promise<void> {
+/**
+ * Add the deny entries and report which ones were genuinely new.
+ *
+ * The return value is what the ownership ledger records. Entries already
+ * present were written by somebody else — gentle-ai, a team settings file,
+ * the user — and praxis must not claim them, or uninstall will delete
+ * protection it never installed.
+ */
+export async function patchSettings(path: string, denyAdditions: string[]): Promise<string[]> {
   const settings = await readSettings(path);
+  const existing = new Set(settings.permissions?.deny ?? []);
+  const added = denyAdditions.filter((entry) => !existing.has(entry));
   const updated = addDenyEntries(settings, denyAdditions);
   await writeSettings(path, updated);
+  return added;
 }
 
 export async function unpatchSettings(path: string, denyAdditions: string[]): Promise<void> {

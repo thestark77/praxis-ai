@@ -34,6 +34,12 @@ import {
 import { unpatchClaudeMd } from './claudemd-patcher.js';
 import { restoreLatestBackup } from './backup.js';
 import { FIREWALL_DEFAULTS, PRAXIS_IMPORT_PATH } from '../data/firewall-defaults.js';
+import {
+  recordOwnership,
+  readOwnership,
+  clearOwnership,
+  claudeEntriesToRemove,
+} from './ownership.js';
 import { POCOCK_SKILL_NAMES } from '../data/pocock-skills.js';
 import {
   bootstrapGentleAi,
@@ -250,9 +256,10 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
       })
     : { installed: [], skipped: [] };
 
+  let claudeEntriesAdded: string[] = [];
   if (wantsClaudeCode) {
     await patchClaudeMd(paths.claudeMd, importPath);
-    await patchSettings(paths.settingsJson, firewallEntries);
+    claudeEntriesAdded = await patchSettings(paths.settingsJson, firewallEntries);
 
     const astHookCommand = opts.astHookCommand ?? (await resolveAstHookCommand());
     const settingsBeforeHook = await readSettings(paths.settingsJson);
@@ -271,6 +278,13 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
     warnings.push(...opencode.warnings);
   }
 
+  // Record only what this machine actually gained, so uninstall can give
+  // back exactly that and nothing a neighbour had already put in place.
+  await recordOwnership(paths.praxisDir, {
+    claudeCode: claudeEntriesAdded,
+    opencode: opencode?.rulesAdded ?? [],
+  });
+
   return {
     mode,
     agents,
@@ -279,7 +293,7 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
     skeletonSkipped: skeleton.skipped,
     claudeSkillsInstalled: claudeSkills.installed,
     claudeSkillsSkipped: claudeSkills.skipped,
-    firewallEntriesAdded: wantsClaudeCode ? firewallEntries.length : 0,
+    firewallEntriesAdded: claudeEntriesAdded.length,
     claudeMdPatched: wantsClaudeCode,
     astHookRegistered: wantsClaudeCode,
     opencode,
@@ -326,11 +340,13 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<Uninsta
   const removeClaudeSkillsFlag = opts.removeClaudeSkills ?? true;
   const wantsClaudeCode = agents.includes('claude-code');
 
+  const ledger = await readOwnership(paths.praxisDir);
+
   let removedClaudeMdBlock = false;
   let removedAstHook = false;
   if (wantsClaudeCode) {
     removedClaudeMdBlock = await unpatchClaudeMd(paths.claudeMd);
-    await unpatchSettings(paths.settingsJson, firewallEntries);
+    await unpatchSettings(paths.settingsJson, claudeEntriesToRemove(ledger, firewallEntries));
 
     // Remove the praxis AST hook entry from settings.json.
     const settingsBeforeHook = await readSettings(paths.settingsJson);
@@ -346,8 +362,14 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<Uninsta
         paths: opencodePaths,
         firewallEntries,
         removeSkills: removeClaudeSkillsFlag,
+        ledger,
       })
     : null;
+
+  // The ledger describes rules that are now gone, so it goes before the
+  // skeleton does — leaving it behind would make a later uninstall believe
+  // it still owns them.
+  await clearOwnership(paths.praxisDir);
 
   if (removeSkeleton) {
     await uninstallSkeleton(paths.praxisDir);

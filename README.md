@@ -5,7 +5,7 @@
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Status: alpha](https://img.shields.io/badge/status-alpha-yellow.svg)](#)
-[![Node](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](#)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.13-brightgreen.svg)](#)
 [![CI](https://github.com/thestark77/praxis-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/thestark77/praxis-ai/actions)
 
 praxis-ai is an additive overlay for Claude Code that fuses three things no
@@ -63,14 +63,19 @@ the whole stack and then layers its own overlay:
      phase model, skill-invocation policy, irreversibility firewall
      protocol, and the balanced preset). Existing content and gentle-ai
      blocks are preserved.
-   - ~40 `permissions.deny` patterns in `settings.json` (destructive `rm`,
-     force-push, history rewrite, `--no-verify` bypasses, package-manager
-     `--force`, secrets paths, and more). Your existing deny entries are
-     preserved.
+   - ~70 `permissions.deny` patterns in `settings.json` (destructive `rm`,
+     force-push, history rewrite, hook bypasses, package-manager forcing,
+     infrastructure teardown, `.env` and home-anchored credentials, and
+     MCP tools that destroy remote state). Your existing deny entries are
+     preserved, and `praxis uninstall` gives back only the rules praxis
+     itself added — a rule gentle-ai or you had already written stays.
    - The `praxis-ast-hook` PreToolUse hook — inspects every Bash command
-     via a token-aware AST walker. Catches chain bypasses
-     (`safe && rm -rf /tmp/x`), encoded payloads (`base64 -d | bash`),
-     substitution payloads (`$(rm -rf /)`), and more (17 rules).
+     via a token-aware AST walker. Catches chain bypasses, multi-line
+     scripts, shell heredocs, encoded payloads, substitution payloads,
+     and more (17 rules). Heredoc bodies a shell will run are inspected;
+     bodies handed to `git commit -F -`, `python -` or `cat > file` are
+     treated as the data they are, so a commit message that names a
+     dangerous flag is not itself dangerous.
    - Six skills lifted from mattpocock/skills into `~/.claude/skills/`
      (`grill-with-docs`, `caveman`, `diagnose`, `zoom-out`, `prototype`,
      `handoff`) with per-skill `NOTICE.md` attribution and mechanism-pure

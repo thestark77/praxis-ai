@@ -6,6 +6,83 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Fixed — the AST hook could be walked past with a newline
+
+Replaying the deny spool of a live install turned up two structural gaps
+in the tokeniser, pulling in opposite directions.
+
+A newline never separated commands. Only `;`, `&&`, `||`, `|` and `&`
+did, so a multi-line Bash call was read as a single command, the rules
+were matched against its first word, and every later line went
+unexamined. `echo hi` followed by a recursive delete on the next line was
+allowed. Claude Code sends multi-line commands routinely, so layer 2 was
+open by default.
+
+Heredoc bodies were tokenised as commands. That denied commit messages
+that merely named a bypass flag — two such denials sit in the spool, and
+one of them blocked the command that wrote the test fixture for this
+change — while allowing a shell heredoc whose body performed a recursive
+delete, because the opening word was `bash` and the body was never
+reached.
+
+Both are fixed together, because fixing either alone makes the other
+worse. Bodies are now lifted out before tokenising and handed back tagged
+with whether a shell consumes them: `bash`, `sh`, `eval` and `ssh` get
+their bodies inspected, while `git commit -F -`, `python -` and
+`cat > file` receive data. Herestrings are left alone and an escaped
+newline stays a line continuation. 26 regression tests; latency unchanged
+for ordinary commands and under 2 ms for a 200-line script.
+
+### Fixed — uninstall could leave a machine less protected than it found it
+
+The firewall list is a set of desired rules, not a record of authorship,
+and uninstall treated it as both: it removed every entry currently denied,
+whoever had written it. Where gentle-ai, a team settings file, or the user
+had independently denied the same thing, `praxis uninstall` deleted their
+protection. The bundled OpenCode fixture already showed the collision —
+gentle-ai ships a `.env` deny.
+
+Install now records what it actually wrote to
+`~/.praxis/owned-permissions.json`, and uninstall gives back only that. A
+box with no praxis footprint at all has its permission block left
+untouched. Where a footprint exists but no ledger does, the old sweep
+still runs, because a half-installed firewall is worse than over-removal;
+one reinstall makes the machine precise. `firewallEntriesAdded` also stops
+reporting the whole list length and reports what was really added.
+
+### Added — firewall coverage for classes it never saw
+
+- `.env` and its environment-specific siblings, plus home-anchored SSH,
+  AWS and gcloud credentials. `Read(.ssh/id_*)` anchors at the working
+  directory, so it never covered the keys that actually matter. The
+  suffixes are enumerated rather than globbed: `Read(.env.*)` also matches
+  `.env.example`, and a deny rule cannot carry an allowlist exception, so
+  the glob had no way to spare the file that documents a project's
+  variables.
+- Infrastructure teardown: `terraform destroy`, `apply -auto-approve`,
+  bucket removal, and migration reset.
+- MCP tools that destroy remote state. Both firewall layers only ever saw
+  Bash; a server can delete a repository or drop a database in one call,
+  and neither the globs nor the AST hook were consulted. Only irreversible
+  operations are listed — moving something to a trash bin is recoverable
+  and left out — and entries stay parenthesis-free, because Claude Code
+  silently skips any `mcp__` rule containing parentheses.
+
+### Changed — `sync-pocock` records a per-file review
+
+Upstream moved to `6654f6b` and all five live lifted files reported as
+drifted. Every diff is editorial: an em-dash sweep across the repo and a
+restatement of skill invocation in Skill-tool terms. The manifest had no
+way to say "read, still faithful" per file, so those reviews were either
+redone every run or hidden by bumping the lift SHA, which would make
+NOTICE.md attribute a revision the file was never lifted from.
+
+Files now carry an optional `reviewedBlobSha` and a note. The lift SHA
+still drives attribution; the reviewed SHA drives the report. The drift
+report reads 0 changed, 8 settled. Upstream's move to a Claude Code plugin
+is recorded too: it does not change what praxis lifts, and the plugin can
+be installed alongside.
+
 ### Added — OpenCode support (`--agent`)
 
 praxis is no longer Claude-Code-only. `install`, `uninstall` and `doctor`

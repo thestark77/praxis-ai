@@ -36,14 +36,21 @@ coexisting and upgrade paths.
 
 ### Changed — dependency majors, taken after checking each one
 
-- **better-sqlite3 12 to 13.** A resilience win rather than a routine
-  bump: 12 depends on the deprecated `prebuild-install`, which downloads
-  a per-Node-ABI binary from GitHub during install, so a new Node release
-  or an offline machine falls back to needing a compiler. 13 ships eight
-  Node-API prebuilds inside the tarball (macOS, Linux, Linux-musl and
-  Windows, x64 and arm64), has no install script, and is ABI-stable
-  across Node versions. It also adds Windows on ARM, which 12 never had.
 - **vitest 4 to 5.** Installs clean and the suite passes unchanged.
+- **better-sqlite3 13 tried and rejected.** On paper it is the better
+  dependency: 12 relies on the deprecated `prebuild-install` to download
+  a per-Node-ABI binary from GitHub during install, while 13 ships eight
+  Node-API prebuilds inside the tarball with no install script at all.
+  It installed cleanly here, loaded its native module, and passed the
+  whole suite. A cold `npm ci` on the CI matrix then failed on Windows
+  with Node 22: npm ignored the bundled prebuild, fell through to
+  `node-gyp rebuild`, and died for want of Visual Studio. Windows with
+  Node 24 passed, so it is not a platform gap but a Node-version-specific
+  one, squarely inside the range praxis supports. Needing a compiler on a
+  supported configuration is the exact failure this repo has fixed once
+  before, so 12.11.1 stays until 13 installs from its own prebuilds
+  across the matrix. A warm local tree is not evidence about a clean
+  install; only the matrix is.
 - **TypeScript 7 deliberately not taken.** typescript-eslint refuses it
   outright (`typescript-eslint does not support TS 7.0`; its peer range
   is `>=4.8.4 <6.1.0`, tracked upstream as typescript-eslint#10940 for TS

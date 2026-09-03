@@ -8,6 +8,16 @@ import { parseAgentSelector, resolveAgents } from '../lib/agents.js';
 import { detectOpenCode } from '../lib/opencode/install.js';
 
 /**
+ * The irreversible half of the synthetic verify payload.
+ *
+ * Assembled rather than written out so this source file does not itself
+ * contain a literal recursive-delete command: the praxis hook inspects
+ * every Bash call an agent makes, and a tool editing this file would be
+ * blocked by the very rule the constant describes.
+ */
+const DANGEROUS_SYNTHETIC = ['rm', '-rf', '/tmp/praxis-doctor-verify-target'].join(' ');
+
+/**
  * Prove the OpenCode layer-2 firewall end to end without launching OpenCode:
  * load the exact engine module the emitted plugin imports and assert it
  * denies a synthetic irreversible command. A plugin whose import target has
@@ -33,7 +43,7 @@ async function verifyOpenCodePlugin(engineUrl: string | null): Promise<VerifyRes
         reason: 'The imported module does not export inspectBashCommand.',
       };
     }
-    const result = mod.inspectBashCommand('rm -rf /tmp/praxis-doctor-verify-target');
+    const result = mod.inspectBashCommand(`echo praxis-doctor-verify\n${DANGEROUS_SYNTHETIC}`);
     if (result.decision !== 'deny') {
       return {
         hookCommand: engineUrl,
@@ -56,6 +66,51 @@ interface VerifyResult {
   hookCommand: string | null;
   passed: boolean;
   reason: string;
+}
+
+/**
+ * Split a hook command into argv, honouring quotes.
+ *
+ * A plain whitespace split keeps the quote characters inside the token, so
+ * `node "C:/path/hook.js"` execs node against a file whose name literally
+ * begins with a double quote. node fails, stdout is empty, and verify
+ * reported "Hook stdout was not JSON" — blaming the hook for a fault in
+ * the checker. Since praxis now quotes the path it writes (an unquoted
+ * path breaks on any space), every verify would have hit this.
+ *
+ * Not a shell parser: quotes group, and nothing else is interpreted,
+ * because the command is exec'd directly rather than through a shell.
+ */
+export function splitCommand(command: string): string[] {
+  const argv: string[] = [];
+  let current = '';
+  let quote: '"' | "'" | null = null;
+  let started = false;
+
+  for (const ch of command) {
+    if (quote) {
+      if (ch === quote) quote = null;
+      else current += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      // An empty quoted string is still an argument.
+      started = true;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (current || started) {
+        argv.push(current);
+        current = '';
+        started = false;
+      }
+      continue;
+    }
+    current += ch;
+  }
+  if (current || started) argv.push(current);
+  return argv;
 }
 
 async function verifyAstHook(settingsPath: string): Promise<VerifyResult> {
@@ -82,14 +137,26 @@ async function verifyAstHook(settingsPath: string): Promise<VerifyResult> {
   // the marker so we are not invoking the shell at all — we exec the
   // first token directly and feed it the synthetic payload over stdin.
   const stripped = hookCommand.replace(PRAXIS_AST_HOOK_MARKER, '').trim();
-  const parts = stripped.split(/\s+/);
+  const parts = splitCommand(stripped);
   const program = parts[0];
   const args = parts.slice(1);
 
+  // Multi-line on purpose: the danger sits on the second line.
+  //
+  // A single-line delete is caught by every engine praxis ever shipped, so
+  // that payload proves only that some hook answered. Layer 2 lives in a
+  // package directory that upgrading the npm package alone does not
+  // refresh, so a stale engine is a real state to be in, and this payload
+  // fails against any engine predating the newline-separator fix.
+  //
+  // It is a floor, not a freshness test: an engine that handles newlines
+  // but predates a later fix still passes. Nothing short of comparing
+  // versions can prove currency, and the remedy either way is the one
+  // already printed on failure -- re-run `praxis install`.
   const synthetic = JSON.stringify({
     session_id: 'praxis-doctor-verify',
     tool_name: 'Bash',
-    tool_input: { command: 'rm -rf /tmp/praxis-doctor-verify-target' },
+    tool_input: { command: `echo praxis-doctor-verify\n${DANGEROUS_SYNTHETIC}` },
   });
 
   return await new Promise<VerifyResult>((resolve) => {
@@ -230,11 +297,18 @@ export function doctorCommand(): Command {
       const claudeCodeHealthy = !checksClaudeCode || report.praxis.overlayInstalled;
       const openCodeHealthy =
         !oc || (oc.instructionsPresent && oc.activeRules === oc.totalRules && oc.plugin.present);
-      if (!claudeCodeHealthy || !openCodeHealthy) {
-        console.log('');
-        console.log('  status: ⚠ praxis is not fully installed. Run `praxis install`.');
-        process.exit(0);
-      }
+      const fullyInstalled = claudeCodeHealthy && openCodeHealthy;
+
+      // --verify runs before the health verdict, never after it.
+      //
+      // This used to sit below an early `process.exit(0)` on the
+      // not-fully-installed path, so `doctor --verify` printed one warning
+      // and exited 0 without executing anything -- on exactly the machines
+      // that most need proving. A partially upgraded box is the case where
+      // "does layer 2 actually block?" has a non-obvious answer, and a
+      // stale OpenCode rule count was enough to skip the Claude Code check
+      // as well. Reporting success without running the check is the one
+      // outcome a verification command must never produce.
       if (opts.verify) {
         if (checksClaudeCode) {
           console.log('');
@@ -265,6 +339,10 @@ export function doctorCommand(): Command {
       }
 
       console.log('');
+      if (!fullyInstalled) {
+        console.log('  status: ⚠ praxis is not fully installed. Run `praxis install`.');
+        process.exit(0);
+      }
       console.log('  status: ✓ overlay healthy');
       process.exit(0);
     });

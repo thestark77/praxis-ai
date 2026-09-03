@@ -113,6 +113,14 @@ export const DEFAULT_AST_HOOK_COMMAND = 'praxis-ast-hook';
  * on PATH — Claude Code would fail to spawn it. Detect the local case
  * by checking for a sibling `praxis-ast-hook.js` next to `process.argv[1]`
  * and return a `node <abs-path>` command in that case.
+ *
+ * The path is quoted. Claude Code runs the hook command through a shell,
+ * so an unquoted path containing a space is split into separate arguments
+ * and node reports `Cannot find module 'C:\Users\First'`. The failure is
+ * silent in the worst possible way: the hook emits no decision, Claude
+ * Code has nothing to act on, and the command proceeds -- layer 2 is off
+ * with nothing saying so. A space in the home directory is ordinary on
+ * Windows, which is exactly where this shipped untested.
  */
 export async function resolveAstHookCommand(): Promise<string> {
   const { stat } = await import('node:fs/promises');
@@ -123,7 +131,7 @@ export async function resolveAstHookCommand(): Promise<string> {
   try {
     const s = await stat(sibling);
     if (s.isFile()) {
-      return `node ${sibling}`;
+      return `node "${sibling}"`;
     }
   } catch {
     // Not a local checkout; fall through to the bare command.

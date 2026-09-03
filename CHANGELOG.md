@@ -6,6 +6,40 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Fixed - `engines` promised a Node version that needs a compiler
+
+`engines` admitted `>=22.13.0` while CI ran only 22 and 24, so two
+admitted majors shipped untested. Mapping the real Node ABI table against
+better-sqlite3's published prebuilds shows the range was wrong in the
+other direction too:
+
+| Node | ABI | prebuild |
+| --- | --- | --- |
+| 22 (LTS) | 127 | yes |
+| **23** | **131** | **none** |
+| 24 (LTS) | 137 | yes |
+| 25 | 141 | yes |
+| 26 (current) | 147 | yes |
+
+Node 23 has no prebuilt binary, so installing praxis there falls through
+to `node-gyp` and needs a C++ toolchain - the same failure that killed
+the better-sqlite3 13 attempt, except this one was promised by our own
+metadata. Node 23 is also out of support.
+
+`engines` becomes `^22.13.0 || >=24.0.0`, which is what actually installs
+without a compiler. The CI matrix gains 26, so the current Node release
+is proven rather than assumed: 18 cells, all green. 25 stays out of the
+matrix because vitest 5 does not run there, but it keeps its prebuild and
+stays admitted.
+
+### Added
+
+`.env.example`. Nothing in it is required to build or test praxis. The
+entry that earns its place is `PRAXIS_HOME`, which points `install` and
+`uninstall` at a scratch directory instead of a real configuration.
+
+## [0.1.0-alpha.10] - 2026-09-03
+
 ### Fixed — an upgrade from a pre-ledger version could never uninstall
 
 Shipped in alpha.9 and found by driving real installs rather than the

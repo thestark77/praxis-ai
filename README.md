@@ -119,6 +119,34 @@ config byte for byte, because `opencode.json` is backed up alongside
 plugin imports and asserts it denies a synthetic `rm -rf`, so a plugin
 whose import target went missing is reported instead of silently no-oping.
 
+## Remote Control on every session
+
+`praxis remote-control enable` turns on Claude Code's
+`remoteControlAtStartup` in every environment on the machine — the host
+home plus each WSL distribution, since those are separate installations
+with separate settings files.
+
+The part that makes "every session" mean something is the scan. A repo
+whose `.claude/settings.json` says `false` defeats your user setting
+silently: Claude Code resolves a project-scoped `false` before it reads
+user settings, and reports it only in a debug log. `enable` finds those
+and names them. (A repo cannot switch it *on* — Claude Code ignores that
+and logs "repo-scoped settings cannot enable Remote Control".)
+
+```bash
+praxis remote-control status    # default; changes nothing
+praxis remote-control enable
+praxis remote-control disable
+praxis remote-control reset     # back to the Claude Code default
+```
+
+This is **not** part of `praxis install`. Remote Control opens a bridge
+that lets another device drive the session, and a tool whose purpose is
+containing irreversible actions should not switch on remote access as a
+side effect of being installed. An organization policy can also pin the
+setting, in which case Claude Code ignores it silently — confirm with
+`/status` in a fresh session.
+
 ## Installation
 
 ```bash

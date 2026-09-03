@@ -6,6 +6,57 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Added - `praxis remote-control`
+
+Turns Claude Code's Remote Control on for every session, in every
+environment on the machine. Writing `remoteControlAtStartup` by hand is
+one line; making it hold for *every* session is not, and that gap is what
+the command closes. Three facts, all read out of the Claude Code binary
+rather than assumed:
+
+- **A repo can switch it off and win.** Resolution returns
+  `{value: false, source: "project_or_local_false"}` the moment a project
+  or local settings file says `false`, before user settings are consulted.
+  A repo cannot switch it *on*: the binary logs "repo-scoped settings
+  cannot enable Remote Control" and ignores it. So the only way a
+  machine-wide "on" quietly fails is a repo saying `false`, and Claude
+  Code surfaces that only in a debug log. `enable` scans for those and
+  reports them; without that the command would promise a guarantee the
+  machine does not keep.
+- **One machine holds several Claude installations.** Each WSL
+  distribution has its own home, binary and settings.json. Discovery walks
+  the host home plus every registered distro, translating each POSIX home
+  through `wslpath`. A distro with no Claude yet is still written, so a
+  later install starts with the setting on.
+- **It is a security-sensitive setting**, and an organization policy can
+  pin it. Where policy has pinned it, writing user settings changes
+  nothing and says nothing, so the command says so rather than claiming a
+  success it cannot verify.
+
+Deliberately not wired into `praxis install`: Remote Control opens a
+bridge that lets another device drive the session, and a tool whose
+purpose is containing irreversible actions should not switch on remote
+access as a side effect of being installed. `status` is the default and
+changes nothing.
+
+### Fixed - the hook ran whatever PATH found, not its own engine
+
+Updating a real machine surfaced it. WSL had praxis alpha.12 installed
+natively, yet its firewall was running the Windows alpha.8 engine.
+
+`resolveAstHookCommand` returned the bare name `praxis-ast-hook` for npm
+installs, which is a bet on PATH resolving to *this* praxis. Inside WSL it
+does not: Windows puts its npm global directory on the Linux PATH through
+/mnt/c and its shims come first. A WSL install therefore wrote
+`praxis-ast-hook` and every WSL session ran a Windows binary - a different
+build, possibly a different version, which disappears the moment the
+Windows install is removed, taking layer 2 with it and saying nothing.
+
+It resolves module-relative to this package's own bin now, falling back to
+the bare name only when even that cannot be found.
+
+## [0.1.0-alpha.12] - unreleased, superseded by alpha.13
+
 ### Fixed - the firewall's own verification could not be trusted
 
 Three faults found by running `praxis doctor --verify` against a real

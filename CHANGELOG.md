@@ -6,6 +6,15 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Fixed
+
+The Remote Control override scan skips the OS temp directory. On a real
+machine it printed ten "repositories that disable Remote Control", every
+one a `.claude` fixture left in temp by a test suite, burying the finding
+the scan exists to surface.
+
+## [0.1.0-alpha.13] - unreleased, superseded by alpha.14
+
 ### Added - `praxis remote-control`
 
 Turns Claude Code's Remote Control on for every session, in every

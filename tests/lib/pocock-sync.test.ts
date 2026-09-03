@@ -131,7 +131,7 @@ describe('formatDriftReport', () => {
     const out = formatDriftReport(report);
 
     expect(out).toContain('mattpocock/skills@abc123');
-    expect(out).toContain('Every live lifted file matches');
+    expect(out).toContain('Every live lifted file is either byte-identical');
     expect(out).toContain('Settled (recorded in the manifest, no action):');
     expect(out).toContain('deleted: skills/deleted/SKILL.md');
     expect(out).toContain('moved: docs/moved.md');

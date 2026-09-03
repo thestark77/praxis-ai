@@ -21,7 +21,31 @@ export const POCOCK_REPO_COMMIT = 'b8be62ffacb0118fa3eaa29a0923c87c8c11985c';
 // two differ whenever upstream has moved on in ways that need no change to a
 // lifted file — without that distinction the drift report cannot tell
 // "nobody has looked at this" from "looked at, still faithful".
-export const POCOCK_UPSTREAM_REVIEWED_COMMIT = '84fdeffd12f2ee307994d1eb6feb48173b6e0502';
+export const POCOCK_UPSTREAM_REVIEWED_COMMIT = '6654f6b60cd9d5be8b54c6fafe44346dabeb3b76';
+
+/**
+ * Upstream now ships as a Claude Code plugin (`.claude-plugin/plugin.json`
+ * plus a marketplace manifest) and has grown well past the six skills
+ * praxis lifted: ask-matt, code-review, codebase-design, diagnosing-bugs,
+ * domain-modeling, implement, research, tdd, triage, wayfinder and more.
+ *
+ * That does not change what praxis lifts. The lifted six are the ones the
+ * praxis phase model actually reaches for, they are rewritten
+ * mechanism-pure so they do not fight gentle-ai's orchestrator, and the
+ * lift is what lets praxis keep `caveman`, `diagnose` and `zoom-out`
+ * alive after upstream deleted them. Anyone wanting the full current set
+ * should install the upstream plugin alongside; the two coexist, because
+ * praxis skills carry their own names and their own NOTICE.md.
+ *
+ * Recorded here so the next person reviewing drift does not rediscover it.
+ */
+export const POCOCK_UPSTREAM_IS_PLUGIN = true;
+
+/** Editorial sweep applied across the whole upstream repo at the reviewed commit. */
+const EDITORIAL_ONLY =
+  'Editorial only at the reviewed commit: upstream removed em dashes repo-wide and ' +
+  'restated skill invocation in Skill-tool terms. The mechanism the lift captured is ' +
+  'unchanged, so the rewrite still holds.';
 
 /**
  * A terminal or structural fact about the upstream path, as opposed to
@@ -54,6 +78,23 @@ export interface PocockSkillFile {
   blobSha: string;
   /** Set once upstream has deleted or moved the path. Absent means "live". */
   upstreamStatus?: PocockUpstreamStatus;
+  /**
+   * Blob SHA a human read and judged to leave the lifted mechanism intact.
+   *
+   * Upstream edits prose far more often than it edits behaviour: a
+   * repo-wide em-dash sweep changes every blob and no meaning. Without
+   * this, the drift report can only say "the bytes moved", so those
+   * reviews are either redone on every run or papered over by bumping
+   * `blobSha`, which would make NOTICE.md attribute a revision the file
+   * was never lifted from.
+   *
+   * `blobSha` therefore stays the lift record and this is the review
+   * record. A file whose upstream matches this is reported as settled;
+   * anything else is real drift again.
+   */
+  reviewedBlobSha?: string;
+  /** Why the reviewed revision needed no re-lift. Shown in the report. */
+  reviewedNote?: string;
 }
 
 export interface PocockSkill {
@@ -85,6 +126,8 @@ export const POCOCK_SKILLS: PocockSkill[] = [
       {
         upstreamPath: 'skills/engineering/grill-with-docs/SKILL.md',
         blobSha: '5ea0aa913629bec683690f371839bd10e588413d',
+        reviewedBlobSha: '26ac9de3bbdf49db18c7a1aa0ff508c6bf680cda',
+        reviewedNote: EDITORIAL_ONLY,
         upstreamStatus: {
           kind: 'relocated',
           observedAt: POCOCK_UPSTREAM_REVIEWED_COMMIT,
@@ -148,14 +191,20 @@ export const POCOCK_SKILLS: PocockSkill[] = [
       {
         upstreamPath: 'skills/engineering/prototype/SKILL.md',
         blobSha: '094571156140f5993cce8557dc31383c82817f3e',
+        reviewedBlobSha: 'a0044501fe0d385b4d8575b610188ede9b236ccf',
+        reviewedNote: EDITORIAL_ONLY,
       },
       {
         upstreamPath: 'skills/engineering/prototype/LOGIC.md',
         blobSha: '5f5a3fd5a8cbd69c029854e9881ddc6e87ae5093',
+        reviewedBlobSha: '32be86a0a5d9928db84b3988e55f9debe476ab40',
+        reviewedNote: EDITORIAL_ONLY,
       },
       {
         upstreamPath: 'skills/engineering/prototype/UI.md',
         blobSha: '76c0f6012b016af04d6105fa696a9a0e29dfa53a',
+        reviewedBlobSha: '3977951663490882c2632b40695d9f59a2fe2408',
+        reviewedNote: EDITORIAL_ONLY,
       },
     ],
   },
@@ -167,6 +216,11 @@ export const POCOCK_SKILLS: PocockSkill[] = [
       {
         upstreamPath: 'skills/productivity/handoff/SKILL.md',
         blobSha: '043d9e13dc7eca3002a47d3ab9865c568f647863',
+        reviewedBlobSha: '2eb98a51b97bb5bac461a26ad14828eeac827909',
+        reviewedNote:
+          'Editorial plus one terminology change at the reviewed commit: the suggested-skills ' +
+          'line now says the next agent calls the Skill tool. The lifted body already names a ' +
+          'suggested-skills section and already carries the redaction and no-duplication rules.',
       },
     ],
   },

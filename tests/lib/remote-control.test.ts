@@ -226,7 +226,7 @@ describe('scanning for repositories that switch it off', () => {
   it('finds a project settings file that disables it', async () => {
     const root = await mkdtemp(join(tmpdir(), 'praxis-scan-'));
     await repo(root, 'work', false);
-    const found = await scanOverrides({ roots: [root] });
+    const found = await scanOverrides({ roots: [root], skipRoots: [] });
     expect(found).toHaveLength(1);
     expect(found[0]?.value).toBe(false);
   });
@@ -234,13 +234,13 @@ describe('scanning for repositories that switch it off', () => {
   it('finds settings.local.json too', async () => {
     const root = await mkdtemp(join(tmpdir(), 'praxis-scan-'));
     await repo(root, 'work', false, 'settings.local.json');
-    expect(await scanOverrides({ roots: [root] })).toHaveLength(1);
+    expect(await scanOverrides({ roots: [root], skipRoots: [] })).toHaveLength(1);
   });
 
   it('reports a repo that sets true, which Claude Code ignores', async () => {
     const root = await mkdtemp(join(tmpdir(), 'praxis-scan-'));
     await repo(root, 'work', true);
-    const found = await scanOverrides({ roots: [root] });
+    const found = await scanOverrides({ roots: [root], skipRoots: [] });
     expect(found[0]?.value).toBe(true);
   });
 
@@ -249,7 +249,7 @@ describe('scanning for repositories that switch it off', () => {
     const dir = join(root, 'work', '.claude');
     await mkdir(dir, { recursive: true });
     await writeFile(join(dir, 'settings.json'), JSON.stringify({ model: 'opus' }), 'utf8');
-    expect(await scanOverrides({ roots: [root] })).toEqual([]);
+    expect(await scanOverrides({ roots: [root], skipRoots: [] })).toEqual([]);
   });
 
   it('never reports the user settings file as an override of itself', async () => {
@@ -259,15 +259,27 @@ describe('scanning for repositories that switch it off', () => {
     const userSettings = join(root, '.claude', 'settings.json');
     await mkdir(join(root, '.claude'), { recursive: true });
     await writeFile(userSettings, JSON.stringify({ [REMOTE_CONTROL_KEY]: true }), 'utf8');
-    expect(await scanOverrides({ roots: [root], exclude: [userSettings] })).toEqual([]);
+    expect(await scanOverrides({ roots: [root], exclude: [userSettings], skipRoots: [] })).toEqual(
+      [],
+    );
     // Without the exclusion it is found, so the test proves the exclusion.
-    expect(await scanOverrides({ roots: [root] })).toHaveLength(1);
+    expect(await scanOverrides({ roots: [root], skipRoots: [] })).toHaveLength(1);
   });
 
   it('does not descend into node_modules', async () => {
     const root = await mkdtemp(join(tmpdir(), 'praxis-scan-'));
     await repo(root, join('node_modules', 'pkg'), false);
+    expect(await scanOverrides({ roots: [root], skipRoots: [] })).toEqual([]);
+  });
+
+  it('skips the OS temp directory by default', async () => {
+    // Test suites -- praxis's own included -- leave `.claude` fixtures in
+    // temp. Reporting those buries the real findings in noise, and nobody
+    // starts a Claude session there.
+    const root = await mkdtemp(join(tmpdir(), 'praxis-scan-'));
+    await repo(root, 'work', false);
     expect(await scanOverrides({ roots: [root] })).toEqual([]);
+    expect(await scanOverrides({ roots: [root], skipRoots: [] })).toHaveLength(1);
   });
 
   it('survives a directory it cannot read', async () => {
@@ -279,7 +291,7 @@ describe('scanning for repositories that switch it off', () => {
   it('stops at the depth limit', async () => {
     const root = await mkdtemp(join(tmpdir(), 'praxis-scan-'));
     await repo(root, join('a', 'b', 'c', 'd'), false);
-    expect(await scanOverrides({ roots: [root], maxDepth: 1 })).toEqual([]);
-    expect(await scanOverrides({ roots: [root], maxDepth: 6 })).toHaveLength(1);
+    expect(await scanOverrides({ roots: [root], maxDepth: 1, skipRoots: [] })).toEqual([]);
+    expect(await scanOverrides({ roots: [root], maxDepth: 6, skipRoots: [] })).toHaveLength(1);
   });
 });

@@ -93,8 +93,11 @@ async function pathExists(path: string): Promise<boolean> {
  * with NUL bytes; they are stripped rather than decoded, because the names
  * are ASCII in practice and a mis-decode would silently drop a distro.
  */
-export function listWslDistros(run: CommandRunner = defaultRunner): string[] {
-  if (process.platform !== 'win32') return [];
+export function listWslDistros(
+  run: CommandRunner = defaultRunner,
+  platform: string = process.platform,
+): string[] {
+  if (platform !== 'win32') return [];
   const res = run('wsl.exe', ['-l', '-q']);
   if (res.status !== 0) return [];
   return res.stdout
@@ -123,6 +126,12 @@ export interface DiscoverOptions {
   home?: string;
   /** Skip WSL discovery. Tests set this. */
   includeWsl?: boolean;
+  /**
+   * Host platform. Injectable so the WSL logic is exercised by the test
+   * suite on every runner, not only on Windows: a test that skips itself
+   * off-Windows proves nothing about the code shipped to Windows.
+   */
+  platform?: string;
 }
 
 /**
@@ -137,19 +146,20 @@ export async function discoverEnvironments(
 ): Promise<ClaudeEnvironment[]> {
   const run = opts.run ?? defaultRunner;
   const home = opts.home ?? homedir();
-  const includeWsl = opts.includeWsl ?? process.platform === 'win32';
+  const platform = opts.platform ?? process.platform;
+  const includeWsl = opts.includeWsl ?? platform === 'win32';
 
   const environments: ClaudeEnvironment[] = [];
   const hostSettings = join(home, '.claude', 'settings.json');
   environments.push({
-    name: process.platform === 'win32' ? 'windows' : process.platform,
+    name: platform === 'win32' ? 'windows' : platform,
     settingsPath: hostSettings,
     claudeInstalled: await pathExists(dirname(hostSettings)),
   });
 
   if (!includeWsl) return environments;
 
-  for (const distro of listWslDistros(run)) {
+  for (const distro of listWslDistros(run, platform)) {
     const settingsPath = wslSettingsPath(distro, run);
     if (!settingsPath) continue;
     // Two distros can share a home (rare, but a bind mount does it), and

@@ -31,6 +31,20 @@ export interface OwnedOpenCodeRule {
 
 export interface OwnershipLedger {
   version: 1;
+  /**
+   * True when this ledger was started by an install that found praxis
+   * already on the machine but no ledger to inherit.
+   *
+   * Such a ledger is structurally incomplete and can never become
+   * complete: the earlier version wrote its rules without recording them,
+   * so the upgrade sees them as already present and claims none of them.
+   * Trusting it would strand every rule the older install wrote and leave
+   * a firewall that cannot be removed. Uninstall therefore ignores it and
+   * sweeps the full list, which is exactly what the pre-ledger versions
+   * did. A clean uninstall followed by a fresh install produces a
+   * trustworthy ledger.
+   */
+  inheritedPreLedgerInstall?: boolean;
   /** `permissions.deny` entries praxis added to Claude Code settings.json. */
   claudeCode: string[];
   /** Permission rules praxis added to opencode.json. */
@@ -66,6 +80,7 @@ export async function readOwnership(praxisDir: string): Promise<OwnershipLedger 
       version: 1,
       claudeCode: Array.isArray(parsed.claudeCode) ? parsed.claudeCode.filter(isString) : [],
       opencode: Array.isArray(parsed.opencode) ? parsed.opencode.filter(isOpenCodeRule) : [],
+      inheritedPreLedgerInstall: parsed.inheritedPreLedgerInstall === true,
     };
   } catch {
     return null;
@@ -92,7 +107,12 @@ function isOpenCodeRule(value: unknown): value is OwnedOpenCodeRule {
  */
 export async function recordOwnership(
   praxisDir: string,
-  added: { claudeCode?: string[]; opencode?: OwnedOpenCodeRule[] },
+  added: {
+    claudeCode?: string[];
+    opencode?: OwnedOpenCodeRule[];
+    /** Set by an install that found praxis present but no ledger. */
+    inheritedPreLedgerInstall?: boolean;
+  },
 ): Promise<OwnershipLedger> {
   const existing = (await readOwnership(praxisDir)) ?? emptyLedger();
 
@@ -113,7 +133,15 @@ export async function recordOwnership(
     opencode.push(rule);
   }
 
-  const ledger: OwnershipLedger = { version: 1, claudeCode, opencode };
+  const ledger: OwnershipLedger = {
+    version: 1,
+    claudeCode,
+    opencode,
+    // Once inherited, always inherited: a later install cannot recover the
+    // authorship the pre-ledger version never wrote down.
+    inheritedPreLedgerInstall:
+      existing.inheritedPreLedgerInstall === true || added.inheritedPreLedgerInstall === true,
+  };
   const path = ownershipPath(praxisDir);
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(ledger, null, 2) + '\n', 'utf8');
@@ -140,7 +168,7 @@ export function claudeEntriesToRemove(
   ledger: OwnershipLedger | null,
   firewallEntries: string[],
 ): string[] {
-  if (!ledger) return firewallEntries;
+  if (!ledger || ledger.inheritedPreLedgerInstall) return firewallEntries;
   const owned = new Set(ledger.claudeCode);
   return firewallEntries.filter((entry) => owned.has(entry));
 }
@@ -150,7 +178,7 @@ export function opencodeRulesToRemove<T extends OwnedOpenCodeRule>(
   ledger: OwnershipLedger | null,
   rules: T[],
 ): T[] {
-  if (!ledger) return rules;
+  if (!ledger || ledger.inheritedPreLedgerInstall) return rules;
   const owned = new Set(ledger.opencode.map(ruleKey));
   return rules.filter((rule) => owned.has(ruleKey(rule)));
 }

@@ -22,6 +22,12 @@ export function uninstallCommand(): Command {
         console.log(`  agents: ${result.agents.join(', ')}`);
         console.log(`  CLAUDE.md @-import removed: ${result.removedClaudeMdBlock}`);
         console.log(`  firewall rules removed: ${result.removedFirewallEntries}`);
+        if (result.preservedFirewallEntries > 0) {
+          console.log(
+            `  firewall rules preserved: ${result.preservedFirewallEntries} ` +
+              '(praxis did not add them, so it did not take them away)',
+          );
+        }
         if (result.removedSkeleton) {
           if (result.praxisDirFullyRemoved) {
             console.log(`  ~/.praxis/ removed: true (no user data was present)`);

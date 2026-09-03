@@ -32,7 +32,14 @@ async function pathExists(path: string): Promise<boolean> {
 
 function commandExists(cmd: string): boolean {
   try {
-    const result = spawnSync('which', [cmd], { stdio: 'pipe' });
+    // `which` is not a Windows command. It resolves on most Windows boxes
+    // only because Git for Windows puts its own `which.exe` on the system
+    // PATH, which is incidental: a machine with git installed but its
+    // usr/bin not exported reports every binary as missing, and praxis
+    // then downgrades a full overlay install to standalone without saying
+    // why. `dependency-check.ts` already picks per platform; match it.
+    const finder = process.platform === 'win32' ? 'where' : 'which';
+    const result = spawnSync(finder, [cmd], { stdio: 'pipe' });
     return result.status === 0;
   } catch {
     return false;

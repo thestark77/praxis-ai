@@ -24,6 +24,8 @@ export interface DriftEntry {
   recordedSha: string;
   upstreamSha: string | null;
   status: 'in-sync' | 'changed' | 'removed' | 'acknowledged';
+  /** Why a reviewed-but-changed upstream revision needed no re-lift. */
+  reviewedNote?: string;
   /**
    * Present when the manifest already records a terminal or structural fact
    * about this path, so the report can separate settled history from work.
@@ -79,6 +81,7 @@ export async function detectDrift(
         let status: DriftEntry['status'];
         if (upstream === null) status = 'removed';
         else if (upstream === baseline) status = 'acknowledged';
+        else if (file.reviewedBlobSha && upstream === file.reviewedBlobSha) status = 'acknowledged';
         else status = 'changed';
         entries.push({
           skill: skill.name,
@@ -87,6 +90,7 @@ export async function detectDrift(
           upstreamSha: upstream,
           status,
           acknowledged: ack,
+          reviewedNote: status === 'acknowledged' ? file.reviewedNote : undefined,
         });
         continue;
       }
@@ -97,6 +101,10 @@ export async function detectDrift(
         status = 'removed';
       } else if (upstream === file.blobSha) {
         status = 'in-sync';
+      } else if (file.reviewedBlobSha && upstream === file.reviewedBlobSha) {
+        // The bytes moved, a human read the diff, and the mechanism held.
+        // Settled, not outstanding work.
+        status = 'acknowledged';
       } else {
         status = 'changed';
       }
@@ -106,6 +114,7 @@ export async function detectDrift(
         recordedSha: file.blobSha,
         upstreamSha: upstream,
         status,
+        reviewedNote: status === 'acknowledged' ? file.reviewedNote : undefined,
       });
     }
   }
@@ -189,15 +198,24 @@ export function formatDriftReport(report: DriftReport): string {
   if (report.acknowledged.length > 0) {
     lines.push('  Settled (recorded in the manifest, no action):');
     for (const e of report.acknowledged) {
+      if (!e.acknowledged && e.reviewedNote !== undefined) {
+        lines.push(`    [${e.skill}] reviewed: ${e.path}`);
+        lines.push(`      ${e.reviewedNote}`);
+        continue;
+      }
       const kind = e.acknowledged?.kind === 'relocated' ? 'moved' : 'deleted';
       lines.push(`    [${e.skill}] ${kind}: ${e.path}`);
       if (e.acknowledged?.note) lines.push(`      ${e.acknowledged.note}`);
+      if (e.reviewedNote) lines.push(`      ${e.reviewedNote}`);
     }
     lines.push('');
   }
 
   if (report.changed.length === 0 && report.removed.length === 0) {
-    lines.push('  ✓ Every live lifted file matches its recorded SHA. No action needed.');
+    lines.push(
+      '  ✓ Every live lifted file is either byte-identical to its recorded SHA or ' +
+        'reviewed at the current upstream revision. No action needed.',
+    );
   } else {
     lines.push('  Next steps:');
     lines.push('    1. Review the upstream diff for each changed file.');

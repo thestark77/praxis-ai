@@ -137,11 +137,11 @@ describe('discovering WSL environments', () => {
   };
 
   it('strips the NUL bytes wsl.exe emits', () => {
-    expect(listWslDistros(fakeWsl)).toEqual(['Ubuntu', 'Debian']);
+    expect(listWslDistros(fakeWsl, 'win32')).toEqual(['Ubuntu', 'Debian']);
   });
 
   it('returns no distros when wsl.exe fails', () => {
-    expect(listWslDistros(() => ({ status: 1, stdout: '' }))).toEqual([]);
+    expect(listWslDistros(() => ({ status: 1, stdout: '' }), 'win32')).toEqual([]);
   });
 
   it('translates a POSIX home into a path Windows can write', () => {
@@ -154,6 +154,7 @@ describe('discovering WSL environments', () => {
       home: await home(),
       includeWsl: true,
       run: fakeWsl,
+      platform: 'win32',
     });
     expect(envs.map((e) => e.name)).toEqual(['windows', 'wsl:Ubuntu', 'wsl:Debian']);
   });
@@ -172,8 +173,25 @@ describe('discovering WSL environments', () => {
       home: await home(),
       includeWsl: true,
       run: sameHome,
+      platform: 'win32',
     });
     expect(envs).toHaveLength(2);
+  });
+
+  it('looks for no distros when the host is not Windows', () => {
+    // WSL exists only on Windows; probing for it elsewhere would spawn a
+    // command that is not there.
+    expect(listWslDistros(fakeWsl, 'linux')).toEqual([]);
+    expect(listWslDistros(fakeWsl, 'darwin')).toEqual([]);
+  });
+
+  it('reports only the host on a non-Windows machine', async () => {
+    const envs = await discoverEnvironments({
+      home: await home(),
+      run: fakeWsl,
+      platform: 'linux',
+    });
+    expect(envs.map((e) => e.name)).toEqual(['linux']);
   });
 
   it('writes the setting into a home with no Claude installed yet', async () => {

@@ -35,8 +35,8 @@
 
 import { readFile, writeFile, mkdir, readdir, stat } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
-import { homedir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { homedir, tmpdir } from 'node:os';
+import { join, dirname, resolve, sep } from 'node:path';
 
 export const REMOTE_CONTROL_KEY = 'remoteControlAtStartup';
 
@@ -302,6 +302,11 @@ export interface ScanOptions {
   /** How deep to descend. Deep trees are the norm; 6 covers real layouts. */
   maxDepth?: number;
   /**
+   * Trees to skip entirely. Defaults to the OS temp directory, which holds
+   * scratch fixtures rather than repositories anyone works in.
+   */
+  skipRoots?: string[];
+  /**
    * Settings files that are user-scoped, not project-scoped.
    *
    * A scan rooted at the home directory walks straight into
@@ -332,8 +337,21 @@ export async function scanOverrides(opts: ScanOptions = {}): Promise<Override[]>
   const seen = new Set<string>();
   const excluded = new Set((opts.exclude ?? []).map((p) => p.toLowerCase()));
 
+  // The temp directory is not somewhere anyone starts a Claude session. It
+  // is, however, full of `.claude` fixtures left by test suites -- praxis's
+  // own included -- and reporting those as repositories that disable
+  // Remote Control buries the real findings under a wall of noise.
+  const skipRoots = (opts.skipRoots ?? [tmpdir()])
+    .filter(Boolean)
+    .map((p) => resolve(p).toLowerCase());
+  const isSkipped = (dir: string): boolean => {
+    const normalized = resolve(dir).toLowerCase();
+    return skipRoots.some((root) => normalized === root || normalized.startsWith(root + sep));
+  };
+
   async function walk(dir: string, depth: number): Promise<void> {
     if (depth > maxDepth) return;
+    if (isSkipped(dir)) return;
     let entries;
     try {
       entries = await readdir(dir, { withFileTypes: true });

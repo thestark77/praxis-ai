@@ -1,4 +1,4 @@
-import { tokeniseBash, extractSubstitutions } from './tokeniser.js';
+import { tokeniseBash, extractSubstitutions, extractHeredocs } from './tokeniser.js';
 import { DEFAULT_RULES, type Rule, type RuleHit } from './rules.js';
 
 export interface InspectionResult {
@@ -13,6 +13,13 @@ export interface InspectOptions {
 }
 
 /**
+ * How deep nested substitutions and executable heredocs are followed.
+ * A hook runs before every Bash call, so the walk is bounded rather than
+ * left open to a pathological input.
+ */
+const MAX_NESTING = 4;
+
+/**
  * Run the rule set against every command extracted from `commandString`.
  * Returns `deny` as soon as any rule hits; collects all hits for
  * reporting context.
@@ -24,11 +31,23 @@ export function inspectBashCommand(
   const rules = opts.rules ?? DEFAULT_RULES;
   const hits: RuleHit[] = [];
 
+  // Worklist of command text to rule-check. It grows with command
+  // substitutions and with heredoc bodies that a shell will execute.
+  // Inert heredoc bodies (commit messages, Python, SQL) never enter it,
+  // which is what keeps prose from tripping the rules.
   const queue: string[] = [];
-  queue.push(commandString);
-  for (const subst of extractSubstitutions(commandString)) {
-    queue.push(subst);
-  }
+  const enqueue = (raw: string, depth: number): void => {
+    if (!raw.trim() || depth > MAX_NESTING) return;
+    const { stripped, heredocs } = extractHeredocs(raw);
+    queue.push(stripped);
+    for (const subst of extractSubstitutions(stripped)) {
+      enqueue(subst, depth + 1);
+    }
+    for (const hd of heredocs) {
+      if (hd.bodyIsExecutable) enqueue(hd.body, depth + 1);
+    }
+  };
+  enqueue(commandString, 0);
 
   const seenHits = new Set<string>();
   function addHit(hit: RuleHit): void {

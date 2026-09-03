@@ -6,6 +6,43 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Fixed - the firewall's own verification could not be trusted
+
+Three faults found by running `praxis doctor --verify` against a real
+installation instead of a fixture.
+
+**`--verify` never ran on a partial install.** The verify block sat below
+an early `process.exit(0)` on the not-fully-installed path, so the
+command printed one warning and exited 0 having executed nothing. A stale
+OpenCode rule count was enough to skip the Claude Code check too. A
+partially upgraded machine is exactly where "does layer 2 actually
+block?" has a non-obvious answer, and reporting success without running
+the check is the one outcome a verification command must never produce.
+Verify now runs before the health verdict, which is printed after.
+
+**The verifier could not parse a quoted command.** It split the hook
+command on whitespace, which keeps the quote characters inside the token,
+so `node "C:/path/ast-hook.js"` exec'd node against a filename beginning
+with a double quote. node failed, stdout came back empty, and verify
+reported `Hook stdout was not JSON` - blaming the hook for a fault in the
+checker.
+
+**The hook command praxis writes was unquoted.** Claude Code runs it
+through a shell, so any path containing a space was split into separate
+arguments and node reported `Cannot find module 'C:\Users\First'`. The
+hook then emitted no decision, Claude Code had nothing to act on, and the
+command proceeded: layer 2 off with nothing saying so. A space in the
+home directory is ordinary on Windows, which is where this shipped
+untested. Quoting the path is also why the parser fix had to land in the
+same change - it makes every verify hit the parser bug.
+
+The synthetic verify payload now puts the danger on a second line, so it
+fails against any engine predating the newline-separator fix. It is a
+floor rather than a freshness test: an engine that handles newlines but
+predates a later fix still passes.
+
+## [0.1.0-alpha.11] - unreleased, superseded by alpha.12
+
 ### Fixed - `engines` promised a Node version that needs a compiler
 
 `engines` admitted `>=22.13.0` while CI ran only 22 and 24, so two

@@ -121,21 +121,54 @@ export const DEFAULT_AST_HOOK_COMMAND = 'praxis-ast-hook';
  * Code has nothing to act on, and the command proceeds -- layer 2 is off
  * with nothing saying so. A space in the home directory is ordinary on
  * Windows, which is exactly where this shipped untested.
+ *
+ * An absolute path is preferred over the bare `praxis-ast-hook` name even
+ * for an npm install, because the bare name is a bet on PATH resolving to
+ * *this* praxis. Inside WSL it does not: Windows puts its npm global
+ * directory on the Linux PATH through /mnt/c, and its shims come first, so
+ * a WSL install writes `praxis-ast-hook` and every WSL session then runs
+ * the Windows engine. That works only by accident -- a different build,
+ * possibly a different version, which disappears the moment the Windows
+ * install is removed, taking layer 2 with it and saying nothing.
+ * Resolving to this package's own bin makes the hook run the engine that
+ * installed it.
  */
 export async function resolveAstHookCommand(): Promise<string> {
   const { stat } = await import('node:fs/promises');
   const { dirname, resolve } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+
+  async function isFile(path: string): Promise<boolean> {
+    try {
+      return (await stat(path)).isFile();
+    } catch {
+      return false;
+    }
+  }
+
+  // Next to the running script: a local checkout, or an npm bin directory
+  // whose shim was resolved to the real file.
   const script = process.argv[1];
-  if (!script) return DEFAULT_AST_HOOK_COMMAND;
-  const sibling = resolve(dirname(script), 'praxis-ast-hook.js');
+  if (script) {
+    const sibling = resolve(dirname(script), 'praxis-ast-hook.js');
+    if (await isFile(sibling)) return `node "${sibling}"`;
+  }
+
+  // Next to this module: the reliable answer for an npm install, where
+  // argv[1] is a shim in a bin directory holding no .js files. Walks up
+  // from dist/ to the package root and into bin/.
   try {
-    const s = await stat(sibling);
-    if (s.isFile()) {
-      return `node "${sibling}"`;
+    const here = dirname(fileURLToPath(import.meta.url));
+    for (const candidate of [
+      resolve(here, '..', 'bin', 'praxis-ast-hook.js'),
+      resolve(here, '..', '..', 'bin', 'praxis-ast-hook.js'),
+    ]) {
+      if (await isFile(candidate)) return `node "${candidate}"`;
     }
   } catch {
-    // Not a local checkout; fall through to the bare command.
+    // import.meta.url unavailable under some bundlers; fall through.
   }
+
   return DEFAULT_AST_HOOK_COMMAND;
 }
 

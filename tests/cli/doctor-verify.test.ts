@@ -95,3 +95,25 @@ describe('the hook command praxis writes', () => {
     for (const arg of argv) expect(arg).not.toMatch(/["']/);
   });
 });
+
+describe('the hook command on a machine with a foreign praxis on PATH', () => {
+  // Inside WSL, Windows puts its npm global directory on the Linux PATH
+  // through /mnt/c, and its shims come first. A bare `praxis-ast-hook`
+  // therefore runs the *Windows* engine from a Linux session: a different
+  // build, possibly a different version, which vanishes the moment the
+  // Windows install is removed -- taking layer 2 with it, silently.
+  it('never falls back to the bare name while its own bin is findable', async () => {
+    const saved = process.argv[1];
+    // A path that does not exist, so the argv[1] branch cannot match and
+    // resolution has to fall through to the module-relative lookup.
+    process.argv[1] = resolve('/nonexistent-praxis-dir/praxis.js');
+    try {
+      const command = await resolveAstHookCommand();
+      expect(command).not.toBe('praxis-ast-hook');
+      expect(command).toMatch(/^node "/);
+      expect(command).toMatch(/praxis-ast-hook\.js"$/);
+    } finally {
+      process.argv[1] = saved;
+    }
+  });
+});

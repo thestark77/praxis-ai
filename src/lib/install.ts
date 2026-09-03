@@ -256,6 +256,14 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
       })
     : { installed: [], skipped: [] };
 
+  // An upgrade from a version that predates the ledger finds praxis
+  // already installed and no record of what it installed. Every rule then
+  // reads as "already present", the new ledger claims nothing, and
+  // uninstall would strand the whole firewall. Mark it so uninstall keeps
+  // the old full sweep instead of trusting an unclaimable ledger.
+  const inheritedPreLedgerInstall =
+    report.praxis.overlayInstalled && (await readOwnership(paths.praxisDir)) === null;
+
   let claudeEntriesAdded: string[] = [];
   if (wantsClaudeCode) {
     await patchClaudeMd(paths.claudeMd, importPath);
@@ -283,6 +291,7 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
   await recordOwnership(paths.praxisDir, {
     claudeCode: claudeEntriesAdded,
     opencode: opencode?.rulesAdded ?? [],
+    inheritedPreLedgerInstall,
   });
 
   return {
@@ -316,6 +325,12 @@ export interface UninstallResult {
   agents: AgentId[];
   removedClaudeMdBlock: boolean;
   removedFirewallEntries: number;
+  /**
+   * Deny entries praxis wants but did not write, so they were left in
+   * place. Reported so a user can see that a rule surviving uninstall is
+   * a decision, not a leak.
+   */
+  preservedFirewallEntries: number;
   /** True if praxis-home install artefacts were removed from ~/.praxis/. */
   removedSkeleton: boolean;
   /**
@@ -341,12 +356,16 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<Uninsta
   const wantsClaudeCode = agents.includes('claude-code');
 
   const ledger = await readOwnership(paths.praxisDir);
+  const claudeEntriesRemoved = claudeEntriesToRemove(ledger, firewallEntries);
+  // Anything praxis wants but did not write stays. Counting it as removed
+  // would report a machine as stripped that is still protected.
+  const claudeEntriesPreserved = firewallEntries.length - claudeEntriesRemoved.length;
 
   let removedClaudeMdBlock = false;
   let removedAstHook = false;
   if (wantsClaudeCode) {
     removedClaudeMdBlock = await unpatchClaudeMd(paths.claudeMd);
-    await unpatchSettings(paths.settingsJson, claudeEntriesToRemove(ledger, firewallEntries));
+    await unpatchSettings(paths.settingsJson, claudeEntriesRemoved);
 
     // Remove the praxis AST hook entry from settings.json.
     const settingsBeforeHook = await readSettings(paths.settingsJson);
@@ -393,7 +412,8 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<Uninsta
   return {
     agents,
     removedClaudeMdBlock,
-    removedFirewallEntries: wantsClaudeCode ? firewallEntries.length : 0,
+    removedFirewallEntries: wantsClaudeCode ? claudeEntriesRemoved.length : 0,
+    preservedFirewallEntries: wantsClaudeCode ? claudeEntriesPreserved : 0,
     removedSkeleton: removeSkeleton,
     praxisDirFullyRemoved,
     removedClaudeSkills,

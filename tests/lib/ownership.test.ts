@@ -104,3 +104,36 @@ describe('deciding what uninstall may remove', () => {
     expect(opencodeRulesToRemove(null, rules)).toEqual(rules);
   });
 });
+
+describe('a ledger inherited from a pre-ledger install', () => {
+  const firewall = ['Read(.env)', 'Bash(rm -rf *)', 'Bash(git filter-branch*)'];
+
+  it('sweeps the full list rather than trusting an unclaimable ledger', () => {
+    // An upgrade from a version with no ledger sees every rule as already
+    // present and claims none. Honouring that would strand the whole
+    // firewall on the machine with no way to remove it.
+    const ledger = { ...emptyLedger(), claudeCode: [], inheritedPreLedgerInstall: true };
+    expect(claudeEntriesToRemove(ledger, firewall)).toEqual(firewall);
+  });
+
+  it('sweeps OpenCode rules the same way', () => {
+    const rules = [{ tool: 'read', pattern: '**/.env' }];
+    const ledger = { ...emptyLedger(), inheritedPreLedgerInstall: true };
+    expect(opencodeRulesToRemove(ledger, rules)).toEqual(rules);
+  });
+
+  it('stays inherited once marked, across later installs', async () => {
+    const dir = await praxisDir();
+    await recordOwnership(dir, { claudeCode: [], inheritedPreLedgerInstall: true });
+    await recordOwnership(dir, { claudeCode: ['Read(.env)'] });
+    expect((await readOwnership(dir))?.inheritedPreLedgerInstall).toBe(true);
+  });
+
+  it('is not set by an ordinary first install', async () => {
+    const dir = await praxisDir();
+    await recordOwnership(dir, { claudeCode: ['Read(.env)'] });
+    const ledger = await readOwnership(dir);
+    expect(ledger?.inheritedPreLedgerInstall).toBe(false);
+    expect(claudeEntriesToRemove(ledger, firewall)).toEqual(['Read(.env)']);
+  });
+});

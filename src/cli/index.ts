@@ -10,6 +10,7 @@ import { syncPocockCommand } from './sync-pocock.js';
 import { updateCommand } from './update.js';
 import { remoteControlCommand } from './remote-control.js';
 import { voiceCommand } from './voice.js';
+import { VERSION } from '../version.js';
 
 const program = new Command();
 
@@ -18,7 +19,7 @@ program
   .description(
     'Phased-autonomy harness layer for Claude Code. Indagatory at task start, autonomous in execution, hard-stop at irreversibility.',
   )
-  .version('0.1.0-alpha.16');
+  .version(VERSION);
 
 program.addCommand(installCommand());
 program.addCommand(uninstallCommand());

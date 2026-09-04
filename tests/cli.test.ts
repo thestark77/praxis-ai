@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { execSync } from 'node:child_process';
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
@@ -100,9 +101,15 @@ describe('praxis CLI sync-pocock — offline path', () => {
     expect(stdout).toContain('sync-pocock');
   });
 
-  it('prints version', () => {
+  it('prints the version npm actually installed', () => {
+    // This assertion used to carry its own copy of the number, so it did not
+    // catch the drift it existed to catch -- it locked the stale value in and
+    // passed while `praxis --version` disagreed with package.json.
+    const pkg = JSON.parse(
+      readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
+    ) as { version: string };
     const out = runCli('--version').trim();
-    expect(out).toBe('0.1.0-alpha.16');
+    expect(out).toBe(pkg.version);
   });
 });
 

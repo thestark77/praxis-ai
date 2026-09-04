@@ -4,6 +4,26 @@ All notable changes to praxis-ai are documented here.
 This project follows [Semantic Versioning](https://semver.org/) and
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.0-alpha.18] - 2026-09-04
+
+### Fixed - `praxis --version` reported the previous release
+
+alpha.17 shipped announcing itself as alpha.16. The number was typed by hand
+into `src/cli/index.ts` as a second copy of what package.json already knew,
+and `npm version` moved one without the other. Caught by reading
+`praxis --version` against what `npm ls -g` had actually installed.
+
+The test that existed to catch exactly this carried a third copy of the
+number, so it passed while asserting the stale value — it locked the bug in
+rather than finding it. That is the more interesting half of the failure: a
+guard that duplicates the fact it guards is not a guard.
+
+The version now comes from package.json at build time, substituted by tsup,
+and the test compares the CLI's output against package.json rather than
+against a literal. Running from source with no build reports `0.0.0-dev`,
+because admitting there is no version is better than printing a
+plausible-looking wrong one.
+
 ## [0.1.0-alpha.17] - 2026-09-04
 
 ### Changed - a chosen default voice and pace

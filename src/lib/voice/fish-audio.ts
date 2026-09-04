@@ -14,6 +14,7 @@
 // whether to check their key or their balance.
 
 import type { VoiceConfig } from './config.js';
+import { summariseForSpeech } from './summarise.js';
 
 export const FISH_AUDIO_TTS_URL = 'https://api.fish.audio/v1/tts';
 
@@ -36,13 +37,21 @@ export interface SynthesizeOptions {
 }
 
 /**
- * Trim an utterance to something worth listening to.
+ * Reduce an utterance to something worth listening to.
  *
- * Cutting at a sentence boundary where one is available: a notification
- * that stops mid-word sounds broken, and the last clause is usually the
- * one carrying the outcome.
+ * Delegates to the summariser, which drops what cannot be spoken (code,
+ * tables, paths, URLs) and then keeps the sentences carrying the outcome.
+ * Blind truncation was the first version and it was wrong: a written answer
+ * puts the detail in the middle, so cutting at a character count reliably
+ * spoke the preamble and threw away the result.
  */
 export function trimForSpeech(text: string, maxChars: number): string {
+  const summary = summariseForSpeech(text, { maxChars });
+  return summary || trimPlain(text, maxChars);
+}
+
+/** Last-resort trim for text the summariser reduced to nothing. */
+function trimPlain(text: string, maxChars: number): string {
   const collapsed = text.replace(/\s+/g, ' ').trim();
   if (collapsed.length <= maxChars) return collapsed;
   const window = collapsed.slice(0, maxChars);

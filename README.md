@@ -174,6 +174,14 @@ praxis voice say --dry-run "x" # check the key without making noise
 praxis voice uninstall
 ```
 
+A long answer is summarised before it is spoken, not truncated. Code blocks,
+tables, URLs and absolute paths are removed — a path read aloud is forty
+syllables of separators — and the remaining sentences are ranked so the
+budget goes to the outcome, what was done, and any question aimed at you.
+Questions are reserved before anything else competes for room, because the
+one thing a listener who walked away cannot afford to miss is that they are
+being asked something. A real 799-character answer becomes about 300.
+
 Optional settings, also read from the project `.env`:
 
 | Key | Default | Notes |

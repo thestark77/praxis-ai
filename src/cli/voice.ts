@@ -11,6 +11,7 @@ import {
   FORMAT_KEY,
 } from '../lib/voice/config.js';
 import { speak } from '../lib/voice/speak.js';
+import { summariseForSpeech } from '../lib/voice/summarise.js';
 import { playersFor } from '../lib/voice/play.js';
 import {
   addPraxisVoiceHook,
@@ -105,7 +106,16 @@ export function voiceCommand(): Command {
       const result = await speak({ text, synthesizeOnly: opts.dryRun });
 
       console.log('praxis voice say');
-      console.log(`  text: ${text}`);
+      // Show what will actually be spoken, not what was passed in. A long
+      // answer is summarised before synthesis, and seeing the difference is
+      // how someone tunes PRAXIS_VOICE_MAX_CHARS to their taste.
+      const spoken = summariseForSpeech(text, { maxChars: result.config.maxChars });
+      if (spoken && spoken !== text) {
+        console.log(`  given:  ${text.length} chars`);
+        console.log(`  spoken: ${spoken}`);
+      } else {
+        console.log(`  text: ${text}`);
+      }
       if (result.skipped) {
         console.log(`  skipped: ${result.reason}`);
         console.log('');

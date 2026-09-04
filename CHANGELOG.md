@@ -6,6 +6,38 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Added - optional spoken notifications through Fish Audio
+
+praxis can read a finished turn aloud, so a long build can be started and
+walked away from. A `Stop` hook speaks the last thing Claude said; `Stop` is
+the event that matches the purpose, where `Notification` would talk over a
+permission prompt and `PostToolUse` would be unbearable.
+
+**Off unless a project asks for it.** Two independent switches, both in the
+project's own `.env`: `PRAXIS_VOICE_ENABLED=true` and `FISH_AUDIO_API_KEY`.
+Either one missing makes the whole feature inert - no network call, no audio,
+no error, no cost. A harness whose job is containing irreversible actions has
+no business making surprise outbound requests because a stray environment
+variable leaked in, and nobody wants a machine that starts talking after an
+unrelated upgrade. For the same reason a project `.env` saying `false` beats
+an ambient variable saying `true`.
+
+The client is written against Fish Audio's published OpenAPI schema rather
+than guessed: `POST https://api.fish.audio/v1/tts`, bearer auth, the model in
+a header, `text`/`reference_id`/`format` in the body. Each documented failure
+is surfaced as itself - 401 is a bad key, 402 an empty wallet, 503 their load
+- because "voice failed" tells nobody whether to check their key or their
+balance.
+
+Playback uses what the machine already has (`afplay`, PowerShell,
+`ffplay`/`mpv`/`paplay`/`aplay`) instead of adding a native audio dependency
+most installs would never use. The hook exits 0 and prints nothing whatever
+happens: a missing speaker is a disappointment, a broken session is a fault.
+
+`praxis voice status | scaffold | install | say | uninstall`. 40 tests.
+
+## [0.1.0-alpha.14] - 2026-09-03
+
 ### Fixed
 
 The Remote Control override scan skips the OS temp directory. On a real

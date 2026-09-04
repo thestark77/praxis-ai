@@ -6,7 +6,8 @@
   "bin": {
     "praxis": "./bin/praxis.js",
     "praxis-ai": "./bin/praxis.js",
-    "praxis-ast-hook": "./bin/praxis-ast-hook.js"
+    "praxis-ast-hook": "./bin/praxis-ast-hook.js",
+    "praxis-voice-hook": "./bin/praxis-voice-hook.js"
   },
   "main": "./dist/index.js",
   "files": [

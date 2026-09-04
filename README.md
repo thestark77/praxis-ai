@@ -147,6 +147,49 @@ side effect of being installed. An organization policy can also pin the
 setting, in which case Claude Code ignores it silently — confirm with
 `/status` in a fresh session.
 
+## Optional: spoken notifications (Fish Audio)
+
+praxis can read a finished turn aloud through [Fish Audio](https://fish.audio),
+so a long build can be started and walked away from. It is **off unless a
+project asks for it**, and switching it on takes two lines in that project's
+`.env`:
+
+```bash
+PRAXIS_VOICE_ENABLED=true
+FISH_AUDIO_API_KEY=<key from fish.audio/app/api-keys>
+```
+
+Both are required. With either missing the feature is completely inert: no
+network call, no audio, no error, no cost — praxis behaves exactly as it does
+without it. The flag lives with the project rather than the user because the
+same person wants narration on a long build and silence in a shared office an
+hour later.
+
+```bash
+praxis voice status            # default; says why it is off when it is
+praxis voice scaffold          # append the keys to .env, commented out
+praxis voice install           # register the Stop hook
+praxis voice say "hello"       # speak one line now
+praxis voice say --dry-run "x" # check the key without making noise
+praxis voice uninstall
+```
+
+Optional settings, also read from the project `.env`:
+
+| Key | Default | Notes |
+| --- | --- | --- |
+| `FISH_AUDIO_VOICE_ID` | Fish Audio's default voice | A model id from fish.audio, including a cloned voice |
+| `FISH_AUDIO_MODEL` | `s2.1-pro` | `s1`, `s2-pro`, `s2.1-pro`, `s2.1-pro-free` |
+| `PRAXIS_VOICE_FORMAT` | `mp3` | `mp3`, `wav`, `pcm`, `opus` |
+| `PRAXIS_VOICE_MAX_CHARS` | `350` | Capped at 2000, so one turn cannot bill for a novel |
+
+Playback uses whatever the machine already has — `afplay` on macOS,
+PowerShell on Windows, `ffplay`/`mpv`/`paplay`/`aplay` on Linux — rather than
+adding a native audio dependency that most installs would never use. A missing
+player is reported by `praxis voice say`, never by a broken session: the hook
+exits 0 and stays silent whatever happens, because no notification is worth
+interrupting the work it is announcing.
+
 ## Installation
 
 ```bash

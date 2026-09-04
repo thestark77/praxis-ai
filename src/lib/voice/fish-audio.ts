@@ -18,6 +18,16 @@ import { summariseForSpeech } from './summarise.js';
 
 export const FISH_AUDIO_TTS_URL = 'https://api.fish.audio/v1/tts';
 
+// The API's own defaults, which are not praxis's. A field is sent only when
+// it differs from what the endpoint would have assumed anyway -- so praxis's
+// default speed of 1.15 does travel on every request, while a project that
+// explicitly asks for 1 sends no prosody at all. Comparing against praxis's
+// defaults here instead would silently stop sending the values that make the
+// default voice sound the way it is meant to.
+const API_DEFAULT_SPEED = 1;
+const API_DEFAULT_TEMPERATURE = 0.7;
+const API_DEFAULT_VOLUME = 0;
+
 export interface SynthesisResult {
   ok: boolean;
   audio: Buffer | null;
@@ -110,11 +120,11 @@ export async function synthesize(opts: SynthesizeOptions): Promise<SynthesisResu
   // Only send what differs from the API's own defaults. A request that
   // restates every default is a request that breaks when a default moves,
   // and the voice's own pacing is usually the right one.
-  if (config.expressiveness !== 0.7) body.temperature = config.expressiveness;
-  if (config.speed !== 1 || config.volume !== 0) {
+  if (config.expressiveness !== API_DEFAULT_TEMPERATURE) body.temperature = config.expressiveness;
+  if (config.speed !== API_DEFAULT_SPEED || config.volume !== API_DEFAULT_VOLUME) {
     const prosody: Record<string, number> = {};
-    if (config.speed !== 1) prosody.speed = config.speed;
-    if (config.volume !== 0) prosody.volume = config.volume;
+    if (config.speed !== API_DEFAULT_SPEED) prosody.speed = config.speed;
+    if (config.volume !== API_DEFAULT_VOLUME) prosody.volume = config.volume;
     body.prosody = prosody;
   }
 

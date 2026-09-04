@@ -30,6 +30,27 @@ export const SPEED_KEY = 'PRAXIS_VOICE_SPEED';
 export const EXPRESSIVENESS_KEY = 'PRAXIS_VOICE_EXPRESSIVENESS';
 export const VOLUME_KEY = 'PRAXIS_VOICE_VOLUME';
 
+/**
+ * The voice praxis speaks with when a project does not name one.
+ *
+ * Fish Audio's own default is a neutral English reader, which is the wrong
+ * choice for a notification: it sounds like every other synthesised voice on
+ * the machine, and the whole point of speaking a finished turn is that the
+ * listener recognises it from across the room without looking. This one is
+ * distinct enough to be identified in a second, and reads Spanish and English
+ * equally well. Override it with `FISH_AUDIO_VOICE_ID`.
+ */
+export const DEFAULT_VOICE_ID = 'dcf8e0d418f3456abb09c95a38c6ed7a';
+
+/**
+ * Default speaking rate.
+ *
+ * Slightly above the voice's own pace. A notification is heard while doing
+ * something else, so it wants to be over quickly; at 1 the same sentence runs
+ * about three seconds longer for no added clarity.
+ */
+export const DEFAULT_SPEED = 1.15;
+
 /** Audio formats the Fish Audio `/v1/tts` endpoint accepts. */
 export const FORMATS = ['mp3', 'wav', 'pcm', 'opus'] as const;
 export type VoiceFormat = (typeof FORMATS)[number];
@@ -41,7 +62,7 @@ export type VoiceModel = (typeof MODELS)[number];
 export interface VoiceConfig {
   enabled: boolean;
   apiKey: string | null;
-  /** Voice model id from fish.audio. Absent means their default voice. */
+  /** Voice model id from fish.audio. Falls back to {@link DEFAULT_VOICE_ID}. */
   voiceId: string | null;
   model: VoiceModel;
   format: VoiceFormat;
@@ -53,8 +74,9 @@ export interface VoiceConfig {
   maxChars: number;
   /**
    * Speaking rate, as Fish Audio's `prosody.speed` multiplier. 1 is the
-   * voice's own pace; the API accepts 0.5 to 2.0 and rejects the rest, so
-   * anything outside that is clamped rather than sent and refused.
+   * voice's own pace and {@link DEFAULT_SPEED} is what praxis uses; the API
+   * accepts 0.5 to 2.0 and rejects the rest, so anything outside that is
+   * clamped rather than sent and refused.
    */
   speed: number;
   /**
@@ -198,11 +220,11 @@ export async function resolveVoiceConfig(opts: ResolveOptions = {}): Promise<Voi
   return {
     enabled: enabled && apiKey !== null,
     apiKey,
-    voiceId: (read(VOICE_KEY) ?? '').trim() || null,
+    voiceId: (read(VOICE_KEY) ?? '').trim() || DEFAULT_VOICE_ID,
     model: pickModel(read(MODEL_KEY)),
     format: pickFormat(read(FORMAT_KEY)),
     maxChars: Number.isFinite(rawMax) && rawMax > 0 ? Math.min(rawMax, 2000) : 350,
-    speed: pickNumber(read(SPEED_KEY), 0.5, 2, 1),
+    speed: pickNumber(read(SPEED_KEY), 0.5, 2, DEFAULT_SPEED),
     expressiveness: pickNumber(read(EXPRESSIVENESS_KEY), 0, 1, 0.7),
     volume: pickNumber(read(VOLUME_KEY), -20, 20, 0),
     envFile,

@@ -186,11 +186,11 @@ Optional settings, also read from the project `.env`:
 
 | Key | Default | Notes |
 | --- | --- | --- |
-| `FISH_AUDIO_VOICE_ID` | Fish Audio's default voice | A model id from fish.audio, including a cloned voice |
+| `FISH_AUDIO_VOICE_ID` | `dcf8e0d4…c6ed7a` | A model id from fish.audio, including a cloned voice. The default is chosen to be recognisable from across the room rather than neutral, since the point of a spoken notification is knowing it was yours without looking |
 | `FISH_AUDIO_MODEL` | `s2.1-pro` | `s1`, `s2-pro`, `s2.1-pro`, `s2.1-pro-free` |
 | `PRAXIS_VOICE_FORMAT` | `mp3` | `mp3`, `wav`, `pcm`, `opus` |
 | `PRAXIS_VOICE_MAX_CHARS` | `350` | Capped at 2000, so one turn cannot bill for a novel |
-| `PRAXIS_VOICE_SPEED` | `1` | Speaking rate, 0.5 to 2.0. Post-processed, so it changes pacing without regenerating |
+| `PRAXIS_VOICE_SPEED` | `1.15` | Speaking rate, 0.5 to 2.0, where `1` is the voice's own pace. Post-processed, so it changes pacing without regenerating |
 | `PRAXIS_VOICE_EXPRESSIVENESS` | `0.7` | 0 to 1. Higher is more varied, lower more consistent — it changes generation, so it also makes the voice less predictable between runs |
 | `PRAXIS_VOICE_VOLUME` | `0` | Decibel adjustment |
 

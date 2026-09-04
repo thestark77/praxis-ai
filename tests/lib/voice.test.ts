@@ -15,6 +15,8 @@ import {
   SPEED_KEY,
   EXPRESSIVENESS_KEY,
   VOLUME_KEY,
+  DEFAULT_VOICE_ID,
+  DEFAULT_SPEED,
 } from '../../src/lib/voice/config.js';
 import { synthesize, trimForSpeech, FISH_AUDIO_TTS_URL } from '../../src/lib/voice/fish-audio.js';
 import { playersFor, play } from '../../src/lib/voice/play.js';
@@ -215,7 +217,11 @@ describe('trimming an utterance', () => {
 describe('calling Fish Audio', () => {
   const enabledConfig = async () =>
     resolveVoiceConfig({
-      cwd: await projectWith(`${ENABLED_KEY}=true\n${KEY_LINE}\n${VOICE_KEY}=voice-9`),
+      cwd: await projectWith(
+        // Pinning speed to the API default keeps this describe block about
+        // the request shape rather than about praxis's chosen pace.
+        `${ENABLED_KEY}=true\n${KEY_LINE}\n${VOICE_KEY}=voice-9\n${SPEED_KEY}=1`,
+      ),
       env: {},
     });
 
@@ -241,7 +247,7 @@ describe('calling Fish Audio', () => {
     expect(body).toEqual({ text: 'hello', format: 'mp3', reference_id: 'voice-9' });
   });
 
-  it('omits reference_id when no voice is chosen', async () => {
+  it('falls back to the praxis voice when the project names none', async () => {
     let body: Record<string, unknown> = {};
     const config = await resolveVoiceConfig({
       cwd: await projectWith(`${ENABLED_KEY}=true\n${KEY_LINE}`),
@@ -249,6 +255,25 @@ describe('calling Fish Audio', () => {
     });
     await synthesize({
       config,
+      text: 'hi',
+      fetchImpl: (async (_u: string, init: RequestInit) => {
+        body = JSON.parse(init.body as string);
+        return new Response(new Uint8Array([1]), { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+    expect(body.reference_id).toBe(DEFAULT_VOICE_ID);
+  });
+
+  it('omits reference_id entirely when a caller supplies no voice', async () => {
+    // Configuration can no longer produce this, but the client still has to
+    // behave for a hand-built config rather than sending `reference_id: null`.
+    let body: Record<string, unknown> = {};
+    const config = await resolveVoiceConfig({
+      cwd: await projectWith(`${ENABLED_KEY}=true\n${KEY_LINE}`),
+      env: {},
+    });
+    await synthesize({
+      config: { ...config, voiceId: null },
       text: 'hi',
       fetchImpl: (async (_u: string, init: RequestInit) => {
         body = JSON.parse(init.body as string);
@@ -418,9 +443,9 @@ describe('speed and expressiveness', () => {
       env: {},
     });
 
-  it('defaults to the voice its own pace and the API default expressiveness', async () => {
+  it('defaults to praxis pace and the API default expressiveness', async () => {
     const config = await withEnv('');
-    expect(config.speed).toBe(1);
+    expect(config.speed).toBe(DEFAULT_SPEED);
     expect(config.expressiveness).toBe(0.7);
     expect(config.volume).toBe(0);
   });
@@ -446,14 +471,16 @@ describe('speed and expressiveness', () => {
 
   it('ignores a value that is not a number', async () => {
     const config = await withEnv(`${SPEED_KEY}=rapido`);
-    expect(config.speed).toBe(1);
+    expect(config.speed).toBe(DEFAULT_SPEED);
   });
 
-  it('sends nothing extra when everything is at its default', async () => {
-    // A request that restates every default breaks when a default moves.
+  it('sends nothing extra when everything matches the API default', async () => {
+    // A request that restates every default breaks when a default moves. The
+    // comparison is against the *API's* defaults, not praxis's, so a project
+    // that asks for plain speed 1 sends no prosody at all.
     let body: Record<string, unknown> = {};
     await synthesize({
-      config: await withEnv(''),
+      config: await withEnv(`${SPEED_KEY}=1`),
       text: 'hi',
       fetchImpl: (async (_u: string, init: RequestInit) => {
         body = JSON.parse(init.body as string);
@@ -476,6 +503,23 @@ describe('speed and expressiveness', () => {
     });
     expect(body.temperature).toBe(0.95);
     expect(body.prosody).toEqual({ speed: 1.3, volume: 2 });
+  });
+
+  it('carries the praxis defaults into the request when the project sets neither', async () => {
+    // The point of having defaults at all: a project that only switches the
+    // feature on still gets the chosen voice at the chosen pace, without
+    // having to know either value exists.
+    let body: Record<string, unknown> = {};
+    await synthesize({
+      config: await withEnv(''),
+      text: 'hi',
+      fetchImpl: (async (_u: string, init: RequestInit) => {
+        body = JSON.parse(init.body as string);
+        return new Response(new Uint8Array([1]), { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+    expect(body.reference_id).toBe(DEFAULT_VOICE_ID);
+    expect(body.prosody).toEqual({ speed: DEFAULT_SPEED });
   });
 
   it('omits volume from prosody when only speed changed', async () => {

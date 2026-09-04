@@ -4,6 +4,28 @@ All notable changes to praxis-ai are documented here.
 This project follows [Semantic Versioning](https://semver.org/) and
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.0-alpha.17] - 2026-09-04
+
+### Changed - a chosen default voice and pace
+
+`FISH_AUDIO_VOICE_ID` fell back to Fish Audio's own default, a neutral
+English reader. That is the wrong default for a notification: it sounds like
+every other synthesised voice on the machine, and the point of speaking a
+finished turn is that the listener recognises it from across the room
+without looking. The fallback is now a specific, distinct voice that reads
+Spanish and English equally well, and `PRAXIS_VOICE_SPEED` defaults to
+`1.15` rather than `1` — a notification is heard while doing something else,
+so it wants to be over quickly.
+
+Both remain plain defaults: setting either key in a project's `.env`
+overrides it exactly as before, and nothing about the two switches that gate
+the feature has changed.
+
+One consequence worth naming: praxis's defaults no longer coincide with the
+API's, so the "only send what differs from the default" rule now compares
+against Fish Audio's values explicitly. `prosody.speed` travels on a default
+request, and a project that asks for speed `1` sends no prosody at all.
+
 ## [0.1.0-alpha.16] - 2026-09-04
 
 ### Added - speed, expressiveness and volume for the voice

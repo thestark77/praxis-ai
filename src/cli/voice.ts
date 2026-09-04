@@ -9,6 +9,9 @@ import {
   VOICE_KEY,
   MODEL_KEY,
   FORMAT_KEY,
+  SPEED_KEY,
+  DEFAULT_VOICE_ID,
+  DEFAULT_SPEED,
 } from '../lib/voice/config.js';
 import { speak } from '../lib/voice/speak.js';
 import { summariseForSpeech } from '../lib/voice/summarise.js';
@@ -24,7 +27,9 @@ function reportConfig(config: Awaited<ReturnType<typeof resolveVoiceConfig>>): v
   console.log(`    enabled:   ${config.enabled}`);
   console.log(`    .env:      ${config.envFile ?? '(none found)'}`);
   console.log(`    api key:   ${config.apiKey ? 'present' : 'missing'}`);
-  console.log(`    voice id:  ${config.voiceId ?? '(Fish Audio default voice)'}`);
+  const isDefaultVoice = config.voiceId === DEFAULT_VOICE_ID;
+  console.log(`    voice id:  ${config.voiceId}${isDefaultVoice ? ' (praxis default)' : ''}`);
+  console.log(`    speed:     ${config.speed}${config.speed === DEFAULT_SPEED ? ' (praxis default)' : ''}`);
   console.log(`    model:     ${config.model}`);
   console.log(`    format:    ${config.format}`);
   console.log(`    max chars: ${config.maxChars}`);
@@ -170,7 +175,8 @@ export function voiceCommand(): Command {
         `# ${ENABLED_KEY}=true`,
         `# ${API_KEY}=`,
         '# Optional:',
-        `# ${VOICE_KEY}=      # voice model id from fish.audio; omitted uses their default`,
+        `# ${VOICE_KEY}=${DEFAULT_VOICE_ID}   # any model id from fish.audio`,
+        `# ${SPEED_KEY}=${DEFAULT_SPEED}      # 0.5 to 2.0`,
         `# ${MODEL_KEY}=s2.1-pro   # s1 | s2-pro | s2.1-pro | s2.1-pro-free`,
         `# ${FORMAT_KEY}=mp3       # mp3 | wav | pcm | opus`,
         '',

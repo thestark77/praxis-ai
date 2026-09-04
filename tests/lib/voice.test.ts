@@ -375,3 +375,35 @@ describe('the Stop hook registration', () => {
     expect(command).toContain('"/Users/First Last/h.js"');
   });
 });
+
+describe('the Windows player', () => {
+  // The first version used the WMPlayer COM object and reported success
+  // while producing silence: 300ms after play() it sits in state 9
+  // (Transitioning), never 3 (Playing), so a `while (playState -eq 3)` wait
+  // falls straight through and close() kills the clip before a sound leaves
+  // it. Waiting for state 3 does not help either -- in a non-interactive
+  // session it never arrives at all. Caught by a user hearing nothing.
+  const script = (): string => playersFor('win32')[0]!.args('C:/tmp/x.mp3').join(' ');
+
+  it('does not depend on a playState transition', () => {
+    expect(script()).not.toContain('playState');
+    expect(script()).not.toContain('WMPlayer');
+  });
+
+  it('waits for the clip its own reported duration', () => {
+    const s = script();
+    expect(s).toContain('NaturalDuration');
+    expect(s).toContain('Start-Sleep');
+  });
+
+  it('fails rather than claiming to have played an undecodable file', () => {
+    // Exiting non-zero lets the caller try the next player instead of
+    // reporting a notification nobody heard.
+    expect(script()).toContain('exit 1');
+  });
+
+  it('escapes a single quote in the path', () => {
+    const args = playersFor('win32')[0]!.args("C:/it's/x.mp3");
+    expect(args.join(' ')).toContain("it''s");
+  });
+});

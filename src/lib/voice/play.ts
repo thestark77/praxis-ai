@@ -33,15 +33,38 @@ export function playersFor(platform: string = process.platform): Player[] {
   if (platform === 'win32') {
     return [
       {
-        // Media.SoundPlayer handles WAV only, so route everything through
-        // the MediaPlayer COM object, which follows the system codecs.
+        // WPF's MediaPlayer, because it reports the clip's real duration.
+        //
+        // The obvious choice, the WMPlayer COM object, was tried first and
+        // reported success while producing silence: 300ms after `play()` it
+        // is in state 9 (Transitioning), never 3 (Playing), so a
+        // `while (playState -eq 3)` wait falls straight through and
+        // `close()` kills the clip before a sound leaves it. Waiting for
+        // state 3 does not help either -- on a non-interactive session it
+        // never arrives at all, even after ten seconds.
+        //
+        // MediaPlayer avoids the state machine entirely: open the file,
+        // read NaturalDuration, sleep exactly that long. If the duration
+        // never arrives the file could not be decoded, and that exits
+        // non-zero so the caller can try the next player instead of
+        // claiming to have spoken.
         command: 'powershell',
         args: (f) => [
           '-NoProfile',
           '-Command',
-          `$p = New-Object -ComObject WMPlayer.OCX; $p.URL = '${f.replace(/'/g, "''")}'; ` +
-            '$p.controls.play(); Start-Sleep -Milliseconds 300; ' +
-            'while ($p.playState -eq 3) { Start-Sleep -Milliseconds 200 }; $p.close()',
+          [
+            'Add-Type -AssemblyName PresentationCore;',
+            '$mp = New-Object System.Windows.Media.MediaPlayer;',
+            `$mp.Open([uri]'${f.replace(/'/g, "''")}');`,
+            '$t = 0;',
+            'while (-not $mp.NaturalDuration.HasTimeSpan -and $t -lt 50) {',
+            '  Start-Sleep -Milliseconds 100; $t++ };',
+            'if (-not $mp.NaturalDuration.HasTimeSpan) { exit 1 };',
+            '$d = [int]$mp.NaturalDuration.TimeSpan.TotalMilliseconds;',
+            '$mp.Play();',
+            'Start-Sleep -Milliseconds ($d + 400);',
+            '$mp.Close()',
+          ].join(' '),
         ],
       },
     ];

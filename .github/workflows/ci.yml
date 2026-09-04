@@ -34,7 +34,27 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
 
+      # node_modules is cached, not just the npm cache directory.
+      #
+      # better-sqlite3 12 installs its binary through `prebuild-install`,
+      # which downloads from GitHub releases at install time and bypasses
+      # the npm cache entirely. On macOS runners that download stalls: a
+      # measured run spent 422 of its 465 seconds inside `npm ci` with no
+      # output at all, against 30 seconds for every other step combined.
+      # Caching the built tree means only a lockfile change pays for it.
+      #
+      # The key carries the OS and the Node major because the tree contains
+      # a compiled native module; restoring an arm64 build onto x64, or a
+      # Node 22 ABI onto 24, would be worse than a slow install.
+      - name: Cache node_modules
+        id: node-modules-cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-${{ runner.arch }}-node${{ matrix.node-version }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install dependencies
+        if: steps.node-modules-cache.outputs.cache-hit != 'true'
         run: npm ci
 
       - name: Typecheck

@@ -131,7 +131,7 @@ describe('discovering WSL environments', () => {
       return { status: 0, stdout: `/home/${args[1] === 'Ubuntu' ? 'sebas' : 'other'}` };
     }
     if (args.includes('wslpath')) {
-      return { status: 0, stdout: `\\\\wsl.localhost\\${args[1]}\\home\\x` };
+      return { status: 0, stdout: join(tmpdir(), `praxis-fake-wsl-${args[1]}`) };
     }
     return { status: 1, stdout: '' };
   };
@@ -145,7 +145,7 @@ describe('discovering WSL environments', () => {
   });
 
   it('translates a POSIX home into a path Windows can write', () => {
-    expect(wslSettingsPath('Ubuntu', fakeWsl)).toContain('wsl.localhost');
+    expect(wslSettingsPath('Ubuntu', fakeWsl)).toContain('praxis-fake-wsl');
     expect(wslSettingsPath('Ubuntu', fakeWsl)).toMatch(/settings\.json$/);
   });
 
@@ -166,7 +166,7 @@ describe('discovering WSL environments', () => {
       if (args[0] === '-l') return { status: 0, stdout: 'A\r\nB\r\n' };
       if (args.includes('echo -n "$HOME"')) return { status: 0, stdout: '/home/shared' };
       if (args.includes('wslpath'))
-        return { status: 0, stdout: '\\\\wsl.localhost\\A\\home\\shared' };
+        return { status: 0, stdout: join(tmpdir(), 'praxis-fake-wsl-shared') };
       return { status: 1, stdout: '' };
     };
     const envs = await discoverEnvironments({

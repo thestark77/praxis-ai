@@ -190,6 +190,15 @@ Optional settings, also read from the project `.env`:
 | `FISH_AUDIO_MODEL` | `s2.1-pro` | `s1`, `s2-pro`, `s2.1-pro`, `s2.1-pro-free` |
 | `PRAXIS_VOICE_FORMAT` | `mp3` | `mp3`, `wav`, `pcm`, `opus` |
 | `PRAXIS_VOICE_MAX_CHARS` | `350` | Capped at 2000, so one turn cannot bill for a novel |
+| `PRAXIS_VOICE_SPEED` | `1` | Speaking rate, 0.5 to 2.0. Post-processed, so it changes pacing without regenerating |
+| `PRAXIS_VOICE_EXPRESSIVENESS` | `0.7` | 0 to 1. Higher is more varied, lower more consistent — it changes generation, so it also makes the voice less predictable between runs |
+| `PRAXIS_VOICE_VOLUME` | `0` | Decibel adjustment |
+
+Values outside those ranges are clamped rather than sent: Fish Audio rejects
+a speed of 3 with a 400, and a notification that fails because a number was
+one step too enthusiastic is a worse outcome than one that speaks slightly
+slower than asked. Only values that differ from the API's own defaults are
+sent, so a default moving upstream does not break the request.
 
 Playback uses whatever the machine already has — `afplay` on macOS,
 PowerShell on Windows, `ffplay`/`mpv`/`paplay`/`aplay` on Linux — rather than

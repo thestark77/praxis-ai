@@ -4,6 +4,32 @@ All notable changes to praxis-ai are documented here.
 This project follows [Semantic Versioning](https://semver.org/) and
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.0-alpha.16] - 2026-09-04
+
+### Added - speed, expressiveness and volume for the voice
+
+praxis sent only `text`, `format` and `reference_id`, so every clip came out
+at Fish Audio's defaults with no way to change the pacing. Three keys now
+reach the API:
+
+| Key | Maps to | Range |
+| --- | --- | --- |
+| `PRAXIS_VOICE_SPEED` | `prosody.speed` | 0.5 to 2.0 |
+| `PRAXIS_VOICE_EXPRESSIVENESS` | `temperature` | 0 to 1 |
+| `PRAXIS_VOICE_VOLUME` | `prosody.volume` | decibels |
+
+They are different mechanisms, not one knob: speed is post-processed and
+changes pacing without regenerating, while temperature changes the
+generation itself, so raising it also makes the voice less predictable
+between runs.
+
+Values outside the documented range are clamped rather than passed through.
+Fish Audio rejects a speed of 3 with a 400, and a notification that fails
+because a number was one step too enthusiastic is a worse outcome than one
+that speaks slightly slower than asked. Only values that differ from the
+API's own defaults are sent, so a default moving upstream cannot break the
+request.
+
 ## [0.1.0-alpha.15] - 2026-09-04
 
 ### Fixed - the Windows player reported success while producing silence

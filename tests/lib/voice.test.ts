@@ -12,6 +12,9 @@ import {
   MODEL_KEY,
   FORMAT_KEY,
   MAX_CHARS_KEY,
+  SPEED_KEY,
+  EXPRESSIVENESS_KEY,
+  VOLUME_KEY,
 } from '../../src/lib/voice/config.js';
 import { synthesize, trimForSpeech, FISH_AUDIO_TTS_URL } from '../../src/lib/voice/fish-audio.js';
 import { playersFor, play } from '../../src/lib/voice/play.js';
@@ -405,5 +408,86 @@ describe('the Windows player', () => {
   it('escapes a single quote in the path', () => {
     const args = playersFor('win32')[0]!.args("C:/it's/x.mp3");
     expect(args.join(' ')).toContain("it''s");
+  });
+});
+
+describe('speed and expressiveness', () => {
+  const withEnv = async (extra: string) =>
+    resolveVoiceConfig({
+      cwd: await projectWith(`${ENABLED_KEY}=true\n${KEY_LINE}\n${extra}`),
+      env: {},
+    });
+
+  it('defaults to the voice its own pace and the API default expressiveness', async () => {
+    const config = await withEnv('');
+    expect(config.speed).toBe(1);
+    expect(config.expressiveness).toBe(0.7);
+    expect(config.volume).toBe(0);
+  });
+
+  it('reads the values a project sets', async () => {
+    const config = await withEnv(`${SPEED_KEY}=1.25\n${EXPRESSIVENESS_KEY}=0.9\n${VOLUME_KEY}=3`);
+    expect(config.speed).toBe(1.25);
+    expect(config.expressiveness).toBe(0.9);
+    expect(config.volume).toBe(3);
+  });
+
+  it('clamps to the ranges the API documents', async () => {
+    // Fish Audio rejects a speed of 3 with a 400. A notification that fails
+    // because a value was one step too enthusiastic is worse than one that
+    // speaks slightly slower than asked.
+    const fast = await withEnv(`${SPEED_KEY}=5\n${EXPRESSIVENESS_KEY}=9`);
+    expect(fast.speed).toBe(2);
+    expect(fast.expressiveness).toBe(1);
+    const slow = await withEnv(`${SPEED_KEY}=0.1\n${EXPRESSIVENESS_KEY}=-4`);
+    expect(slow.speed).toBe(0.5);
+    expect(slow.expressiveness).toBe(0);
+  });
+
+  it('ignores a value that is not a number', async () => {
+    const config = await withEnv(`${SPEED_KEY}=rapido`);
+    expect(config.speed).toBe(1);
+  });
+
+  it('sends nothing extra when everything is at its default', async () => {
+    // A request that restates every default breaks when a default moves.
+    let body: Record<string, unknown> = {};
+    await synthesize({
+      config: await withEnv(''),
+      text: 'hi',
+      fetchImpl: (async (_u: string, init: RequestInit) => {
+        body = JSON.parse(init.body as string);
+        return new Response(new Uint8Array([1]), { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+    expect('temperature' in body).toBe(false);
+    expect('prosody' in body).toBe(false);
+  });
+
+  it('sends prosody and temperature when a project changes them', async () => {
+    let body: Record<string, unknown> = {};
+    await synthesize({
+      config: await withEnv(`${SPEED_KEY}=1.3\n${EXPRESSIVENESS_KEY}=0.95\n${VOLUME_KEY}=2`),
+      text: 'hi',
+      fetchImpl: (async (_u: string, init: RequestInit) => {
+        body = JSON.parse(init.body as string);
+        return new Response(new Uint8Array([1]), { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+    expect(body.temperature).toBe(0.95);
+    expect(body.prosody).toEqual({ speed: 1.3, volume: 2 });
+  });
+
+  it('omits volume from prosody when only speed changed', async () => {
+    let body: Record<string, unknown> = {};
+    await synthesize({
+      config: await withEnv(`${SPEED_KEY}=1.2`),
+      text: 'hi',
+      fetchImpl: (async (_u: string, init: RequestInit) => {
+        body = JSON.parse(init.body as string);
+        return new Response(new Uint8Array([1]), { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+    expect(body.prosody).toEqual({ speed: 1.2 });
   });
 });

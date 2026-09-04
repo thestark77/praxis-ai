@@ -107,6 +107,17 @@ export async function synthesize(opts: SynthesizeOptions): Promise<SynthesisResu
   const body: Record<string, unknown> = { text: spoken, format: config.format };
   if (config.voiceId) body.reference_id = config.voiceId;
 
+  // Only send what differs from the API's own defaults. A request that
+  // restates every default is a request that breaks when a default moves,
+  // and the voice's own pacing is usually the right one.
+  if (config.expressiveness !== 0.7) body.temperature = config.expressiveness;
+  if (config.speed !== 1 || config.volume !== 0) {
+    const prosody: Record<string, number> = {};
+    if (config.speed !== 1) prosody.speed = config.speed;
+    if (config.volume !== 0) prosody.volume = config.volume;
+    body.prosody = prosody;
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {

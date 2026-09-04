@@ -26,6 +26,9 @@ export const VOICE_KEY = 'FISH_AUDIO_VOICE_ID';
 export const MODEL_KEY = 'FISH_AUDIO_MODEL';
 export const FORMAT_KEY = 'PRAXIS_VOICE_FORMAT';
 export const MAX_CHARS_KEY = 'PRAXIS_VOICE_MAX_CHARS';
+export const SPEED_KEY = 'PRAXIS_VOICE_SPEED';
+export const EXPRESSIVENESS_KEY = 'PRAXIS_VOICE_EXPRESSIVENESS';
+export const VOLUME_KEY = 'PRAXIS_VOICE_VOLUME';
 
 /** Audio formats the Fish Audio `/v1/tts` endpoint accepts. */
 export const FORMATS = ['mp3', 'wav', 'pcm', 'opus'] as const;
@@ -48,6 +51,19 @@ export interface VoiceConfig {
    * useful and starts costing money per character.
    */
   maxChars: number;
+  /**
+   * Speaking rate, as Fish Audio's `prosody.speed` multiplier. 1 is the
+   * voice's own pace; the API accepts 0.5 to 2.0 and rejects the rest, so
+   * anything outside that is clamped rather than sent and refused.
+   */
+  speed: number;
+  /**
+   * Expressiveness, as the API's `temperature`. Higher is more varied,
+   * lower more consistent. Range 0 to 1.
+   */
+  expressiveness: number;
+  /** Volume adjustment in decibels. 0 leaves the clip as generated. */
+  volume: number;
   /** Where the values came from, for `praxis voice status` to report. */
   envFile: string | null;
   /** Why the feature is off, when it is. */
@@ -117,6 +133,20 @@ function isTruthy(value: string | undefined): boolean {
   return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
 }
 
+/**
+ * Read a number, clamped to the range the API documents.
+ *
+ * Clamping rather than passing through: Fish Audio rejects a speed of 3
+ * with a 400, and a notification that fails because a config value was one
+ * step too enthusiastic is a worse outcome than one that speaks slightly
+ * slower than asked.
+ */
+function pickNumber(value: string | undefined, min: number, max: number, fallback: number): number {
+  const parsed = Number.parseFloat((value ?? '').trim());
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
 function pickFormat(value: string | undefined): VoiceFormat {
   const v = (value ?? '').trim().toLowerCase() as VoiceFormat;
   return (FORMATS as readonly string[]).includes(v) ? v : 'mp3';
@@ -172,6 +202,9 @@ export async function resolveVoiceConfig(opts: ResolveOptions = {}): Promise<Voi
     model: pickModel(read(MODEL_KEY)),
     format: pickFormat(read(FORMAT_KEY)),
     maxChars: Number.isFinite(rawMax) && rawMax > 0 ? Math.min(rawMax, 2000) : 350,
+    speed: pickNumber(read(SPEED_KEY), 0.5, 2, 1),
+    expressiveness: pickNumber(read(EXPRESSIVENESS_KEY), 0, 1, 0.7),
+    volume: pickNumber(read(VOLUME_KEY), -20, 20, 0),
     envFile,
     reason,
   };

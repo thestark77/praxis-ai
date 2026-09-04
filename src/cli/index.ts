@@ -9,6 +9,7 @@ import { contextUsageCommand } from './context-usage.js';
 import { syncPocockCommand } from './sync-pocock.js';
 import { updateCommand } from './update.js';
 import { remoteControlCommand } from './remote-control.js';
+import { voiceCommand } from './voice.js';
 
 const program = new Command();
 
@@ -29,5 +30,6 @@ program.addCommand(contextUsageCommand());
 program.addCommand(syncPocockCommand());
 program.addCommand(updateCommand());
 program.addCommand(remoteControlCommand());
+program.addCommand(voiceCommand());
 
 program.parse(process.argv);

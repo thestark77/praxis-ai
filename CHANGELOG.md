@@ -34,7 +34,29 @@ Playback uses what the machine already has (`afplay`, PowerShell,
 most installs would never use. The hook exits 0 and prints nothing whatever
 happens: a missing speaker is a disappointment, a broken session is a fault.
 
-`praxis voice status | scaffold | install | say | uninstall`. 40 tests.
+A long answer is summarised before it is spoken, not truncated. Blind
+truncation was the first version and it was wrong: a written answer puts the
+detail in the middle, so cutting at a character count reliably spoke the
+throat-clearing and threw away the result. Code blocks, tables, URLs and
+absolute paths are removed first, then the remaining sentences are ranked and
+re-emitted in their original order.
+
+Three of the rules came from listening to the output rather than from
+reasoning about it, which is the only way they would have been found:
+
+- A sentence that says "minor details that do not change the result" is
+  telling the listener to skip it, and the first real summary kept exactly
+  that while dropping what had been done.
+- A question is reserved before anything competes for the budget. Ranking
+  alone let a long high-scoring sentence starve "shall I publish?", and that
+  is the one thing a listener who walked away cannot afford to miss.
+- Removing a path or a URL out of the middle of a sentence leaves a
+  grammatical stump — "escribí el módulo en y lo conecté" — that a listener
+  hears as a mistake, so the stranded function word is collapsed.
+
+`praxis voice status | scaffold | install | say | uninstall`. `say` prints
+what will actually be spoken alongside the input length, which is how
+`PRAXIS_VOICE_MAX_CHARS` gets tuned. 65 tests.
 
 ## [0.1.0-alpha.14] - 2026-09-03
 

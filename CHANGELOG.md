@@ -4,7 +4,48 @@ All notable changes to praxis-ai are documented here.
 This project follows [Semantic Versioning](https://semver.org/) and
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.1.0-alpha.15] - 2026-09-04
+
+### Fixed - the Windows player reported success while producing silence
+
+Caught by a user hearing nothing after `praxis voice say` printed
+`status: spoken`. The worst shape of bug in a notification feature: it
+claimed to have told someone something.
+
+The first version drove the WMPlayer COM object and waited with
+`while ($p.playState -eq 3)`. Measured 300ms after `play()` the state is 9
+(Transitioning), never 3 (Playing), so the wait fell straight through and
+`close()` killed the clip before a sound left it. Waiting *for* state 3 does
+not help either: in a non-interactive session it never arrives at all, even
+after ten seconds.
+
+WPF's `MediaPlayer` replaces it, with no state machine to race - open the
+file, read `NaturalDuration`, sleep exactly that long. A file whose duration
+never arrives could not be decoded, and that exits non-zero so the caller
+tries the next player instead of claiming to have spoken.
+
+### Changed - CI caches node_modules
+
+A macOS cell spent 422 of its 465 seconds inside `npm ci`, with no output for
+seven minutes, against 30 seconds for every other step combined.
+better-sqlite3 12 installs its binary through `prebuild-install`, which
+downloads from GitHub releases at install time and bypasses the npm cache
+entirely, so `cache: npm` never helped. The built tree is cached instead,
+keyed on OS, architecture and Node major because it holds a compiled native
+module.
+
+Measured on a warm cache: macOS went from 310s average to 31s, the slowest
+cell from 465s to 71s, and `npm ci` to zero. macOS is now the fastest of the
+three platforms rather than 2.2x the slowest. The tests were never the cost -
+they ran in 9 seconds throughout.
+
+### Fixed - a flaky WSL discovery test
+
+Its fake returned `\wsl.localhost\...` paths, and discovery stats each home
+to report whether Claude is installed there. Windows treats that as a real
+share and starts the distribution: one run took five seconds and failed. The
+fake returns local temp paths now.
+
 
 ### Added - optional spoken notifications through Fish Audio
 

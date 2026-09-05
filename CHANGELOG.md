@@ -4,6 +4,24 @@ All notable changes to praxis-ai are documented here.
 This project follows [Semantic Versioning](https://semver.org/) and
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.0-alpha.22] - 2026-09-06
+
+### Fixed - `voice say` can take the text off the command line
+
+`praxis voice say -` now reads the text from stdin. An answer is a multi-line
+document carrying quotes, backticks and accented characters; passing it as an
+argv entry puts it through the shell's quoting rules -- on Windows through two
+of them, since npm's launcher is itself a PowerShell script and the backtick
+is that shell's escape character.
+
+Observed: a fenced block reached praxis with its fences gone, so the command
+inside was read out loud word by word instead of being announced as "a block
+of powershell". The stripping was correct; the text arriving had already lost
+the markers it needed. stdin has no quoting rules, so there is nothing left to
+get wrong.
+
+Words on the command line still work exactly as before.
+
 ## [0.1.0-alpha.20] - 2026-09-06
 
 ### Changed - what cannot be spoken is now named, not deleted

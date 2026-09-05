@@ -23,13 +23,45 @@ import {
 } from '../lib/voice/hook.js';
 import { resolveVoiceHookCommand } from '../lib/voice/resolve-hook-command.js';
 
+/**
+ * The text to speak: either the words given, or stdin when asked for `-`.
+ *
+ * An answer is a multi-line document carrying quotes, backticks and accented
+ * characters. Sending it as an argv entry puts it through the shell's quoting
+ * rules -- on Windows through two of them, where the backtick is the escape
+ * character -- and a fenced block arrived with its fences gone, so the command
+ * inside was read out loud instead of being announced as a block.
+ *
+ * stdin has no quoting rules, so there is nothing to get wrong.
+ */
+export async function textFromArgs(
+  parts: string[],
+  readStdin: () => Promise<string>,
+): Promise<string> {
+  if (parts.length === 1 && parts[0] === '-') {
+    const piped = (await readStdin()).trim();
+    if (piped) return piped;
+  }
+  return (parts ?? []).join(' ').trim() || 'praxis voice check.';
+}
+
+/** Read all of stdin, giving up rather than hanging if nothing is piped. */
+async function readStdin(): Promise<string> {
+  if (process.stdin.isTTY) return '';
+  const chunks: Buffer[] = [];
+  for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 function reportConfig(config: Awaited<ReturnType<typeof resolveVoiceConfig>>): void {
   console.log(`    enabled:   ${config.enabled}`);
   console.log(`    .env:      ${config.envFile ?? '(none found)'}`);
   console.log(`    api key:   ${config.apiKey ? 'present' : 'missing'}`);
   const isDefaultVoice = config.voiceId === DEFAULT_VOICE_ID;
   console.log(`    voice id:  ${config.voiceId}${isDefaultVoice ? ' (praxis default)' : ''}`);
-  console.log(`    speed:     ${config.speed}${config.speed === DEFAULT_SPEED ? ' (praxis default)' : ''}`);
+  console.log(
+    `    speed:     ${config.speed}${config.speed === DEFAULT_SPEED ? ' (praxis default)' : ''}`,
+  );
   console.log(`    model:     ${config.model}`);
   console.log(`    format:    ${config.format}`);
   console.log(`    max chars: ${config.maxChars}`);
@@ -104,10 +136,12 @@ export function voiceCommand(): Command {
 
   command
     .command('say [text...]')
-    .description('Speak one line now. Reports why nothing happened when it does not.')
+    .description(
+      'Speak one line now, or pass "-" to read it from stdin. Reports why nothing happened when it does not.',
+    )
     .option('--dry-run', 'synthesise without playing, to check the key and the network')
     .action(async (parts: string[], opts: { dryRun?: boolean }) => {
-      const text = (parts ?? []).join(' ').trim() || 'praxis voice check.';
+      const text = await textFromArgs(parts ?? [], readStdin);
       const result = await speak({ text, synthesizeOnly: opts.dryRun });
 
       console.log('praxis voice say');

@@ -661,3 +661,38 @@ describe('speaking a long answer', () => {
     expect(result.reason).toBeTruthy();
   });
 });
+
+describe('taking the text off the command line', () => {
+  // An answer is a multi-line document carrying quotes, backticks and accents.
+  // Passing it as an argv entry sends it through the shell's quoting rules --
+  // on Windows, through two layers of them, where the backtick is the escape
+  // character. A fenced block arrived with its fences gone and the command
+  // inside was read out loud instead of being announced.
+  //
+  // stdin has no quoting rules. Nothing to get wrong.
+
+  it('reads the text from stdin when asked for "-"', async () => {
+    const { textFromArgs } = await import('../../src/cli/voice.js');
+    const read = async () => 'texto que llego por la entrada estandar';
+    expect(await textFromArgs(['-'], read)).toBe('texto que llego por la entrada estandar');
+  });
+
+  it('still accepts words on the command line', async () => {
+    const { textFromArgs } = await import('../../src/cli/voice.js');
+    const read = async () => 'no deberia leerse';
+    expect(await textFromArgs(['hola', 'mundo'], read)).toBe('hola mundo');
+  });
+
+  it('keeps a fenced block intact through stdin', async () => {
+    const { textFromArgs } = await import('../../src/cli/voice.js');
+    const document = 'Corre esto:\n```powershell\nGet-Process -Name "x"\n```\nY listo.';
+    const read = async () => document;
+    expect(await textFromArgs(['-'], read)).toBe(document);
+  });
+
+  it('falls back to the check phrase when nothing is given', async () => {
+    const { textFromArgs } = await import('../../src/cli/voice.js');
+    const read = async () => '';
+    expect(await textFromArgs([], read)).toContain('praxis voice');
+  });
+});

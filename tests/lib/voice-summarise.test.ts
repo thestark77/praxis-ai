@@ -326,6 +326,19 @@ describe('referring to what cannot be spoken', () => {
     expect((out.match(/un enlace/g) ?? []).length).toBe(1);
   });
 
+  it('does not stutter when the prose already named the thing', () => {
+    // "Te dejo el enlace en https://..." becomes "el enlace en un enlace",
+    // which sounds like a fault. The writer already said what it was.
+    const out = stripUnspeakable('Te dejo el enlace en https://github.com/a/b para que mires.');
+    expect(out).toContain('el enlace');
+    expect(out).not.toMatch(/enlace\s+en\s+un enlace/);
+  });
+
+  it('does the same in English', () => {
+    const out = stripUnspeakable('I left the link at https://example.com/x for you to read.');
+    expect(out).not.toMatch(/link\s+at\s+a link/);
+  });
+
   it('still keeps a short inline identifier as itself', () => {
     expect(stripUnspeakable('Corre `npm test` ahora.')).toContain('npm test');
   });

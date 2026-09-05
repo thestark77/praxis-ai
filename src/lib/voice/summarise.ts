@@ -275,6 +275,23 @@ export function detectLanguage(text: string): 'es' | 'en' {
   return es > en ? 'es' : 'en';
 }
 
+/**
+ * Drop a placeholder the prose already introduced.
+ *
+ * "Te dejo el enlace en https://..." becomes "el enlace en un enlace", which
+ * sounds like a stutter rather than a reference. The writer already named the
+ * thing; the placeholder only has to carry it when nothing else does.
+ */
+function dropRedundantMention(text: string, phrase: string): string {
+  const noun = phrase.split(' ').pop()!;
+  const escapedNoun = noun.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(
+    new RegExp(`(${escapedNoun})(\\s+(?:en|a|at|in|de|of)\\s+)${escaped}`, 'gi'),
+    '$1',
+  );
+}
+
 /** Collapse "a link a link a link" back down to one mention. */
 function dedupeAdjacent(text: string, phrase: string): string {
   const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -340,6 +357,8 @@ export function stripUnspeakable(text: string): string {
 
   out = out.replace(/\b[\w.-]+\.(com|org|net|io|dev|ai)\b\S*/g, ` ${ref.link} `);
   out = dedupeAdjacent(out, ref.link);
+  out = dropRedundantMention(out, ref.link);
+  out = dropRedundantMention(out, ref.table);
 
   // Inline code: keep short identifiers, drop long ones.
   out = out.replace(/`([^`]*)`/g, (_m, inner: string) => (inner.length <= 24 ? inner : ' '));

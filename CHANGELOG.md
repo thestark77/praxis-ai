@@ -18,7 +18,8 @@ its last segment, so "C:\Users\sebas\Desktop\notas.md" is heard as
 Wording follows the answer's own language, chosen by scoring Spanish against
 English function words. Repeated placeholders collapse, because three links in
 one sentence read as "a link a link a link" is worse than the deletion it
-replaced. An answer whose speakable content is ONLY placeholders still stays
+replaced, and a placeholder the prose already introduced is dropped -- "te
+dejo el enlace en un enlace" sounds like a stutter, not a reference. An answer whose speakable content is ONLY placeholders still stays
 silent: "a code block." alone carries no outcome.
 
 ### Fixed - a long answer no longer waits for the whole rendering

@@ -190,6 +190,26 @@ describe('optional settings', () => {
     });
     expect(config.maxChars).toBe(2000);
   });
+
+  it('treats 0 as an explicit request for no budget at all', async () => {
+    // The cap protects someone who never thought about it, on an API billed
+    // per character. Someone who writes 0 has thought about it: they want the
+    // whole answer spoken, minus what stripping removes, and silently holding
+    // them to 2000 would drop the end of every long turn without saying so.
+    const config = await resolveVoiceConfig({
+      cwd: await projectWith(`${ENABLED_KEY}=true\n${KEY_LINE}\n${MAX_CHARS_KEY}=0`),
+      env: {},
+    });
+    expect(config.maxChars).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it('still falls back to the default for a value that is not a number', async () => {
+    const config = await resolveVoiceConfig({
+      cwd: await projectWith(`${ENABLED_KEY}=true\n${KEY_LINE}\n${MAX_CHARS_KEY}=todo`),
+      env: {},
+    });
+    expect(config.maxChars).toBe(350);
+  });
 });
 
 describe('trimming an utterance', () => {

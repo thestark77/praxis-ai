@@ -230,3 +230,36 @@ describe('believing a writer who marks their own text as skippable', () => {
     expect(out).toContain('481');
   });
 });
+
+describe('an unlimited budget', () => {
+  it('keeps every sentence, having only removed what cannot be spoken', () => {
+    // The point of asking for no budget is that nothing worth hearing is
+    // dropped. Ranking still runs for a finite budget; here there is nothing
+    // to rank away, so the result is the cleaned text and nothing less.
+    const answer = [
+      'Encontre la causa real del fallo.',
+      'El VPS tiene alpha 14, npm publica alpha 17, el repo va por alpha 18.',
+      'Los 134 tests quedaron en verde.',
+      '```bash\nrm -rf /tmp/x\n```',
+      '| col | col |',
+      'Necesito que corras el script una vez mas.',
+    ].join('\n');
+
+    const spoken = summariseForSpeech(answer, { maxChars: Number.POSITIVE_INFINITY });
+
+    expect(spoken).toContain('alpha 14');
+    expect(spoken).toContain('alpha 18');       // the detail a 350 budget dropped
+    expect(spoken).toContain('134 tests');
+    expect(spoken).toContain('una vez mas');
+    expect(spoken).not.toContain('rm -rf');     // stripping still applies
+    expect(spoken).not.toContain('|');
+    expect(spoken).not.toContain('…');          // nothing was truncated
+  });
+
+  it('does not truncate a single long sentence', () => {
+    const long = `Este turno explica ${'un detalle importante '.repeat(60)}y termina bien.`;
+    const spoken = summariseForSpeech(long, { maxChars: Number.POSITIVE_INFINITY });
+    expect(spoken).toContain('termina bien');
+    expect(spoken).not.toContain('…');
+  });
+});

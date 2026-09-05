@@ -215,7 +215,14 @@ export async function resolveVoiceConfig(opts: ResolveOptions = {}): Promise<Voi
   else if (!enabled) reason = `${ENABLED_KEY} is not set to true`;
   else if (!apiKey) reason = `${ENABLED_KEY} is on but ${API_KEY} is missing`;
 
-  const rawMax = Number.parseInt(read(MAX_CHARS_KEY) ?? '', 10);
+  // `0` means "no budget": speak the whole answer, minus what stripping
+  // removes. The 2000 cap exists to protect someone who never thought about
+  // an API billed per character; someone who writes 0 has thought about it,
+  // and quietly holding them to 2000 would drop the end of every long turn
+  // without ever saying so.
+  const rawMaxText = (read(MAX_CHARS_KEY) ?? '').trim();
+  const rawMax = Number.parseInt(rawMaxText, 10);
+  const unlimited = Number.isFinite(rawMax) && rawMax === 0;
 
   return {
     enabled: enabled && apiKey !== null,
@@ -223,7 +230,11 @@ export async function resolveVoiceConfig(opts: ResolveOptions = {}): Promise<Voi
     voiceId: (read(VOICE_KEY) ?? '').trim() || DEFAULT_VOICE_ID,
     model: pickModel(read(MODEL_KEY)),
     format: pickFormat(read(FORMAT_KEY)),
-    maxChars: Number.isFinite(rawMax) && rawMax > 0 ? Math.min(rawMax, 2000) : 350,
+    maxChars: unlimited
+      ? Number.POSITIVE_INFINITY
+      : Number.isFinite(rawMax) && rawMax > 0
+        ? Math.min(rawMax, 2000)
+        : 350,
     speed: pickNumber(read(SPEED_KEY), 0.5, 2, DEFAULT_SPEED),
     expressiveness: pickNumber(read(EXPRESSIVENESS_KEY), 0, 1, 0.7),
     volume: pickNumber(read(VOLUME_KEY), -20, 20, 0),

@@ -4,6 +4,23 @@ All notable changes to praxis-ai are documented here.
 This project follows [Semantic Versioning](https://semver.org/) and
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.0-alpha.23] - 2026-09-06
+
+### Fixed - CI failed on a scheduling problem, not a broken test
+
+`ast-hook-telemetry` timed out at the 5s default on CI while passing locally.
+The work it times is a `node` spawn that takes about 90ms unloaded, so a
+fifty-fold slowdown was the machine being starved rather than the code being
+slow.
+
+Vitest isolates each test file in its own worker, so 40 files meant 40 worker
+processes, and the four suites that spawn subprocesses then forked `node`
+again from inside them -- far more concurrency than a hosted runner has cores.
+`vitest.config.ts` now caps workers to four on CI and gives the subprocess
+suites real headroom, so a busy runner cannot report scheduling as a failure.
+
+No change to the published package.
+
 ## [0.1.0-alpha.22] - 2026-09-06
 
 ### Fixed - `voice say` can take the text off the command line

@@ -4,6 +4,19 @@ All notable changes to praxis-ai are documented here.
 This project follows [Semantic Versioning](https://semver.org/) and
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.0-alpha.24] - 2026-09-06
+
+### Fixed - long inline code no longer takes the sentence with it
+
+Inline code over 24 characters was deleted outright, which leaves the sentence
+without its subject: "la causa es que `Get-CimInstance Win32_Process` reporta
+mal" collapsed to "la causa es que reporta mal". A listener hears that as
+broken speech, not as something left out on purpose.
+
+It is now named, like links, paths and blocks already were -- "un comando" /
+"a command" -- and the stutter guard covers the case where the prose already
+introduced it, with or without a preposition in between.
+
 ## [0.1.0-alpha.23] - 2026-09-06
 
 ### Fixed - CI failed on a scheduling problem, not a broken test

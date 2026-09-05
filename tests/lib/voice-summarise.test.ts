@@ -343,3 +343,38 @@ describe('referring to what cannot be spoken', () => {
     expect(stripUnspeakable('Corre `npm test` ahora.')).toContain('npm test');
   });
 });
+
+describe('inline code that is too long to read', () => {
+  // Dropping it outright leaves a sentence without its subject: "La causa:
+  // `Get-CimInstance Win32_Process` reporta mal" became "La causa: reporta
+  // mal", which a listener hears as a fault in the speech, not as an omission.
+  // Naming it keeps the sentence standing and tells them where to look.
+
+  it('names a long command instead of deleting it', () => {
+    const out = stripUnspeakable(
+      'La causa es que `Get-CimInstance Win32_Process` reporta mal la linea de comandos.',
+    );
+    expect(out).not.toContain('Get-CimInstance');
+    expect(out).toContain('un comando');
+    expect(out).toContain('reporta mal');
+  });
+
+  it('uses English wording for an English sentence', () => {
+    const out = stripUnspeakable(
+      'The problem is that `Get-CimInstance Win32_Process` reports the command line badly for you.',
+    );
+    expect(out).toContain('a command');
+    expect(out).not.toContain('un comando');
+  });
+
+  it('still keeps a short identifier as itself', () => {
+    expect(stripUnspeakable('Corre `npm test` y me dices que tal.')).toContain('npm test');
+  });
+
+  it('does not stutter when the prose already said "comando"', () => {
+    const out = stripUnspeakable(
+      'Te dejo el comando `Get-CimInstance Win32_Process -Filter x` para que lo mires.',
+    );
+    expect(out).not.toMatch(/comando\s+un comando/);
+  });
+});

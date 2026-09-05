@@ -168,8 +168,15 @@ const REFERENCES = {
     table: 'una tabla',
     code: 'un bloque de codigo',
     codeIn: 'un bloque de',
+    command: 'un comando',
   },
-  en: { link: 'a link', table: 'a table', code: 'a code block', codeIn: 'a block of' },
+  en: {
+    link: 'a link',
+    table: 'a table',
+    code: 'a code block',
+    codeIn: 'a block of',
+    command: 'a command',
+  },
 } as const;
 
 /** Every placeholder phrase, for deciding whether anything real survived. */
@@ -286,8 +293,11 @@ function dropRedundantMention(text: string, phrase: string): string {
   const noun = phrase.split(' ').pop()!;
   const escapedNoun = noun.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // The preposition is optional: "el enlace EN un enlace" and "el comando un
+  // comando" are the same stutter, and only the second form appears when the
+  // writer put the code straight after the noun.
   return text.replace(
-    new RegExp(`(${escapedNoun})(\\s+(?:en|a|at|in|de|of)\\s+)${escaped}`, 'gi'),
+    new RegExp(`(${escapedNoun})(?:\\s+(?:en|a|at|in|de|of))?\\s+${escaped}`, 'gi'),
     '$1',
   );
 }
@@ -360,8 +370,17 @@ export function stripUnspeakable(text: string): string {
   out = dropRedundantMention(out, ref.link);
   out = dropRedundantMention(out, ref.table);
 
-  // Inline code: keep short identifiers, drop long ones.
-  out = out.replace(/`([^`]*)`/g, (_m, inner: string) => (inner.length <= 24 ? inner : ' '));
+  // Inline code: keep short identifiers, NAME the long ones.
+  //
+  // Dropping a long one outright leaves the sentence without its subject --
+  // "la causa es que `Get-CimInstance Win32_Process` reporta mal" collapses to
+  // "la causa es que reporta mal", which a listener hears as broken speech
+  // rather than as something omitted on purpose.
+  out = out.replace(/`([^`]*)`/g, (_m, inner: string) =>
+    inner.length <= 24 ? inner : ` ${ref.command} `,
+  );
+  out = dedupeAdjacent(out, ref.command);
+  out = dropRedundantMention(out, ref.command);
 
   // Headings, list bullets, blockquote markers, emphasis, check marks.
   out = out.replace(/^#{1,6}\s+/gm, ' ');

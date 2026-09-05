@@ -4,6 +4,38 @@ All notable changes to praxis-ai are documented here.
 This project follows [Semantic Versioning](https://semver.org/) and
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.0-alpha.20] - 2026-09-06
+
+### Changed - what cannot be spoken is now named, not deleted
+
+Stripping a link, a path, a table or a code block used to remove it without
+trace, which loses the fact that it was ever offered: a listener told nothing
+has no reason to go back and look at the written answer. They are now
+announced -- "a link", "a table", "a block of powershell" -- and a path keeps
+its last segment, so "C:\Users\sebas\Desktop\notas.md" is heard as
+"notas.md" rather than as forty syllables of separators or as nothing at all.
+
+Wording follows the answer's own language, chosen by scoring Spanish against
+English function words. Repeated placeholders collapse, because three links in
+one sentence read as "a link a link a link" is worse than the deletion it
+replaced. An answer whose speakable content is ONLY placeholders still stays
+silent: "a code block." alone carries no outcome.
+
+### Fixed - a long answer no longer waits for the whole rendering
+
+Fish Audio renders a complete utterance before it answers, so time-to-first-
+word tracked the length of the request rather than the length of what the
+listener was about to hear. On a real turn that was about forty seconds of
+silence before anything played.
+
+Speech is now split on sentence boundaries into roughly one breath each, and
+the next chunk renders WHILE the current one plays. Without that one-ahead,
+chunking would only move the waiting around; with it, every gap after the
+first is hidden behind audio already being heard. A short answer is still sent
+as a single request, and a chunk that fails to render stops the run while
+reporting what did reach the speakers -- half an answer heard is better than
+an error claiming nothing happened.
+
 ## [0.1.0-alpha.19] - 2026-09-06
 
 ### Added - a spoken summary can be told to keep everything

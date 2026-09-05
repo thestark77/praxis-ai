@@ -156,6 +156,143 @@ const ATTENTION_WORDS = [
 ];
 
 /**
+ * Wording for the things that get replaced rather than read.
+ *
+ * Deleting a link outright loses the fact that a link was given at all, and a
+ * listener who is told nothing has no reason to go back and look. Naming it
+ * costs three words and keeps the pointer.
+ */
+const REFERENCES = {
+  es: {
+    link: 'un enlace',
+    table: 'una tabla',
+    code: 'un bloque de codigo',
+    codeIn: 'un bloque de',
+  },
+  en: { link: 'a link', table: 'a table', code: 'a code block', codeIn: 'a block of' },
+} as const;
+
+/** Every placeholder phrase, for deciding whether anything real survived. */
+const ALL_REFERENCES: string[] = Object.values(REFERENCES).flatMap((set) => Object.values(set));
+
+/**
+ * Which wording to use, from the answer itself.
+ *
+ * Crude on purpose: accented vowels and a handful of function words separate
+ * the two languages praxis's word lists already cover, and a wrong guess costs
+ * three words in the wrong language rather than a lost sentence.
+ */
+export function detectLanguage(text: string): 'es' | 'en' {
+  if (/[áéíóúñ¿¡]/i.test(text)) return 'es';
+  // Score both sides rather than testing one: an English answer quoting a
+  // Spanish identifier should not flip, and a Spanish answer full of English
+  // tool names should not either. Only words that are unambiguous in one
+  // language are listed; "no", "en" and "a" are in both and would decide
+  // nothing.
+  const count = (words: string[]): number =>
+    words.reduce(
+      (total, word) =>
+        total + (text.match(new RegExp(`(^|[^\\p{L}])${word}([^\\p{L}]|$)`, 'giu')) ?? []).length,
+      0,
+    );
+  const es = count([
+    'que',
+    'para',
+    'con',
+    'pero',
+    'este',
+    'esta',
+    'como',
+    'cuando',
+    'donde',
+    'porque',
+    'desde',
+    'hasta',
+    'sobre',
+    'entre',
+    'ahora',
+    'luego',
+    'tambien',
+    'solo',
+    'aqui',
+    'los',
+    'las',
+    'una',
+    'del',
+    'se',
+    'le',
+    'lo',
+    'me',
+    'te',
+    'su',
+    'mi',
+    'tu',
+    'es',
+    'son',
+    'hay',
+    'ser',
+    'estar',
+    'mira',
+    'dices',
+    'dice',
+    'dejo',
+    'listo',
+    'muy',
+    'mas',
+    'y',
+  ]);
+  const en = count([
+    'the',
+    'and',
+    'for',
+    'you',
+    'with',
+    'this',
+    'that',
+    'from',
+    'have',
+    'was',
+    'are',
+    'not',
+    'but',
+    'all',
+    'can',
+    'will',
+    'would',
+    'should',
+    'been',
+    'they',
+    'there',
+    'what',
+    'when',
+    'where',
+    'which',
+    'while',
+    'left',
+    'read',
+    'your',
+  ]);
+  return es > en ? 'es' : 'en';
+}
+
+/** Collapse "a link a link a link" back down to one mention. */
+function dedupeAdjacent(text: string, phrase: string): string {
+  const escaped = phrase.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(new RegExp(`(?:${escaped})(?:[\\s,]+(?:${escaped}))+`, 'gi'), phrase);
+}
+
+/**
+ * The speakable tail of a path: the file, not the forty syllables before it.
+ *
+ * "C:\\Users\\sebas\\Desktop\\notas.md" is unlistenable read out, but
+ * "notas.md" tells the listener exactly which file was meant.
+ */
+function pathTail(raw: string): string {
+  const parts = raw.split(/[\\/]+/).filter(Boolean);
+  return parts.length ? parts[parts.length - 1]! : raw;
+}
+
+/**
  * Strip everything that cannot usefully be spoken.
  *
  * Order matters: fenced blocks go first so their contents cannot be
@@ -164,31 +301,45 @@ const ATTENTION_WORDS = [
  */
 export function stripUnspeakable(text: string): string {
   let out = text;
+  const ref = REFERENCES[detectLanguage(text)];
 
   // Fenced code blocks, including unterminated ones at the end of a stream.
-  out = out.replace(/```[\s\S]*?```/g, ' ');
-  out = out.replace(/```[\s\S]*$/g, ' ');
+  // Announced rather than deleted: "run this: a block of powershell" tells the
+  // listener there is something to go and copy.
+  out = out.replace(/```([\w+-]*)\n?[\s\S]*?```/g, (_m, lang: string) =>
+    lang ? ` ${ref.codeIn} ${lang}. ` : ` ${ref.code}. `,
+  );
+  out = out.replace(/```([\w+-]*)[\s\S]*$/g, (_m, lang: string) =>
+    lang ? ` ${ref.codeIn} ${lang}. ` : ` ${ref.code}. `,
+  );
 
-  // Markdown tables: any line that is mostly pipes.
+  // Markdown tables: any line that is mostly pipes, replaced by one mention.
+  let announcedTable = false;
   out = out
     .split('\n')
-    .filter((line) => {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith('|')) return true;
-      return false;
+    .map((line) => {
+      if (!line.trim().startsWith('|')) return line;
+      if (announcedTable) return '';
+      announcedTable = true;
+      return `${ref.table}.`;
     })
     .join('\n');
 
   // Table rule lines like |---|---|
   out = out.replace(/^[\s|:-]+$/gm, ' ');
 
-  // URLs and bare hosts.
-  out = out.replace(/https?:\/\/\S+/g, ' ');
-  out = out.replace(/\b[\w.-]+\.(com|org|net|io|dev|ai|sh)\b\S*/g, ' ');
+  // Real URLs first, then PATHS, and only then bare hosts. Order matters: the
+  // bare-host pattern ends in `sh`, so it claims the `gh.sh` at the end of
+  // `/home/sebas/scripts/gh.sh` and the listener is told "a link" about a file
+  // that is not one. Paths are the more specific shape, so they go first.
+  out = out.replace(/https?:\/\/\S+/g, ` ${ref.link} `);
 
-  // Absolute and deep relative paths: forty syllables of separators.
-  out = out.replace(/[A-Za-z]:\\[^\s'"`]+/g, ' ');
-  out = out.replace(/(?:^|\s)(?:~|\.{1,2})?\/[^\s'"`]{6,}/g, ' ');
+  // Paths: keep the file, drop the separators before it.
+  out = out.replace(/[A-Za-z]:\\[^\s'"`]+/g, (m) => ` ${pathTail(m)} `);
+  out = out.replace(/(?:^|\s)(?:~|\.{1,2})?\/[^\s'"`]{6,}/g, (m) => ` ${pathTail(m)} `);
+
+  out = out.replace(/\b[\w.-]+\.(com|org|net|io|dev|ai)\b\S*/g, ` ${ref.link} `);
+  out = dedupeAdjacent(out, ref.link);
 
   // Inline code: keep short identifiers, drop long ones.
   out = out.replace(/`([^`]*)`/g, (_m, inner: string) => (inner.length <= 24 ? inner : ' '));
@@ -204,12 +355,25 @@ export function stripUnspeakable(text: string): string {
   // Markdown links: keep the label, drop the target.
   out = out.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1');
 
-  return tidyFragments(
+  const tidied = tidyFragments(
     out
       .replace(/[ \t]+/g, ' ')
       .replace(/\n{2,}/g, '\n')
       .trim(),
   );
+
+  // An answer that was ENTIRELY unspeakable stays silent. Announcing "a code
+  // block." and nothing else is noise: there is no outcome in it, and the
+  // whole feature exists to say whether something worked.
+  //
+  // Done by subtraction, not by one big alternation regex: `(?:a|b|\w+)*`
+  // over a long phrase list backtracks catastrophically and hangs the hook.
+  let residue = tidied;
+  for (const phrase of ALL_REFERENCES) {
+    residue = residue.split(phrase).join(' ');
+  }
+  residue = residue.replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  return residue ? tidied : '';
 }
 
 /**

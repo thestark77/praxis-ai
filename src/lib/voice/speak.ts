@@ -9,6 +9,46 @@
 import { resolveVoiceConfig, type ResolveOptions, type VoiceConfig } from './config.js';
 import { synthesize } from './fish-audio.js';
 import { play } from './play.js';
+import { splitSentences } from './summarise.js';
+
+/**
+ * Roughly one breath of speech per request.
+ *
+ * Fish Audio renders a whole utterance before answering, so time-to-first-word
+ * tracks the LENGTH of the request, not the length of the answer. Asking for
+ * the whole thing at once means the listener waits through the rendering of
+ * material they will not hear for another minute -- measured at about forty
+ * seconds of silence on a real turn.
+ *
+ * Small enough that the first chunk renders quickly, large enough that the
+ * seams fall on sentence boundaries and the delivery still sounds continuous.
+ */
+const CHUNK_CHARS = 320;
+
+/**
+ * Split on sentence boundaries, packing up to CHUNK_CHARS per chunk.
+ *
+ * Never mid-sentence: a seam inside a clause is audible as a stumble, and the
+ * engine loses the prosody it was going to give the whole phrase.
+ */
+export function chunkForSpeech(text: string, maxChars: number = CHUNK_CHARS): string[] {
+  const sentences = splitSentences(text);
+  if (sentences.length <= 1) return text.trim() ? [text.trim()] : [];
+
+  const chunks: string[] = [];
+  let current = '';
+  for (const sentence of sentences) {
+    const candidate = current ? `${current} ${sentence}` : sentence;
+    if (current && candidate.length > maxChars) {
+      chunks.push(current);
+      current = sentence;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
 
 export interface SpeakResult {
   /** True when audio actually reached a speaker. */
@@ -40,26 +80,53 @@ export async function speak(opts: SpeakOptions): Promise<SpeakResult> {
     return { ...base, skipped: true, reason: config.reason ?? 'voice is disabled' };
   }
 
-  const synth = await synthesize({ config, text: opts.text, fetchImpl: opts.fetchImpl });
-  if (!synth.ok || !synth.audio) {
-    return { ...base, reason: synth.error };
-  }
-  if (opts.synthesizeOnly) {
-    return { ...base, spoke: false, reason: null, bytes: synth.audio.length };
+  const chunks = opts.synthesizeOnly ? [opts.text] : chunkForSpeech(opts.text);
+  const render = (text: string) => synthesize({ config, text, fetchImpl: opts.fetchImpl });
+
+  // Render the next chunk WHILE the current one is playing. Without the
+  // one-ahead, chunking would only move the waiting around; with it, every
+  // gap after the first is hidden behind audio the listener is already hearing.
+  let pending = render(chunks[0] ?? opts.text);
+  let spoke = false;
+  let bytes = 0;
+  let player: string | null = null;
+  let reason: string | null = null;
+
+  for (let i = 0; i < chunks.length; i++) {
+    const synth = await pending;
+    pending = i + 1 < chunks.length ? render(chunks[i + 1]!) : Promise.resolve(synth);
+
+    if (!synth.ok || !synth.audio) {
+      // Report the first failure and stop. Ploughing on would leave a hole in
+      // the middle of a sentence the listener is still following.
+      reason = reason ?? synth.error;
+      break;
+    }
+    bytes += synth.audio.length;
+
+    if (opts.synthesizeOnly) {
+      return { ...base, spoke: false, reason: null, bytes };
+    }
+
+    const played = await play({
+      audio: synth.audio,
+      format: config.format,
+      platform: opts.platform,
+      runner: opts.runner,
+    });
+    if (played.played) {
+      spoke = true;
+      player = played.player;
+    } else {
+      reason = reason ?? played.error;
+      break;
+    }
   }
 
-  const played = await play({
-    audio: synth.audio,
-    format: config.format,
-    platform: opts.platform,
-    runner: opts.runner,
-  });
+  // A chunk that never rendered leaves an unawaited promise behind, and an
+  // unhandled rejection would take the process down after the answer was
+  // already spoken.
+  void pending.catch(() => undefined);
 
-  return {
-    ...base,
-    spoke: played.played,
-    reason: played.error,
-    player: played.player,
-    bytes: synth.audio.length,
-  };
+  return { ...base, spoke, reason, player, bytes };
 }

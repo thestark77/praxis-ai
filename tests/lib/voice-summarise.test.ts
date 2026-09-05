@@ -248,12 +248,12 @@ describe('an unlimited budget', () => {
     const spoken = summariseForSpeech(answer, { maxChars: Number.POSITIVE_INFINITY });
 
     expect(spoken).toContain('alpha 14');
-    expect(spoken).toContain('alpha 18');       // the detail a 350 budget dropped
+    expect(spoken).toContain('alpha 18'); // the detail a 350 budget dropped
     expect(spoken).toContain('134 tests');
     expect(spoken).toContain('una vez mas');
-    expect(spoken).not.toContain('rm -rf');     // stripping still applies
+    expect(spoken).not.toContain('rm -rf'); // stripping still applies
     expect(spoken).not.toContain('|');
-    expect(spoken).not.toContain('…');          // nothing was truncated
+    expect(spoken).not.toContain('…'); // nothing was truncated
   });
 
   it('does not truncate a single long sentence', () => {
@@ -261,5 +261,72 @@ describe('an unlimited budget', () => {
     const spoken = summariseForSpeech(long, { maxChars: Number.POSITIVE_INFINITY });
     expect(spoken).toContain('termina bien');
     expect(spoken).not.toContain('…');
+  });
+});
+
+describe('referring to what cannot be spoken', () => {
+  // Deleting a link outright loses the fact that a link was given at all. The
+  // listener is told what was left in the written answer so they know to go
+  // and look, without forty syllables of separators being read at them.
+
+  it('names a link instead of deleting it', () => {
+    const out = stripUnspeakable('Mira https://github.com/a/b y me dices.');
+    expect(out).not.toContain('http');
+    expect(out).toContain('un enlace');
+    expect(out).toContain('me dices');
+  });
+
+  it('names a path by its last segment, not its separators', () => {
+    const out = stripUnspeakable('Lo dejé en C:\\Users\\sebas\\Desktop\\notas.md ya.');
+    expect(out).not.toContain('C:\\');
+    expect(out).toContain('notas.md');
+    expect(out).not.toContain('Users');
+  });
+
+  it('names a POSIX path the same way', () => {
+    const out = stripUnspeakable('Escribí /home/sebas/iris-stack/scripts/gh.sh hoy.');
+    expect(out).not.toContain('/home/sebas');
+    expect(out).toContain('gh.sh');
+  });
+
+  it('announces a code block by its language', () => {
+    const out = stripUnspeakable('Corre esto:\n```powershell\nGet-Process\n```\nY listo.');
+    expect(out).not.toContain('Get-Process');
+    expect(out).toContain('powershell');
+    expect(out).toContain('listo');
+  });
+
+  it('announces an unlabelled code block generically', () => {
+    const out = stripUnspeakable(
+      'Para limpiarlo corre esto que te dejo:\n```\nrm -rf /tmp/x\n```\ny con eso queda.',
+    );
+    expect(out).not.toContain('rm -rf');
+    expect(out).toMatch(/bloque de (codigo|código)/);
+  });
+
+  it('announces a table', () => {
+    const out = stripUnspeakable(
+      'Estos son los resultados que te resumo:\n| a | b |\n| --- | --- |\n| 1 | 2 |\nY con eso terminamos.',
+    );
+    expect(out).not.toContain('|');
+    expect(out).toContain('una tabla');
+    expect(out).toContain('terminamos');
+  });
+
+  it('uses English wording for an English answer', () => {
+    const out = stripUnspeakable('I left it at https://example.com/x for you to read.');
+    expect(out).toContain('a link');
+    expect(out).not.toContain('un enlace');
+  });
+
+  it('does not announce the same thing twice in a row', () => {
+    // Three links in one sentence read as "a link a link a link", which is
+    // worse than the deletion it replaced.
+    const out = stripUnspeakable('Ver https://a.com https://b.com https://c.com ahora.');
+    expect((out.match(/un enlace/g) ?? []).length).toBe(1);
+  });
+
+  it('still keeps a short inline identifier as itself', () => {
+    expect(stripUnspeakable('Corre `npm test` ahora.')).toContain('npm test');
   });
 });

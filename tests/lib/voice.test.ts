@@ -555,3 +555,109 @@ describe('speed and expressiveness', () => {
     expect(body.prosody).toEqual({ speed: 1.2 });
   });
 });
+
+describe('speaking a long answer', () => {
+  // Fish Audio is asked for a whole utterance and answers only when the whole
+  // thing is rendered, so a ninety-second answer means ninety seconds of
+  // rendering before the first word is heard. Measured at about forty seconds
+  // of silence on a real turn. Splitting the text lets playback start after
+  // the first sentence instead of after the last.
+
+  const KEY_ONLY = `${ENABLED_KEY}=true\n${API_KEY}=fk_test_123`;
+
+  function recordingFetch(log: string[]) {
+    return (async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as { text: string };
+      log.push(body.text);
+      return new Response(Buffer.from('audio-bytes'), { status: 200 });
+    }) as unknown as typeof fetch;
+  }
+
+  function recordingRunner(log: string[]) {
+    return async () => {
+      log.push('PLAYED');
+      return true;
+    };
+  }
+
+  it('splits a long answer so playback starts before the last word is rendered', async () => {
+    const events: string[] = [];
+    const long = Array.from(
+      { length: 12 },
+      (_v, i) => `Esta es la frase numero ${i} y trae bastante texto para llenar el presupuesto.`,
+    ).join(' ');
+
+    const result = await speak({
+      text: long,
+      cwd: await projectWith(KEY_ONLY),
+      env: {},
+      fetchImpl: recordingFetch(events),
+      runner: recordingRunner(events),
+      platform: 'linux',
+    });
+
+    expect(result.spoke).toBe(true);
+    const synths = events.filter((e) => e !== 'PLAYED');
+    expect(synths.length).toBeGreaterThan(1);
+    // The decisive assertion: something was played before the last chunk was
+    // ever sent for rendering.
+    expect(events.indexOf('PLAYED')).toBeLessThan(events.lastIndexOf(synths[synths.length - 1]!));
+  });
+
+  it('keeps the whole text, in order, across the chunks', async () => {
+    const events: string[] = [];
+    const long = Array.from(
+      { length: 10 },
+      (_v, i) => `Frase ${i} con suficiente longitud para no caber entera en un solo trozo.`,
+    ).join(' ');
+
+    await speak({
+      text: long,
+      cwd: await projectWith(KEY_ONLY),
+      env: {},
+      fetchImpl: recordingFetch(events),
+      runner: recordingRunner(events),
+      platform: 'linux',
+    });
+
+    const sent = events.filter((e) => e !== 'PLAYED').join(' ');
+    for (let i = 0; i < 10; i++) expect(sent).toContain(`Frase ${i}`);
+  });
+
+  it('still sends a short answer as one request', async () => {
+    const events: string[] = [];
+    await speak({
+      text: 'Listo, quedo arreglado.',
+      cwd: await projectWith(KEY_ONLY),
+      env: {},
+      fetchImpl: recordingFetch(events),
+      runner: recordingRunner(events),
+      platform: 'linux',
+    });
+    expect(events.filter((e) => e !== 'PLAYED')).toHaveLength(1);
+  });
+
+  it('reports what was spoken when a later chunk fails', async () => {
+    // Half an answer heard is better than an error and silence, and the
+    // listener already heard the opening -- pretending nothing happened would
+    // be a lie about what reached the speakers.
+    let calls = 0;
+    const result = await speak({
+      text: Array.from({ length: 10 }, (_v, i) => `Frase ${i} razonablemente larga aqui.`).join(
+        ' ',
+      ),
+      cwd: await projectWith(KEY_ONLY),
+      env: {},
+      fetchImpl: (async () => {
+        calls += 1;
+        if (calls === 1) return new Response(Buffer.from('ok'), { status: 200 });
+        return new Response('boom', { status: 500 });
+      }) as unknown as typeof fetch,
+      runner: async () => true,
+      platform: 'linux',
+    });
+
+    expect(result.spoke).toBe(true);
+    expect(result.reason).toBeTruthy();
+  });
+});

@@ -9,6 +9,7 @@
 import { resolveVoiceConfig, type ResolveOptions, type VoiceConfig } from './config.js';
 import { synthesize } from './fish-audio.js';
 import { play } from './play.js';
+import { trimForSpeech } from './fish-audio.js';
 import { splitSentences } from './summarise.js';
 
 /**
@@ -80,13 +81,23 @@ export async function speak(opts: SpeakOptions): Promise<SpeakResult> {
     return { ...base, skipped: true, reason: config.reason ?? 'voice is disabled' };
   }
 
-  const chunks = opts.synthesizeOnly ? [opts.text] : chunkForSpeech(opts.text);
-  const render = (text: string) => synthesize({ config, text, fetchImpl: opts.fetchImpl });
+  // Clean FIRST, split second. Chunking arrived after stripping and put itself
+  // in front of it: splitting raw markdown breaks a URL at its own full stops
+  // -- "github.com", ".ps1" -- and the halves no longer match the pattern that
+  // would have removed them, so most of a link was read out loud.
+  const spoken = trimForSpeech(opts.text, config.maxChars);
+  if (!spoken) {
+    return { ...base, reason: 'nothing speakable was left after stripping' };
+  }
+
+  const chunks = opts.synthesizeOnly ? [spoken] : chunkForSpeech(spoken);
+  const render = (text: string) =>
+    synthesize({ config, text, fetchImpl: opts.fetchImpl, preformatted: true });
 
   // Render the next chunk WHILE the current one is playing. Without the
   // one-ahead, chunking would only move the waiting around; with it, every
   // gap after the first is hidden behind audio the listener is already hearing.
-  let pending = render(chunks[0] ?? opts.text);
+  let pending = render(chunks[0] ?? spoken);
   let spoke = false;
   let bytes = 0;
   let player: string | null = null;

@@ -4,6 +4,34 @@ All notable changes to praxis-ai are documented here.
 This project follows [Semantic Versioning](https://semver.org/) and
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.0-alpha.25] - 2026-09-06
+
+### Fixed - a link was read out because splitting ran before cleaning
+
+Chunked speech arrived after stripping and put itself in front of it: `speak`
+split the RAW markdown and each fragment was cleaned on its own. Sentence
+splitting breaks on every full stop, so a URL breaks at "github.com" and
+".ps1", and neither half still looks like a URL to the pattern that would have
+removed it. Heard as most of a link being read out, and as stray markdown
+markers between paragraphs.
+
+The answer is now cleaned once and split afterwards, and `synthesize` takes a
+`preformatted` flag so a chunk of already-clean prose is not summarised again
+against the whole budget.
+
+### Fixed - a player that cannot reach a speaker no longer reports success
+
+`play` decided by exit code alone. `ffplay` on a machine with no PCM device
+prints "audio open failed" and exits 0, so the result was `{played: true}`
+over silence -- the hardest failure to notice, because a working mute looks
+exactly the same. Players now report stderr as well, and a known
+device-failure message means the run did not count. The reported error names
+what happened rather than claiming nothing was installed.
+
+Verified on a headless host whose `/dev/snd` holds only `seq` and `timer`:
+previously `played: true`, now `ffplay exited successfully but could not open
+an audio device`.
+
 ## [0.1.0-alpha.24] - 2026-09-06
 
 ### Fixed - long inline code no longer takes the sentence with it

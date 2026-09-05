@@ -17,6 +17,21 @@ import type { VoiceFormat } from './config.js';
 export interface Player {
   command: string;
   args: (file: string) => string[];
+  /**
+   * Strings this player prints when it fails while still exiting 0.
+   *
+   * ffplay on a machine with no PCM device reports "audio open failed" and
+   * returns success anyway, so a caller that trusts the exit code is told it
+   * spoke when nothing came out. That is the hardest failure to notice,
+   * because a working mute looks exactly the same.
+   */
+  failureMarkers?: string[];
+}
+
+/** What a player run reports back. Exit status alone is not enough. */
+export interface RunOutcome {
+  ok: boolean;
+  stderr: string;
 }
 
 /**
@@ -69,11 +84,28 @@ export function playersFor(platform: string = process.platform): Player[] {
       },
     ];
   }
+  // `-loglevel error` rather than `quiet`: the failure has to be readable for
+  // failureMarkers to catch it, and errors alone are not noisy.
+  const audioFailure = [
+    'audio open failed',
+    'No more combinations to try',
+    'Failed to open file',
+    'cannot open shared',
+    'Connection refused',
+  ];
   return [
-    { command: 'ffplay', args: (f) => ['-nodisp', '-autoexit', '-loglevel', 'quiet', f] },
-    { command: 'mpv', args: (f) => ['--no-video', '--really-quiet', f] },
-    { command: 'paplay', args: (f) => [f] },
-    { command: 'aplay', args: (f) => ['-q', f] },
+    {
+      command: 'ffplay',
+      args: (f) => ['-nodisp', '-autoexit', '-loglevel', 'error', f],
+      failureMarkers: audioFailure,
+    },
+    {
+      command: 'mpv',
+      args: (f) => ['--no-video', '--really-quiet', f],
+      failureMarkers: audioFailure,
+    },
+    { command: 'paplay', args: (f) => [f], failureMarkers: audioFailure },
+    { command: 'aplay', args: (f) => ['-q', f], failureMarkers: audioFailure },
   ];
 }
 
@@ -84,28 +116,40 @@ export interface PlayResult {
   error: string | null;
 }
 
-function run(player: Player, file: string, timeoutMs: number): Promise<boolean> {
+function run(player: Player, file: string, timeoutMs: number): Promise<RunOutcome> {
   return new Promise((resolve) => {
     let child;
+    let stderr = '';
     try {
-      child = spawn(player.command, player.args(file), { stdio: 'ignore' });
+      child = spawn(player.command, player.args(file), { stdio: ['ignore', 'ignore', 'pipe'] });
     } catch {
-      resolve(false);
+      resolve({ ok: false, stderr: '' });
       return;
     }
+    child.stderr?.on('data', (chunk: Buffer) => {
+      // Bounded: a player stuck in a loop must not fill memory.
+      if (stderr.length < 4096) stderr += chunk.toString();
+    });
     const timer = setTimeout(() => {
       child.kill();
-      resolve(false);
+      resolve({ ok: false, stderr });
     }, timeoutMs);
     child.on('error', () => {
       clearTimeout(timer);
-      resolve(false);
+      resolve({ ok: false, stderr });
     });
     child.on('close', (code) => {
       clearTimeout(timer);
-      resolve(code === 0);
+      resolve({ ok: code === 0, stderr });
     });
   });
+}
+
+/** True when the player claimed success but said it could not reach a device. */
+export function reportedSilentFailure(player: Player, stderr: string): boolean {
+  if (!stderr) return false;
+  const haystack = stderr.toLowerCase();
+  return (player.failureMarkers ?? []).some((m) => haystack.includes(m.toLowerCase()));
 }
 
 export interface PlayOptions {
@@ -113,7 +157,7 @@ export interface PlayOptions {
   format: VoiceFormat;
   platform?: string;
   /** Injectable for tests, so the suite never actually makes noise. */
-  runner?: (player: Player, file: string, timeoutMs: number) => Promise<boolean>;
+  runner?: (player: Player, file: string, timeoutMs: number) => Promise<RunOutcome>;
   timeoutMs?: number;
 }
 
@@ -132,15 +176,24 @@ export async function play(opts: PlayOptions): Promise<PlayResult> {
     const file = join(dir, `speech.${opts.format}`);
     await writeFile(file, opts.audio);
 
+    let silent: string | null = null;
     for (const candidate of candidates) {
-      if (await runner(candidate, file, timeoutMs)) {
-        return { played: true, player: candidate.command, error: null };
+      const outcome = await runner(candidate, file, timeoutMs);
+      if (!outcome.ok) continue;
+      if (reportedSilentFailure(candidate, outcome.stderr)) {
+        // Exit 0 and no sound. Keep going rather than claim success.
+        silent = candidate.command;
+        continue;
       }
+      return { played: true, player: candidate.command, error: null };
     }
+    const tried = candidates.map((c) => c.command).join(', ');
     return {
       played: false,
       player: null,
-      error: `no audio player worked; tried ${candidates.map((c) => c.command).join(', ')}`,
+      error: silent
+        ? `${silent} exited successfully but could not open an audio device; tried ${tried}`
+        : `no audio player worked; tried ${tried}`,
     };
   } catch (err) {
     return {

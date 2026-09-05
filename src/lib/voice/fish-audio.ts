@@ -40,6 +40,14 @@ export interface SynthesisResult {
 export interface SynthesizeOptions {
   config: VoiceConfig;
   text: string;
+  /**
+   * The text is already stripped and within budget; send it as it is.
+   *
+   * Set when the caller split a cleaned answer into chunks. Summarising each
+   * chunk again would apply the whole budget to every one of them, and worse,
+   * it assumes the chunk is still markdown when it is prose by then.
+   */
+  preformatted?: boolean;
   /** Injectable for tests; defaults to global fetch. */
   fetchImpl?: typeof fetch;
   /** Abort the request after this many ms. Speech is never worth a hang. */
@@ -109,7 +117,7 @@ export async function synthesize(opts: SynthesizeOptions): Promise<SynthesisResu
   if (!config.enabled || !config.apiKey) {
     return { ok: false, audio: null, error: config.reason ?? 'voice is disabled', status: null };
   }
-  const spoken = trimForSpeech(text, config.maxChars);
+  const spoken = opts.preformatted ? text.trim() : trimForSpeech(text, config.maxChars);
   if (!spoken) {
     return { ok: false, audio: null, error: 'nothing to say', status: null };
   }

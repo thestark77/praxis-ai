@@ -366,7 +366,9 @@ describe('playback', () => {
       platform: 'linux',
       runner: async (player) => {
         tried.push(player.command);
-        return player.command === 'aplay';
+        // The runner now reports stderr too: an exit code alone cannot tell a
+        // real playback from a player that failed to open a device.
+        return { ok: player.command === 'aplay', stderr: '' };
       },
     });
     expect(result.played).toBe(true);
@@ -379,7 +381,7 @@ describe('playback', () => {
       audio: Buffer.from([1]),
       format: 'mp3',
       platform: 'linux',
-      runner: async () => false,
+      runner: async () => ({ ok: false, stderr: '' }),
     });
     expect(result.played).toBe(false);
     expect(result.error).toMatch(/no audio player worked/);
@@ -563,7 +565,7 @@ describe('speaking a long answer', () => {
   // of silence on a real turn. Splitting the text lets playback start after
   // the first sentence instead of after the last.
 
-  const KEY_ONLY = `${ENABLED_KEY}=true\n${API_KEY}=fk_test_123`;
+  const KEY_ONLY = `${ENABLED_KEY}=true\n${API_KEY}=fk_test_123\n${MAX_CHARS_KEY}=0`;
 
   function recordingFetch(log: string[]) {
     return (async (_url: string, init: RequestInit) => {
@@ -576,7 +578,7 @@ describe('speaking a long answer', () => {
   function recordingRunner(log: string[]) {
     return async () => {
       log.push('PLAYED');
-      return true;
+      return { ok: true, stderr: '' };
     };
   }
 
@@ -653,7 +655,7 @@ describe('speaking a long answer', () => {
         if (calls === 1) return new Response(Buffer.from('ok'), { status: 200 });
         return new Response('boom', { status: 500 });
       }) as unknown as typeof fetch,
-      runner: async () => true,
+      runner: async () => ({ ok: true, stderr: '' }),
       platform: 'linux',
     });
 
@@ -694,5 +696,104 @@ describe('taking the text off the command line', () => {
     const { textFromArgs } = await import('../../src/cli/voice.js');
     const read = async () => '';
     expect(await textFromArgs([], read)).toContain('praxis voice');
+  });
+});
+
+describe('cleaning before splitting', () => {
+  // Chunking arrived after stripping was written, and put itself in front of
+  // it: speak() split the RAW markdown and each fragment was cleaned on its
+  // own. splitSentences breaks on every full stop, so a URL breaks at
+  // "github.com" and ".ps1", and the halves no longer look like a URL to the
+  // pattern that would have removed them. Heard as most of a link being read
+  // out character by character.
+
+  const KEY_ONLY = `${ENABLED_KEY}=true\n${API_KEY}=fk_test_123\n${MAX_CHARS_KEY}=0`;
+
+  function capture(log: string[]) {
+    return (async (_url: string, init: RequestInit) => {
+      log.push((JSON.parse(String(init.body)) as { text: string }).text);
+      return new Response(Buffer.from('audio'), { status: 200 });
+    }) as unknown as typeof fetch;
+  }
+
+  it('never sends a URL to the engine, however the text is split', async () => {
+    const sent: string[] = [];
+    await speak({
+      text:
+        'Descarga el instalador desde el navegador con tu sesion de GitHub y me dices.\n' +
+        '**https://github.com/thestark77/iris-stack/raw/main/scripts/windows/Install-PraxisListen.ps1**\n' +
+        'Instala praxis primero y luego corre ese archivo, que ya trae todo lo necesario dentro.',
+      cwd: await projectWith(KEY_ONLY),
+      env: {},
+      fetchImpl: capture(sent),
+      runner: async () => ({ ok: true, stderr: '' }),
+      platform: 'linux',
+    });
+
+    const everything = sent.join(' ');
+    expect(everything).not.toContain('github.com');
+    expect(everything).not.toContain('Install-PraxisListen');
+    expect(everything).not.toContain('https');
+    expect(everything).toContain('un enlace');
+  });
+
+  it('never sends a markdown marker to the engine', async () => {
+    const sent: string[] = [];
+    await speak({
+      text:
+        '## Solo queda el portatil\nEste parrafo existe para que el texto sea largo y se parta en varios trozos distintos.\n' +
+        '**Lo que quedo construido**\nY este otro parrafo tambien es largo, para forzar mas de un trozo en la salida final.',
+      cwd: await projectWith(KEY_ONLY),
+      env: {},
+      fetchImpl: capture(sent),
+      runner: async () => ({ ok: true, stderr: '' }),
+      platform: 'linux',
+    });
+
+    for (const chunk of sent) {
+      expect(chunk).not.toContain('**');
+      expect(chunk).not.toContain('##');
+    }
+  });
+});
+
+describe('a player that cannot reach a speaker', () => {
+  // ffplay on a machine with no PCM device prints "audio open failed" and
+  // still exits 0. Trusting the exit code reports {played:true} on silence --
+  // the single hardest failure to notice, because a working mute looks the
+  // same. Measured on a headless VPS: /dev/snd holds only seq and timer.
+
+  it('does not call a zero exit a success when the device failed', async () => {
+    const { play } = await import('../../src/lib/voice/play.js');
+    const result = await play({
+      audio: Buffer.from('x'),
+      format: 'mp3',
+      platform: 'linux',
+      runner: async (player) => {
+        if (player.command === 'ffplay') {
+          // Exit 0, but nothing came out.
+          return {
+            ok: true,
+            stderr:
+              'ALSA lib pcm.c: Unknown PCM default\nNo more combinations to try, audio open failed',
+          };
+        }
+        return { ok: false, stderr: 'not installed' };
+      },
+    });
+    expect(result.played).toBe(false);
+    expect(result.error).toMatch(/audio|device|player/i);
+  });
+
+  it('still accepts a clean run', async () => {
+    const { play } = await import('../../src/lib/voice/play.js');
+    const result = await play({
+      audio: Buffer.from('x'),
+      format: 'mp3',
+      platform: 'linux',
+      runner: async () => ({ ok: true, stderr: '' }),
+    });
+    expect(result.played).toBe(true);
+    expect(result.player).toBe('ffplay');
   });
 });

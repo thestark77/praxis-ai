@@ -63,6 +63,35 @@ async function exists(path: string): Promise<boolean> {
 }
 
 describe('runOpenCodeInstall', () => {
+  it('warns before a rewrite drops the comments a .jsonc config carried', async () => {
+    // JSON.stringify cannot carry comments through. The write is recoverable
+    // (install backs the file up first) but it must be said out loud.
+    const paths = await sandbox(false);
+    await writeFile(
+      paths.opencodeJsonc,
+      '{\n  // gentle-ai agents live below\n  "$schema": "https://opencode.ai/config.json"\n}\n',
+      'utf8',
+    );
+    const result = await runOpenCodeInstall({
+      paths,
+      skillsTemplatesRoot,
+      firewallModulePath: engine,
+    });
+
+    expect(result.configFile).toBe(paths.opencodeJsonc);
+    expect(result.warnings.join('\n')).toMatch(/comment/i);
+  });
+
+  it('says nothing about comments when the config had none', async () => {
+    const paths = await sandbox();
+    const result = await runOpenCodeInstall({
+      paths,
+      skillsTemplatesRoot,
+      firewallModulePath: engine,
+    });
+    expect(result.warnings.join('\n')).not.toMatch(/comment/i);
+  });
+
   it('installs all three layers into an existing gentle-ai config', async () => {
     const paths = await sandbox();
     const result = await runOpenCodeInstall({

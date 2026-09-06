@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir, stat } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import type { OpenCodePermissions } from './permissions.js';
+import { parseJsonc, hasComments } from './jsonc.js';
 
 export const OPENCODE_SCHEMA_URL = 'https://opencode.ai/config.json';
 
@@ -23,24 +24,34 @@ async function pathExists(path: string): Promise<boolean> {
 /**
  * Pick the config file praxis should patch.
  *
- * OpenCode accepts both `opencode.json` and `opencode.jsonc`. When a `.jsonc`
- * is the live config, patching the `.json` sibling would write rules OpenCode
- * never reads — a silently disarmed firewall — so the existing file always
- * wins and `.json` is only chosen when neither exists.
+ * OpenCode reads both `opencode.json` and `opencode.jsonc` and merges them,
+ * but they are not equals: verified against opencode 1.18.29, the `.jsonc`
+ * value wins on any colliding key. Objects such as `permission` deep-merge,
+ * so denies written to either file survive — but arrays are replaced
+ * outright, and `instructions` is an array. A praxis overlay entry written
+ * into `.json` therefore disappears the moment `.jsonc` declares its own.
+ *
+ * So `.jsonc` wins here whenever it exists, and `.json` is used only when it
+ * is the sole file or neither exists. Patching the file OpenCode itself gives
+ * the last word is the only way praxis can be sure what it wrote is what
+ * OpenCode reads.
  */
 export async function resolveConfigFile(paths: {
   opencodeJson: string;
   opencodeJsonc: string;
 }): Promise<string> {
-  if (await pathExists(paths.opencodeJson)) return paths.opencodeJson;
   if (await pathExists(paths.opencodeJsonc)) return paths.opencodeJsonc;
+  if (await pathExists(paths.opencodeJson)) return paths.opencodeJson;
   return paths.opencodeJson;
 }
 
 /**
- * Read an OpenCode config. A missing file is an empty config; a malformed
- * one throws with the path, because guessing would mean overwriting a config
- * praxis could not understand.
+ * Read an OpenCode config, JSON or JSONC.
+ *
+ * A missing file is an empty config; a malformed one throws with the path,
+ * because guessing would mean overwriting a config praxis could not
+ * understand. Comments and trailing commas are accepted because OpenCode
+ * accepts them — refusing here made a live firewall read as `0` rules.
  */
 export async function readOpenCodeConfig(path: string): Promise<OpenCodeConfig> {
   let content: string;
@@ -51,14 +62,29 @@ export async function readOpenCodeConfig(path: string): Promise<OpenCodeConfig> 
     throw err;
   }
   try {
-    return JSON.parse(content) as OpenCodeConfig;
+    return parseJsonc(content) as OpenCodeConfig;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `${path} is not valid JSON (${message}). ` +
-        'praxis will not rewrite a config it cannot parse — fix or move the file and retry. ' +
-        'JSONC comments are not supported.',
+      `${path} is not valid JSON or JSONC (${message}). ` +
+        'praxis will not rewrite a config it cannot parse — fix or move the file and retry.',
     );
+  }
+}
+
+/**
+ * Whether rewriting this file would silently drop comments the user wrote.
+ *
+ * `writeOpenCodeConfig` serialises with `JSON.stringify`, which cannot carry
+ * comments through. That is recoverable — install backs the file up first
+ * and `praxis rollback` restores it — but it must be said out loud rather
+ * than discovered later in a diff.
+ */
+export async function configHasComments(path: string): Promise<boolean> {
+  try {
+    return hasComments(await readFile(path, 'utf8'));
+  } catch {
+    return false;
   }
 }
 

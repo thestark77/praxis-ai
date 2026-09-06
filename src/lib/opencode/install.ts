@@ -8,6 +8,7 @@ import {
 import { resolveOpenCodePaths, type OpenCodePaths } from '../paths.js';
 import {
   readOpenCodeConfig,
+  configHasComments,
   writeOpenCodeConfig,
   resolveConfigFile,
   addPraxisInstructions,
@@ -170,6 +171,15 @@ export async function runOpenCodeInstall(
 
   const configFile = await resolveConfigFile(paths);
   const config = await readOpenCodeConfig(configFile);
+  if (await configHasComments(configFile)) {
+    // praxis serialises with JSON.stringify, which has nowhere to put a
+    // comment. The rules and agents all survive; only the prose around them
+    // is lost, and `praxis rollback` brings the original file back.
+    warnings.push(
+      `opencode: ${configFile} contained comments, and rewriting it dropped them. ` +
+        'Every setting was preserved; `praxis rollback` restores the commented file.',
+    );
+  }
   const rules = praxisOpenCodeRules(firewallEntries);
 
   const merged = mergePraxisPermissions(config.permission, rules);

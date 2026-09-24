@@ -262,7 +262,9 @@ praxis update --skills     # only the six lifted mattpocock skills
   for components). Your persona, preset, model assignments, and Strict TDD
   setting are preserved. The engram binary is not upgraded; praxis only
   warns when the installed gentle-ai or engram version differs from the
-  one it is validated against. (Homebrew installs update the binary via
+  one it is validated against. After the sync, praxis re-runs its
+  CLAUDE.md patcher so the praxis block stays last even when gentle-ai
+  appended new sections below it. (Homebrew installs update the binary via
   `brew upgrade gentle-ai`.)
 - **skills** are refreshed from the praxis-ai repo — the canonical source
   of the mechanism-pure lifts. Only the six praxis-managed skill dirs are

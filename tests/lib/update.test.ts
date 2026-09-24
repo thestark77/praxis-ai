@@ -216,6 +216,73 @@ describe('runUpdate — scoped upgrade + version drift', () => {
   });
 });
 
+describe('runUpdate — keeps the praxis block last after gentle-ai sync', () => {
+  const praxisBlock = '<!-- praxis:start -->\n@~/custom/praxis/main.md\n<!-- praxis:end -->';
+
+  // A run that mimics gentle-ai sync appending a new managed section at the
+  // end of CLAUDE.md, below the praxis block.
+  function syncAppends(claudeMdPath: string) {
+    const { run: base, calls } = fakeRun();
+    const run = async (command: string, args: string[]): Promise<CommandResult> => {
+      if (command === 'gentle-ai' && args[0] === 'sync') {
+        const current = await readFile(claudeMdPath, 'utf8');
+        await writeFile(
+          claudeMdPath,
+          current + '\n<!-- gentle-ai:new-section -->\nNEW\n<!-- /gentle-ai:new-section -->\n',
+          'utf8',
+        );
+      }
+      return base(command, args);
+    };
+    return { run, calls };
+  }
+
+  it('moves the praxis block back below a section sync appended, keeping its import path', async () => {
+    const paths = resolvePaths(home);
+    await writeFile(
+      paths.claudeMd,
+      `<!-- gentle-ai:persona -->\nP\n<!-- /gentle-ai:persona -->\n\n${praxisBlock}\n`,
+      'utf8',
+    );
+    const { run } = syncAppends(paths.claudeMd);
+    const { fetchFile } = fakeFetch();
+    const result = await runUpdate({
+      paths,
+      skills: false,
+      run,
+      fetchFile,
+      hasGentleAi: () => true,
+    });
+
+    const after = await readFile(paths.claudeMd, 'utf8');
+    expect(after).toContain('<!-- /gentle-ai:new-section -->');
+    expect(after.trimEnd().endsWith(praxisBlock)).toBe(true);
+    expect(after.match(/<!-- praxis:start -->/g)).toHaveLength(1);
+    expect(result.gentleAi?.claudeMdRepatched).toBe(true);
+  });
+
+  it('does not add a praxis block when CLAUDE.md has none', async () => {
+    const paths = resolvePaths(home);
+    await writeFile(
+      paths.claudeMd,
+      '<!-- gentle-ai:persona -->\nP\n<!-- /gentle-ai:persona -->\n',
+      'utf8',
+    );
+    const { run } = syncAppends(paths.claudeMd);
+    const { fetchFile } = fakeFetch();
+    const result = await runUpdate({
+      paths,
+      skills: false,
+      run,
+      fetchFile,
+      hasGentleAi: () => true,
+    });
+
+    expect(await readFile(paths.claudeMd, 'utf8')).not.toContain('praxis:start');
+    expect(result.gentleAi?.claudeMdRepatched).toBe(false);
+  });
+});
+
 describe('runUpdate — gentle-ai not installed', () => {
   it('skips gentle-ai with a guidance message, still updates skills', async () => {
     const paths = resolvePaths(home);

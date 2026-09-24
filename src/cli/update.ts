@@ -32,6 +32,9 @@ export function updateCommand(): Command {
               `  gentle-ai: upgrade exit=${g.upgrade?.code ?? 'n/a'}, sync exit=${g.sync?.code ?? 'n/a'}` +
                 `, strict-tdd preserved=${g.strictTddPreserved}`,
             );
+            if (g.claudeMdRepatched) {
+              console.log('  CLAUDE.md: praxis block kept in last position');
+            }
             for (const v of g.versions ?? []) {
               console.log(
                 `  ${v.tool}: installed=${v.installed ?? 'unknown'}, expected=${v.expected}`,

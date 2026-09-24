@@ -1,7 +1,8 @@
 // `praxis update` — refresh the external pieces praxis depends on, to
 // their latest, modularly, without touching the rest of the praxis
-// overlay (CLAUDE.md block, firewall deny list, AST hook, telemetry,
-// ~/.praxis skeleton are all left untouched).
+// overlay (firewall deny list, AST hook, telemetry, ~/.praxis skeleton
+// are left untouched; the CLAUDE.md block is only moved back to last
+// position after a gentle-ai sync, never rewritten).
 //
 // Two independent targets:
 //
@@ -18,6 +19,11 @@
 //     3. `gentle-ai version` + `engram version` — compared against the
 //        versions praxis is validated with; drift is a warning, not an
 //        error, so a newer upstream never blocks the update.
+//     4. Re-run the CLAUDE.md patcher when a praxis block is present:
+//        sync may append new gentle-ai sections below it, and praxis
+//        precedence relies on its block being last. The block's own
+//        import path is kept; a CLAUDE.md without a praxis block is left
+//        alone.
 //
 //   skills — the six lifted mattpocock skills are refreshed from the
 //     praxis-ai repo (the canonical source of the *lifted*,
@@ -31,6 +37,8 @@ import { spawnSync } from 'node:child_process';
 import { resolvePaths, type PraxisPaths } from './paths.js';
 import { detect } from './detector.js';
 import { POCOCK_SKILLS } from '../data/pocock-skills.js';
+import { PRAXIS_IMPORT_PATH } from '../data/firewall-defaults.js';
+import { findPraxisBlock, patchClaudeMd } from './claudemd-patcher.js';
 import {
   defaultCommandRunner,
   GENTLE_AI_VERSION,
@@ -71,6 +79,8 @@ export interface GentleAiUpdateResult {
   strictTddPreserved: boolean;
   /** Installed vs expected versions, probed after upgrade + sync. */
   versions?: ToolVersionCheck[];
+  /** True when the CLAUDE.md patcher re-ran to keep the praxis block last. */
+  claudeMdRepatched?: boolean;
   warnings: string[];
 }
 
@@ -206,7 +216,29 @@ async function updateGentleAi(
     }
   }
 
+  // 4. Keep the praxis block last. Sync may have appended sections below it.
+  result.claudeMdRepatched = await repatchClaudeMd(paths.claudeMd);
+
   return result;
+}
+
+/**
+ * Re-run the CLAUDE.md patcher if (and only if) a praxis block is present,
+ * reusing the block's own import path. Returns whether the patcher ran.
+ */
+async function repatchClaudeMd(claudeMdPath: string): Promise<boolean> {
+  const { readFile } = await import('node:fs/promises');
+  let content: string;
+  try {
+    content = await readFile(claudeMdPath, 'utf8');
+  } catch {
+    return false;
+  }
+  const block = findPraxisBlock(content);
+  if (!block) return false;
+  const importPath = block.body.match(/@(\S+)/)?.[1] ?? PRAXIS_IMPORT_PATH;
+  await patchClaudeMd(claudeMdPath, importPath);
+  return true;
 }
 
 async function updateSkills(

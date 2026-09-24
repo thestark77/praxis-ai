@@ -22,10 +22,11 @@
   "engines": {
     "node": "^22.13.0 || >=24.0.0"
   },
+  "packageManager": "pnpm@11.9.0",
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
-    "pretest": "npm run build",
+    "pretest": "pnpm run build",
     "test": "vitest run",
     "test:unit": "vitest run tests/lib tests/cli.test.ts",
     "test:integration": "vitest run tests/integration",

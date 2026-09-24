@@ -210,7 +210,8 @@ interrupting the work it is announcing.
 ## Installation
 
 ```bash
-npx praxis-ai@latest install
+pnpm add -g praxis-ai
+praxis install
 ```
 
 That's it — gentle-ai, engram, the firewall, and the lifted skills are all
@@ -270,8 +271,8 @@ praxis update --skills     # only the six lifted mattpocock skills
   of the mechanism-pure lifts. Only the six praxis-managed skill dirs are
   overwritten; any other skill you have is left untouched.
 
-To also update praxis-ai itself: `npm install -g praxis-ai@latest`
-(or `npx praxis-ai@latest ...`).
+To also update praxis-ai itself: `pnpm add -g praxis-ai@latest`
+(or `pnpm dlx praxis-ai@latest ...`).
 
 ### Adaptive modes
 
@@ -308,8 +309,8 @@ reset to the praxis defaults.
 ```bash
 git clone https://github.com/thestark77/praxis-ai.git
 cd praxis-ai
-npm install
-npm run build
+pnpm install
+pnpm run build
 node bin/praxis.js install
 ```
 
@@ -356,7 +357,7 @@ praxis-ai has a four-tier test pyramid documented in
 [docs/testing.md](docs/testing.md). Quick summary:
 
 - **Tier 1 + 2** — Vitest unit + integration. 223 tests, free, <2 s.
-  `npm test`.
+  `pnpm test`.
 - **Tier 3** — sub-agent scenarios that share the parent Claude Code
   session and exercise the firewall against live `Bash` calls.
   Free, ~60 s, 14 scenarios in `tests/scenarios/T*.md`. Latest run:
@@ -364,7 +365,7 @@ praxis-ai has a four-tier test pyramid documented in
 - **Tier 4** — real `claude --print` subprocess in an isolated HOME.
   Cold-start session, exercises the F0 classifier + skill auto-discovery
   + firewall against a real LLM-driven Bash call. Opt-in via
-  `npm run test:tier4`. Defaults to Haiku 4.5 (~$0.05–0.10 per full
+  `pnpm run test:tier4`. Defaults to Haiku 4.5 (~$0.05–0.10 per full
   run). Latest run (alpha.5): 5 / 5 PASS.
 
 Cross-platform hook-latency benchmark runs on every push (`ubuntu-latest`

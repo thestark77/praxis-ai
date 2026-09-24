@@ -212,8 +212,8 @@ export async function runOpenCodeInstall(
   } else {
     warnings.push(
       'opencode: built firewall engine (dist/firewall.js) not found, so the AST plugin was ' +
-        'not emitted. Run `npm run build` in the praxis checkout, or reinstall praxis-ai from ' +
-        'npm, then re-run install. Layer 1 (permission denies) is active.',
+        'not emitted. Run `pnpm run build` in the praxis checkout, or reinstall praxis-ai from ' +
+        'the npm registry, then re-run install. Layer 1 (permission denies) is active.',
     );
   }
 

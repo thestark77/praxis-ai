@@ -28,18 +28,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # pnpm must be on PATH before setup-node so `cache: pnpm` can find the
+      # store. The pnpm version comes from package.json "packageManager".
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6.1.0
+
       - name: Setup Node ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-          cache: npm
+          cache: pnpm
 
-      # node_modules is cached, not just the npm cache directory.
+      # node_modules is cached, not just the pnpm store.
       #
       # better-sqlite3 12 installs its binary through `prebuild-install`,
       # which downloads from GitHub releases at install time and bypasses
-      # the npm cache entirely. On macOS runners that download stalls: a
-      # measured run spent 422 of its 465 seconds inside `npm ci` with no
+      # the package-manager cache entirely. On macOS runners that download
+      # stalls: a measured run spent 422 of its 465 seconds inside `npm ci`
+      # (before the move to pnpm) with no
       # output at all, against 30 seconds for every other step combined.
       # Caching the built tree means only a lockfile change pays for it.
       #
@@ -51,26 +57,26 @@ jobs:
         uses: actions/cache@v4
         with:
           path: node_modules
-          key: ${{ runner.os }}-${{ runner.arch }}-node${{ matrix.node-version }}-${{ hashFiles('package-lock.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-node${{ matrix.node-version }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install dependencies
         if: steps.node-modules-cache.outputs.cache-hit != 'true'
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Typecheck
-        run: npm run typecheck
+        run: pnpm run typecheck
 
       - name: Build
-        run: npm run build
+        run: pnpm run build
 
       - name: Test
-        run: npm test
+        run: pnpm test
 
       - name: Lint
-        run: npm run lint
+        run: pnpm run lint
 
       - name: Pack (dry run) — verify the publish payload
-        run: npm pack --dry-run
+        run: pnpm pack --dry-run
 
       - name: Hook latency benchmark
         # Runs once per matrix cell so we have numbers on both

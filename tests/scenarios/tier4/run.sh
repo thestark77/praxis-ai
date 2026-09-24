@@ -32,7 +32,7 @@ if ! command -v claude >/dev/null 2>&1; then
 fi
 
 if ! command -v "$PRAXIS_BIN" >/dev/null 2>&1; then
-  echo "error: praxis CLI not on PATH; install praxis-ai globally via npm install -g praxis-ai" >&2
+  echo "error: praxis CLI not on PATH; install praxis-ai globally via pnpm add -g praxis-ai" >&2
   exit 2
 fi
 

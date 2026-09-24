@@ -7,10 +7,10 @@ different class of risk and runs at a different speed and cost.
 
 | Tier | What it tests | Where | Cost | Speed | Runs on |
 |------|---------------|-------|------|-------|---------|
-| 1 — Vitest unit | Pure logic: tokeniser, rules, telemetry queries, settings patcher, install lib | `tests/lib/`, `tests/cli/` | Free | <2 s | Every push, every PR (CI matrix). `npm test` locally. |
+| 1 — Vitest unit | Pure logic: tokeniser, rules, telemetry queries, settings patcher, install lib | `tests/lib/`, `tests/cli/` | Free | <2 s | Every push, every PR (CI matrix). `pnpm test` locally. |
 | 2 — Vitest integration | Cross-module flow: full install → uninstall → rollback round-trip, end-to-end CLI smoke via spawned `praxis` bin in sandbox HOME | `tests/integration/`, `tests/cli.test.ts` | Free | <2 s | Same as Tier 1. |
 | 3 — Tier 3 sub-agents | praxis behaviour with a real (parent-shared) Claude Code context: firewall enforcement on live `Bash` tool calls, telemetry recording, skill discovery, doctor verify, classifier reasoning | `tests/scenarios/T1–T14` | Free (uses session context) | ~60 s for 14 | Manually triggered by running `Agent({ subagent_type: "general-purpose", ... })` against scenario specs. |
-| 4 — Tier 4 real `claude --print` | praxis behaviour in cold sessions with sandbox HOME: F0 classifier on a fresh process, firewall against a real LLM-driven Bash call, skill auto-discovery from clean install | `tests/scenarios/tier4/` | ~$0.05–0.10 / full run (Haiku 4.5) | ~3 min for 5 | Opt-in via `npm run test:tier4`. Never in CI. |
+| 4 — Tier 4 real `claude --print` | praxis behaviour in cold sessions with sandbox HOME: F0 classifier on a fresh process, firewall against a real LLM-driven Bash call, skill auto-discovery from clean install | `tests/scenarios/tier4/` | ~$0.05–0.10 / full run (Haiku 4.5) | ~3 min for 5 | Opt-in via `pnpm run test:tier4`. Never in CI. |
 
 The tiers are complementary, not redundant. Tier 1 + 2 prove the building
 blocks. Tier 3 proves they compose under the real firewall. Tier 4 proves
@@ -35,7 +35,7 @@ real `~/.claude`.
 
 ## Tier 2 — Vitest integration
 
-Same `npm test` invocation; tests under `tests/integration/` exercise the
+Same `pnpm test` invocation; tests under `tests/integration/` exercise the
 install → uninstall → rollback lifecycle against fixture HOMEs. Confirms
 the marker-bounded `CLAUDE.md` block survives round-trips, settings.json
 deny entries merge with user entries cleanly, and backups are restored

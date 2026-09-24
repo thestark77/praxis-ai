@@ -43,7 +43,7 @@ aborts with guidance if they are missing. The actual software installs are:
 | gentle-ai binary | gentle-ai `scripts/install.sh` (driven by praxis) | brew tap or GitHub Releases binary |
 | gentle-ai ecosystem (9 components) | `gentle-ai install` | gentle-ai downloads them |
 | engram | `gentle-ai install` (preset includes it) | binary download / go install |
-| praxis-ai | `npm install -g praxis-ai` (or `npx`) | npm registry |
+| praxis-ai | `pnpm add -g praxis-ai` (or `pnpm dlx`) | npm registry |
 | lifted skills | `praxis install` (from the npm package) | mechanism-pure rewrites; refresh via `praxis sync-pocock` |
 
 ## Error example

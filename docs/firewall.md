@@ -153,7 +153,7 @@ listening on a Unix socket, paid for by eliminating per-call Node
 startup. That is a v0.2+ consideration; the current dispatch model is
 chosen for simplicity and zero background processes.
 
-Run locally with `npm run bench:hook [N]` (default N=50). Look for
+Run locally with `pnpm run bench:hook [N]` (default N=50). Look for
 `BENCH:<path>:n=<n>:total_ms=<>:per_ms=<>` lines for machine-readable
 output.
 

@@ -30,15 +30,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # pnpm must be on PATH before setup-node so `cache: pnpm` can find the
+      # store. The pnpm version comes from package.json "packageManager".
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6.1.0
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-          cache: npm
+          cache: pnpm
 
       - name: Install dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Verify package is not marked private
         run: |
@@ -50,18 +55,22 @@ jobs:
           fi
 
       - name: Typecheck
-        run: npm run typecheck
+        run: pnpm run typecheck
 
       - name: Build
-        run: npm run build
+        run: pnpm run build
 
       - name: Test
-        run: npm test
+        run: pnpm test
 
       - name: Pack (dry run)
-        run: npm pack --dry-run
+        run: pnpm pack --dry-run
 
+      # pnpm 11 publishes natively and accepts --provenance (it signs via
+      # the GitHub OIDC token, hence `id-token: write` above).
+      # --no-git-checks: a release event checks out a detached tag, which
+      # pnpm's branch/clean checks would otherwise reject.
       - name: Publish to npm
-        run: npm publish --access public --provenance
+        run: pnpm publish --access public --provenance --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

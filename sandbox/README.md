@@ -74,7 +74,7 @@ From a Claude Code orchestrator session:
 
 1. Run `sandbox/scripts/create-sandbox.sh <fixture>` to materialise a
    sandbox project directory.
-2. Run `npx praxis-ai@latest install` inside the sandbox.
+2. Run `pnpm dlx praxis-ai@latest install` inside the sandbox.
 3. Open Claude Code rooted at the sandbox directory.
 4. Submit the user prompt from the scenario.
 5. Compare the response against the rubric.

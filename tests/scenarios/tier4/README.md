@@ -21,8 +21,8 @@ trivial (~$0.01 / scenario, ~$0.10 for the whole suite). Override
 with `PRAXIS_TIER4_MODEL=claude-sonnet-4-6` for higher fidelity at
 ~10× the spend.
 
-Tier 4 is **opt-in**. It is NOT in `npm test` or CI; run via
-`npm run test:tier4` or `./tests/scenarios/tier4/run.sh` directly.
+Tier 4 is **opt-in**. It is NOT in `pnpm test` or CI; run via
+`pnpm run test:tier4` or `./tests/scenarios/tier4/run.sh` directly.
 
 ## How the runner works
 

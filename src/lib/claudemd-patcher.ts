@@ -35,7 +35,14 @@ export function injectPraxisBlock(content: string, importPath: string): string {
   const block = buildPraxisBlock(importPath);
   const found = findPraxisBlock(content);
   if (found) {
-    return content.slice(0, found.startIdx) + block + content.slice(found.endIdx);
+    // Already last: replace in place so the file stays byte-identical.
+    if (content.slice(found.endIdx).trim() === '') {
+      return content.slice(0, found.startIdx) + block + content.slice(found.endIdx);
+    }
+    // Something was appended after the block (gentle-ai 3.x adds new
+    // managed sections at the end). Praxis precedence relies on recency,
+    // so lift the block out and re-append it below everything else.
+    content = removePraxisBlock(content);
   }
   if (content.length === 0) return block + '\n';
   const normalized = content.endsWith('\n') ? content : content + '\n';

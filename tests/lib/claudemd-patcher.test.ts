@@ -85,6 +85,52 @@ describe('injectPraxisBlock', () => {
   });
 });
 
+describe('injectPraxisBlock — keeps the praxis block LAST', () => {
+  const block = buildPraxisBlock(IMPORT_PATH);
+  // gentle-ai 3.x appends new managed sections at the end of the file,
+  // i.e. after an already-installed praxis block.
+  const before = `<!-- gentle-ai:persona -->\npersona\n<!-- /gentle-ai:persona -->\n`;
+  const after = `<!-- gentle-ai:review-contract -->\nreview\n<!-- /gentle-ai:review-contract -->\n`;
+
+  it('moves an existing praxis block after sections appended below it', () => {
+    const input = `${before}\n${block}\n\n${after}`;
+    const result = injectPraxisBlock(input, IMPORT_PATH);
+    expect(result).toBe(`${before}\n${after}\n${block}\n`);
+    expect(result.trimEnd().endsWith(END_MARKER)).toBe(true);
+  });
+
+  it('preserves the surrounding content and gentle-ai markers byte-for-byte', () => {
+    const input = `${before}\n${block}\n\n${after}`;
+    const result = injectPraxisBlock(input, IMPORT_PATH);
+    expect(result.startsWith(before)).toBe(true);
+    expect(result).toContain(after);
+    expect(removePraxisBlock(result)).toBe(`${before}\n${after}`);
+  });
+
+  it('updates the import path while moving the block', () => {
+    const input = `${before}\n${buildPraxisBlock('~/old/path.md')}\n\n${after}`;
+    const result = injectPraxisBlock(input, IMPORT_PATH);
+    expect(result).not.toContain('@~/old/path.md');
+    expect(result).toBe(`${before}\n${after}\n${block}\n`);
+  });
+
+  it('is idempotent once the block has been moved', () => {
+    const input = `${before}\n${block}\n\n${after}`;
+    const once = injectPraxisBlock(input, IMPORT_PATH);
+    expect(injectPraxisBlock(once, IMPORT_PATH)).toBe(once);
+  });
+
+  it('leaves a file whose praxis block is already last untouched', () => {
+    const input = `${before}\n${after}\n${block}\n`;
+    expect(injectPraxisBlock(input, IMPORT_PATH)).toBe(input);
+  });
+
+  it('moves a block that sits at the very top of the file', () => {
+    const input = `${block}\n\n${after}`;
+    expect(injectPraxisBlock(input, IMPORT_PATH)).toBe(`${after}\n${block}\n`);
+  });
+});
+
 describe('removePraxisBlock', () => {
   it('removes block and leaves surrounding content clean', () => {
     const input = `prefix\n\n${START_MARKER}\n@${IMPORT_PATH}\n${END_MARKER}\n\nsuffix`;
@@ -147,6 +193,21 @@ describe('patchClaudeMd / unpatchClaudeMd', () => {
     expect(removed).toBe(true);
     const finalContent = await readFile(claudeMd, 'utf8');
     expect(finalContent.trim()).toBe(original.trim());
+  });
+
+  it('moves the praxis block to the end after gentle-ai appended below it', async () => {
+    const appended = `<!-- gentle-ai:new-section -->\nnew\n<!-- /gentle-ai:new-section -->\n`;
+    await writeFile(claudeMd, 'existing content\n', 'utf8');
+    await patchClaudeMd(claudeMd, IMPORT_PATH);
+    const patched = await readFile(claudeMd, 'utf8');
+    await writeFile(claudeMd, patched + '\n' + appended, 'utf8');
+
+    await patchClaudeMd(claudeMd, IMPORT_PATH);
+    const content = await readFile(claudeMd, 'utf8');
+    expect(content.indexOf(START_MARKER)).toBeGreaterThan(
+      content.indexOf('<!-- /gentle-ai:new-section -->'),
+    );
+    expect(content).toContain(appended);
   });
 
   it('unpatch returns false when no block is present', async () => {

@@ -38,19 +38,19 @@
     "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\""
   },
   "dependencies": {
-    "better-sqlite3": "^12.11.1",
-    "commander": "^15.0.0"
+    "better-sqlite3": "12.11.1",
+    "commander": "15.0.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^9.6.0",
-    "@types/node": "^26.4.1",
-    "@typescript-eslint/eslint-plugin": "^8.69.0",
-    "@typescript-eslint/parser": "^8.69.0",
-    "eslint": "^10.9.1",
-    "prettier": "^3.3.0",
-    "tsup": "^8.2.0",
-    "typescript": "^6.0.3",
-    "vitest": "^5.0.0"
+    "@types/better-sqlite3": "9.6.0",
+    "@types/node": "26.4.1",
+    "@typescript-eslint/eslint-plugin": "8.69.0",
+    "@typescript-eslint/parser": "8.69.0",
+    "eslint": "10.9.1",
+    "prettier": "3.9.6",
+    "tsup": "8.5.1",
+    "typescript": "6.0.3",
+    "vitest": "5.0.0"
   },
   "keywords": [
     "claude-code",

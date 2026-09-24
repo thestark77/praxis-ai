@@ -253,14 +253,16 @@ hook, telemetry, and `~/.praxis/` skeleton are left alone):
 
 ```bash
 praxis update              # update both gentle-ai and the lifted skills
-praxis update --gentle-ai  # only gentle-ai (binary + components + engram)
+praxis update --gentle-ai  # only gentle-ai (binary + components)
 praxis update --skills     # only the six lifted mattpocock skills
 ```
 
 - **gentle-ai** is updated through its own config-preserving primitives
-  (`gentle-ai upgrade` for the binary, `gentle-ai sync` for components +
-  engram). Your persona, preset, model assignments, and Strict TDD
-  setting are preserved. (Homebrew installs update the binary via
+  (`gentle-ai upgrade gentle-ai` for the binary only, `gentle-ai sync`
+  for components). Your persona, preset, model assignments, and Strict TDD
+  setting are preserved. The engram binary is not upgraded; praxis only
+  warns when the installed gentle-ai or engram version differs from the
+  one it is validated against. (Homebrew installs update the binary via
   `brew upgrade gentle-ai`.)
 - **skills** are refreshed from the praxis-ai repo — the canonical source
   of the mechanism-pure lifts. Only the six praxis-managed skill dirs are

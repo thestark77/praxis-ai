@@ -6,10 +6,11 @@ export function updateCommand(): Command {
     .description(
       'Update the external pieces praxis depends on to their latest, without ' +
         'touching the rest of the praxis overlay. By default updates both ' +
-        'gentle-ai (binary + components + engram, preserving your config) and ' +
+        'gentle-ai (binary + components, preserving your config; the engram ' +
+        'binary is not upgraded, only version-checked) and ' +
         'the lifted skills (from the praxis-ai repo).',
     )
-    .option('--gentle-ai', 'update only gentle-ai (binary + components + engram)')
+    .option('--gentle-ai', 'update only gentle-ai (binary + components)')
     .option('--skills', 'update only the lifted mattpocock skills')
     .action(async (opts: { gentleAi?: boolean; skills?: boolean }) => {
       // If neither flag is passed, update both. If one is passed, update
@@ -31,6 +32,11 @@ export function updateCommand(): Command {
               `  gentle-ai: upgrade exit=${g.upgrade?.code ?? 'n/a'}, sync exit=${g.sync?.code ?? 'n/a'}` +
                 `, strict-tdd preserved=${g.strictTddPreserved}`,
             );
+            for (const v of g.versions ?? []) {
+              console.log(
+                `  ${v.tool}: installed=${v.installed ?? 'unknown'}, expected=${v.expected}`,
+              );
+            }
           }
         }
 

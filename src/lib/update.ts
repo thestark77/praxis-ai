@@ -6,13 +6,18 @@
 // Two independent targets:
 //
 //   gentle-ai — updated via gentle-ai's OWN config-preserving primitives:
-//     1. `gentle-ai upgrade`  (binary self-update; brew installs are
-//        instructed to `brew upgrade` instead — surfaced as a note)
+//     1. `gentle-ai upgrade gentle-ai`  (binary self-update, filtered to
+//        gentle-ai only: an unfiltered `upgrade` also bumps engram and gga
+//        outside praxis's control; brew installs are instructed to
+//        `brew upgrade` instead — surfaced as a note)
 //     2. `gentle-ai sync`     (re-applies all components incl. engram for
 //        the installed agents from persisted state — preserves persona,
 //        preset, and model assignments). Strict TDD is preserved by
 //        reading the current state and passing --strict-tdd only when it
 //        is already enabled.
+//     3. `gentle-ai version` + `engram version` — compared against the
+//        versions praxis is validated with; drift is a warning, not an
+//        error, so a newer upstream never blocks the update.
 //
 //   skills — the six lifted mattpocock skills are refreshed from the
 //     praxis-ai repo (the canonical source of the *lifted*,
@@ -28,9 +33,15 @@ import { detect } from './detector.js';
 import { POCOCK_SKILLS } from '../data/pocock-skills.js';
 import {
   defaultCommandRunner,
+  GENTLE_AI_VERSION,
   type CommandRunner,
   type CommandResult,
 } from './gentle-ai-bootstrap.js';
+
+/** gentle-ai release praxis is validated against (same pin as the installer). */
+export const EXPECTED_GENTLE_AI_VERSION = GENTLE_AI_VERSION;
+/** engram release praxis is validated against. */
+export const EXPECTED_ENGRAM_VERSION = '2.1.0';
 
 export const PRAXIS_SKILLS_BASE_URL =
   'https://raw.githubusercontent.com/thestark77/praxis-ai/main/templates/claude-skills';
@@ -40,7 +51,7 @@ export type FileFetcher = (url: string) => Promise<string | null>;
 
 export interface UpdateOptions {
   paths?: PraxisPaths;
-  /** Update gentle-ai (binary + components + engram). Default true. */
+  /** Update gentle-ai (binary + components; engram version-checked only). Default true. */
   gentleAi?: boolean;
   /** Update the lifted skills from the praxis-ai repo. Default true. */
   skills?: boolean;
@@ -58,7 +69,16 @@ export interface GentleAiUpdateResult {
   upgrade?: CommandResult;
   sync?: CommandResult;
   strictTddPreserved: boolean;
+  /** Installed vs expected versions, probed after upgrade + sync. */
+  versions?: ToolVersionCheck[];
   warnings: string[];
+}
+
+export interface ToolVersionCheck {
+  tool: 'gentle-ai' | 'engram';
+  expected: string;
+  /** null when the version could not be determined (missing binary, odd output). */
+  installed: string | null;
 }
 
 export interface SkillsUpdateResult {
@@ -83,6 +103,22 @@ export function liftedFilesFor(skillName: string): string[] {
   }
   basenames.add('NOTICE.md');
   return [...basenames];
+}
+
+/** Extract a semver from `<tool> <version>` output (leading `v` stripped). */
+export function parseToolVersion(output: string): string | null {
+  const m = output.match(/\bv?(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)/);
+  return m ? m[1] : null;
+}
+
+async function checkToolVersion(
+  run: CommandRunner,
+  tool: ToolVersionCheck['tool'],
+  expected: string,
+): Promise<ToolVersionCheck> {
+  const r = await run(tool, ['version']);
+  const installed = r.code === 0 ? parseToolVersion(r.stdout) : null;
+  return { tool, expected, installed };
 }
 
 const defaultFetchFile: FileFetcher = async (url) => {
@@ -132,7 +168,8 @@ async function updateGentleAi(
   result.attempted = true;
 
   // 1. Binary self-update. Non-fatal; brew installs get a note instead.
-  const upgrade = await run('gentle-ai', ['upgrade']);
+  // Positional tool filter (gentle-ai >= 3.x): only gentle-ai is upgraded.
+  const upgrade = await run('gentle-ai', ['upgrade', 'gentle-ai']);
   result.upgrade = upgrade;
   if (upgrade.code !== 0) {
     result.warnings.push(
@@ -149,6 +186,24 @@ async function updateGentleAi(
   result.sync = sync;
   if (sync.code !== 0) {
     result.warnings.push(`gentle-ai sync exited ${sync.code}. ${sync.stderr.slice(0, 200)}`);
+  }
+
+  // 3. Version drift check. Informational only — never fails the update.
+  result.versions = [
+    await checkToolVersion(run, 'gentle-ai', EXPECTED_GENTLE_AI_VERSION),
+    await checkToolVersion(run, 'engram', EXPECTED_ENGRAM_VERSION),
+  ];
+  for (const v of result.versions) {
+    if (v.installed === null) {
+      result.warnings.push(
+        `could not determine the installed ${v.tool} version; praxis expects ${v.expected}.`,
+      );
+    } else if (v.installed !== v.expected) {
+      result.warnings.push(
+        `${v.tool} ${v.installed} is installed; praxis expects ${v.expected}. ` +
+          'Behaviour may differ from what praxis was validated against.',
+      );
+    }
   }
 
   return result;

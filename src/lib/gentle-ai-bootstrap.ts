@@ -15,8 +15,9 @@
 //   - TDD:     strict (enabled)
 //
 // Everything is fetched/driven from the source of truth:
-//   - binary:    scripts/install.sh from the gentle-ai repo (downloaded at
-//                runtime, executed, then discarded — never committed here)
+//   - binary:    scripts/install.sh from the gentle-ai repo at the pinned
+//                release tag (downloaded at runtime, executed, then
+//                discarded — never committed here)
 //   - ecosystem: `gentle-ai install` (gentle-ai downloads its own components)
 //   - TDD:       `gentle-ai sync --strict-tdd`
 //
@@ -24,8 +25,16 @@
 // gentle-ai is already configured, the bootstrap respects the user's
 // existing choices unless `force` is set.
 
-export const GENTLE_AI_INSTALL_SCRIPT_URL =
-  'https://raw.githubusercontent.com/Gentleman-Programming/gentle-ai/main/scripts/install.sh';
+/**
+ * The gentle-ai release praxis is validated against. Single source of truth:
+ * the install.sh URL is pinned to this tag, and `praxis update` warns when
+ * the installed binary differs. Bump deliberately, after re-validating.
+ */
+export const GENTLE_AI_VERSION = '3.7.0';
+
+// Pinned to the release tag, never `main`: an unpinned installer lets an
+// unreleased upstream change reach users without review.
+export const GENTLE_AI_INSTALL_SCRIPT_URL = `https://raw.githubusercontent.com/Gentleman-Programming/gentle-ai/v${GENTLE_AI_VERSION}/scripts/install.sh`;
 
 export interface CommandResult {
   code: number;

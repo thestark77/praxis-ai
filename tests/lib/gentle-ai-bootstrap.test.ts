@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { bootstrapGentleAi, type CommandResult } from '../../src/lib/gentle-ai-bootstrap.js';
+import {
+  bootstrapGentleAi,
+  GENTLE_AI_VERSION,
+  GENTLE_AI_INSTALL_SCRIPT_URL,
+  type CommandResult,
+} from '../../src/lib/gentle-ai-bootstrap.js';
 
 interface RecordedCall {
   command: string;
@@ -16,6 +21,16 @@ function fakeRunner(results: Record<string, CommandResult> = {}) {
   };
   return { run, calls };
 }
+
+describe('GENTLE_AI_INSTALL_SCRIPT_URL', () => {
+  it('pins install.sh to the tagged release, never to main', () => {
+    expect(GENTLE_AI_VERSION).toBe('3.7.0');
+    expect(GENTLE_AI_INSTALL_SCRIPT_URL).toBe(
+      'https://raw.githubusercontent.com/Gentleman-Programming/gentle-ai/v3.7.0/scripts/install.sh',
+    );
+    expect(GENTLE_AI_INSTALL_SCRIPT_URL).not.toContain('/main/');
+  });
+});
 
 const fetchScript = async () => '#!/usr/bin/env bash\necho fake-installer\n';
 

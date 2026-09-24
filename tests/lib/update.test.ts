@@ -3,7 +3,14 @@ import { mkdtemp, mkdir, writeFile, readFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { resolvePaths } from '../../src/lib/paths.js';
-import { runUpdate, liftedFilesFor, PRAXIS_SKILLS_BASE_URL } from '../../src/lib/update.js';
+import {
+  runUpdate,
+  liftedFilesFor,
+  parseToolVersion,
+  PRAXIS_SKILLS_BASE_URL,
+  EXPECTED_GENTLE_AI_VERSION,
+  EXPECTED_ENGRAM_VERSION,
+} from '../../src/lib/update.js';
 import type { CommandResult } from '../../src/lib/gentle-ai-bootstrap.js';
 
 let home: string;
@@ -17,8 +24,15 @@ function fakeRun(results: Record<string, CommandResult> = {}) {
   const calls: Array<{ command: string; args: string[] }> = [];
   const run = async (command: string, args: string[]): Promise<CommandResult> => {
     calls.push({ command, args });
-    const key = args[0] ?? command;
-    return results[key] ?? { code: 0, stdout: '', stderr: '' };
+    // Most specific key wins: "<command> <subcommand>", then "<subcommand>".
+    const specific = results[`${command} ${args[0]}`] ?? results[args[0] ?? command];
+    if (specific) return specific;
+    // Version probes default to the expected versions (no drift).
+    if (args[0] === 'version') {
+      const v = command === 'engram' ? EXPECTED_ENGRAM_VERSION : EXPECTED_GENTLE_AI_VERSION;
+      return { code: 0, stdout: `${command} ${v}\n`, stderr: '' };
+    }
+    return { code: 0, stdout: '', stderr: '' };
   };
   return { run, calls };
 }
@@ -72,8 +86,8 @@ describe('runUpdate — both targets', () => {
       hasGentleAi: () => true,
     });
 
-    // gentle-ai: upgrade then sync --strict-tdd (TDD preserved).
-    expect(calls[0]).toEqual({ command: 'gentle-ai', args: ['upgrade'] });
+    // gentle-ai: upgrade (scoped to gentle-ai only) then sync --strict-tdd.
+    expect(calls[0]).toEqual({ command: 'gentle-ai', args: ['upgrade', 'gentle-ai'] });
     expect(calls[1]).toEqual({ command: 'gentle-ai', args: ['sync', '--strict-tdd'] });
     expect(result.gentleAi?.strictTddPreserved).toBe(true);
 
@@ -99,6 +113,106 @@ describe('runUpdate — both targets', () => {
     const result = await runUpdate({ paths, run, fetchFile, hasGentleAi: () => true });
     expect(result.gentleAi?.strictTddPreserved).toBe(false);
     expect(calls.find((c) => c.args[0] === 'sync')!.args).toEqual(['sync']);
+  });
+});
+
+describe('expected versions', () => {
+  it('pins gentle-ai 3.7.0 and engram 2.1.0', () => {
+    expect(EXPECTED_GENTLE_AI_VERSION).toBe('3.7.0');
+    expect(EXPECTED_ENGRAM_VERSION).toBe('2.1.0');
+  });
+});
+
+describe('parseToolVersion', () => {
+  it('extracts the version from `<tool> <version>` output', () => {
+    expect(parseToolVersion('gentle-ai 3.7.0\n')).toBe('3.7.0');
+    expect(parseToolVersion('engram 2.0.0-rc.4')).toBe('2.0.0-rc.4');
+    expect(parseToolVersion('engram v2.1.0')).toBe('2.1.0');
+  });
+
+  it('returns null when no version is present', () => {
+    expect(parseToolVersion('')).toBeNull();
+    expect(parseToolVersion('command not found')).toBeNull();
+  });
+});
+
+describe('runUpdate — scoped upgrade + version drift', () => {
+  it('never upgrades engram: the upgrade is filtered to gentle-ai', async () => {
+    const paths = resolvePaths(home);
+    await writeFile(paths.claudeMd, '', 'utf8');
+    const { run, calls } = fakeRun();
+    const { fetchFile } = fakeFetch();
+    await runUpdate({ paths, skills: false, run, fetchFile, hasGentleAi: () => true });
+    const upgrades = calls.filter((c) => c.args[0] === 'upgrade');
+    expect(upgrades).toEqual([{ command: 'gentle-ai', args: ['upgrade', 'gentle-ai'] }]);
+  });
+
+  it('reports installed versions and no warning when they match', async () => {
+    const paths = resolvePaths(home);
+    await writeFile(paths.claudeMd, '', 'utf8');
+    const { run, calls } = fakeRun();
+    const { fetchFile } = fakeFetch();
+    const result = await runUpdate({
+      paths,
+      skills: false,
+      run,
+      fetchFile,
+      hasGentleAi: () => true,
+    });
+    expect(calls).toContainEqual({ command: 'gentle-ai', args: ['version'] });
+    expect(calls).toContainEqual({ command: 'engram', args: ['version'] });
+    expect(result.gentleAi?.versions).toEqual([
+      { tool: 'gentle-ai', expected: '3.7.0', installed: '3.7.0' },
+      { tool: 'engram', expected: '2.1.0', installed: '2.1.0' },
+    ]);
+    expect(result.warnings.filter((w) => /expects/.test(w))).toEqual([]);
+  });
+
+  it('warns when installed versions differ from the expected ones', async () => {
+    const paths = resolvePaths(home);
+    await writeFile(paths.claudeMd, '', 'utf8');
+    const { run } = fakeRun({
+      'gentle-ai version': { code: 0, stdout: 'gentle-ai 3.8.0\n', stderr: '' },
+      'engram version': { code: 0, stdout: 'engram 2.0.0-rc.4\n', stderr: '' },
+    });
+    const { fetchFile } = fakeFetch();
+    const result = await runUpdate({
+      paths,
+      skills: false,
+      run,
+      fetchFile,
+      hasGentleAi: () => true,
+    });
+    expect(result.warnings).toContainEqual(
+      expect.stringMatching(/gentle-ai 3\.8\.0 is installed; praxis expects 3\.7\.0/),
+    );
+    expect(result.warnings).toContainEqual(
+      expect.stringMatching(/engram 2\.0\.0-rc\.4 is installed; praxis expects 2\.1\.0/),
+    );
+  });
+
+  it('warns when a version cannot be determined (e.g. engram missing)', async () => {
+    const paths = resolvePaths(home);
+    await writeFile(paths.claudeMd, '', 'utf8');
+    const { run } = fakeRun({
+      'engram version': { code: 127, stdout: '', stderr: 'spawn engram ENOENT' },
+    });
+    const { fetchFile } = fakeFetch();
+    const result = await runUpdate({
+      paths,
+      skills: false,
+      run,
+      fetchFile,
+      hasGentleAi: () => true,
+    });
+    expect(result.gentleAi?.versions?.[1]).toEqual({
+      tool: 'engram',
+      expected: '2.1.0',
+      installed: null,
+    });
+    expect(result.warnings).toContainEqual(
+      expect.stringMatching(/could not determine the installed engram version/),
+    );
   });
 });
 

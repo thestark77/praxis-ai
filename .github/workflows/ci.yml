@@ -52,12 +52,18 @@ jobs:
       # The key carries the OS and the Node major because the tree contains
       # a compiled native module; restoring an arm64 build onto x64, or a
       # Node 22 ABI onto 24, would be worse than a slow install.
+      #
+      # Not on Windows: pnpm's node_modules is a tree of junctions into
+      # .pnpm, and a restored tree loses them (`EPERM ... realpath`), so
+      # packages such as @types/node silently vanish and typecheck fails.
+      # Windows installs from the pnpm store cache every run instead.
       - name: Cache node_modules
         id: node-modules-cache
+        if: runner.os != 'Windows'
         uses: actions/cache@v4
         with:
           path: node_modules
-          key: ${{ runner.os }}-${{ runner.arch }}-node${{ matrix.node-version }}-${{ hashFiles('pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-node${{ matrix.node-version }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml') }}
 
       - name: Install dependencies
         if: steps.node-modules-cache.outputs.cache-hit != 'true'

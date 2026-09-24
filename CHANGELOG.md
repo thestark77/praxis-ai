@@ -4,6 +4,30 @@ All notable changes to praxis-ai are documented here.
 This project follows [Semantic Versioning](https://semver.org/) and
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.1.0-alpha.27] - 2026-09-24
+
+### Changed - gentle-ai 3.7.0 and engram 2.1.0 are the expected versions
+
+The gentle-ai bootstrap fetches `install.sh` from the `v3.7.0` tag instead of
+`main`, and `praxis update` runs `gentle-ai upgrade gentle-ai` so it no longer
+upgrades engram behind your back. After the upgrade it compares the installed
+gentle-ai and engram against the expected versions and warns on drift. The
+tag pins the installer script only; the installer still resolves the latest
+gentle-ai release, so the drift warning is what catches a newer binary.
+
+### Fixed - the praxis block stays last in CLAUDE.md
+
+gentle-ai 3.x appends new managed sections at the end of `CLAUDE.md`, after the
+praxis block, which silently broke the recency-based precedence. The patcher
+now moves an existing praxis block to the end, and `praxis update` re-runs it
+after the gentle-ai upgrade and sync.
+
+### Changed - pnpm replaces npm
+
+The repository now uses pnpm 11 (`packageManager`, `pnpm-lock.yaml`, CI and
+release on `pnpm/action-setup`), and every dependency is pinned to an exact
+version.
+
 ## [0.1.0-alpha.25] - 2026-09-06
 
 ### Fixed - a link was read out because splitting ran before cleaning

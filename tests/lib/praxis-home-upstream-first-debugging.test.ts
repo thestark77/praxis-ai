@@ -38,5 +38,7 @@ describe('praxis-home upstream-first-debugging module', () => {
     // `gh search issues --state` accepts only open|closed; omitting it searches both.
     expect(content).not.toMatch(/gh search issues[^\n]*--state all/);
     expect(content).toContain('gh search issues --repo <owner/repo> "<symptom>" --include-prs');
+    expect(content).toContain('gh issue list --repo <owner/repo>');
+    expect(content).toContain('gh pr list --repo <owner/repo>');
   });
 });

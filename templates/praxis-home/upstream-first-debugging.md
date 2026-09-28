@@ -18,8 +18,8 @@ as usual.
    - `gh search issues --repo <owner/repo> "<symptom>" --include-prs`
      (no `--state`: it accepts only `open` or `closed`, and omitting it
      searches both)
-   - `gh issue list --search "<symptom>" --state all`
-   - `gh pr list --search "<symptom>" --state all`
+   - `gh issue list --repo <owner/repo> --search "<symptom>" --state all`
+   - `gh pr list --repo <owner/repo> --search "<symptom>" --state all`
 2. Find the canonical issue and read how it was closed and which
    commit/PR fixed it.
 3. Check whether that fix is in the installed version: compare the

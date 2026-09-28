@@ -749,6 +749,9 @@ function wordsIncludingQuoted(command: string): string[] {
 // quoted content is itself split on whitespace before the basename check.
 // A word starting with `-` is checked past its `=`, so `--opt=<path>`
 // values are covered instead of every flag-shaped word being skipped.
+// A word that exists only inside quotes must also look like a path
+// (contain `/`, or start with `~` or `$`), so a commit message that merely
+// names `bypass.token` stays allowed while `cat "./bypass.token"` does not.
 //
 // This is still a syntactic, basename-based check: a glob that avoids
 // spelling the words out (e.g. `by*` expanding to the token file) cannot
@@ -758,7 +761,9 @@ function wordsIncludingQuoted(command: string): string[] {
 const readBypassToken: Rule = {
   id: 'read-bypass-token',
   inspect(command) {
+    const unquoted = new Set(tokens(command));
     for (const word of wordsIncludingQuoted(command)) {
+      if (!unquoted.has(word) && !/\/|^[~$]/.test(word)) continue;
       let candidate = word;
       if (word.startsWith('-')) {
         const eq = word.indexOf('=');

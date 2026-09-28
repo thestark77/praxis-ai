@@ -99,6 +99,16 @@ describe('git-path-invocation', () => {
 });
 
 describe('read-bypass-token', () => {
+  it('allows a quoted message that only names the file (no path shape)', () => {
+    expect(inspectBashCommand('git commit -m "remove bypass.token handling"').decision).toBe(
+      'allow',
+    );
+  });
+
+  it('still denies a quoted relative path to the token', () => {
+    expect(inspectBashCommand('cat "./bypass.token"').decision).toBe('deny');
+  });
+
   const TOKEN_PATH = '~/.local/state/iris-worktrees/bypass.token';
 
   it('denies `cat` on the Iris worktree-guard bypass token', () => {

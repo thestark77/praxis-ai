@@ -19,4 +19,5 @@ precedence on conflict via recency.
 @context-conventions.md
 @command-handoff.md
 @workflow-policy.md
+@effort-policy.md
 @presets/balanced.md

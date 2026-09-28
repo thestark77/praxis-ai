@@ -41,6 +41,17 @@ human), and at most 4 agents writing code at the same time. The gap mattered
 because parallel agents editing the same file, or a workflow that pushes on
 its own, both bite quietly until someone hits the collision.
 
+### Added - effort-policy module
+
+A written reasoning-effort policy: default to `medium` on Claude Opus 5.5
+for routine work (its own API default, and Anthropic's testing shows Opus
+5.5 at `medium` beats Opus 5 at `high` on coding and knowledge-work
+evaluations), escalate to `high` for architecture decisions,
+security-sensitive work, and corrections after a review, reserve
+`xhigh`/`max` for measured gains only since `max` is prone to overthink,
+and use `low` for simple delegated subagent tasks. The gap mattered because
+effort was otherwise raised by habit rather than by task.
+
 ## [0.1.0-alpha.27] - 2026-09-24
 
 ### Changed - gentle-ai 3.7.0 and engram 2.1.0 are the expected versions

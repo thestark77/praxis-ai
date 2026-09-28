@@ -89,8 +89,9 @@ the Iris-specific decision-model evaluation.
   Found and fixed, in the same change, a real evasion-class bug in the
   pre-existing `argv()` parser: it mishandled the standard shell `'\''`
   quote-escape idiom outside of quotes, which could turn a `deny` into an
-  `allow` for a sufficiently obfuscated nested `bash -c` chain. Not yet
-  committed/reported back to the orchestrator.
+  `allow` for a sufficiently obfuscated nested `bash -c` chain. Committed
+  as `4548406` on `feat/inspector-normalization`; not pushed, no PR
+  opened. Awaiting orchestrator review before checking this off.
 - [x] T8 `away-mode` — explicit skill for unattended sessions (Iris backlog
   item #1836, topic `praxis/backlog/away-mode`): readiness checks and flags
   (herdr, `cc-flags` auto_compact/auto_resume, context guard, review

@@ -19,6 +19,17 @@ correction, or an answer to the agent's own blocking question). It is the
 harness-wide home of the rule, so other overlays should depend on it instead
 of shipping their own copy.
 
+### Added - command-handoff module
+
+Commands handed to the user for them to run themselves now have a written
+rule: always use absolute paths (never a `~`-relative or cwd-dependent path
+unless there is no alternative), represent any secret with an obvious
+placeholder such as `PEGA_AQUI_TU_API_KEY`, and never print, echo, log, or
+read secrets back — prefer a command that reads the secret from the user's
+own environment or prompts for it instead. The gap mattered because a handed
+command that assumes the agent's cwd or embeds a real key is easy to
+copy-paste wrong or leak.
+
 ## [0.1.0-alpha.27] - 2026-09-24
 
 ### Changed - gentle-ai 3.7.0 and engram 2.1.0 are the expected versions

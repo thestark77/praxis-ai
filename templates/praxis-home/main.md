@@ -17,4 +17,5 @@ precedence on conflict via recency.
 @irreversibility-firewall.md
 @grilling.md
 @context-conventions.md
+@command-handoff.md
 @presets/balanced.md

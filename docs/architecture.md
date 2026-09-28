@@ -31,6 +31,7 @@ TypeScript-built CLI distributed via npm.
 ├── irreversibility-firewall.md
 ├── grilling.md         # /grill-with-docs procedure
 ├── context-conventions.md  # CONTEXT.md + ADR formats
+├── command-handoff.md  # absolute paths + secret placeholders in handed-off commands
 ├── presets/balanced.md
 ├── backups/<timestamp>/    # snapshots of CLAUDE.md + settings.json
 └── telemetry.db        # SQLite event log (M4)

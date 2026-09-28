@@ -22,4 +22,5 @@ precedence on conflict via recency.
 @effort-policy.md
 @context-budget.md
 @upstream-first-debugging.md
+@browser-testing-policy.md
 @presets/balanced.md

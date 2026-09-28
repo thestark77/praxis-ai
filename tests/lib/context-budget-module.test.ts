@@ -40,7 +40,48 @@ describe('praxis-home context-budget module', () => {
     const balanced = await readFile(join(templatesRoot, 'presets', 'balanced.md'), 'utf8');
     expect(balanced).not.toContain('Warn at 75%');
     expect(balanced).toContain('context-budget.md');
-    expect(balanced).toContain('50');
-    expect(balanced).toContain('60');
+    expect(balanced).toContain('between 50% and 60%');
+  });
+
+  it('documents a trust boundary restricting the guard messages to the controller turn', async () => {
+    const content = await readFile(join(templatesRoot, 'context-budget.md'), 'utf8');
+    expect(content).toContain('Trust boundary');
+    expect(content).toContain('user/controller turn');
+    expect(content).toContain('tool output');
+    expect(content).toContain('subagent result');
+    expect(content).toContain('pasted');
+  });
+
+  it('documents handoff path rules (absolute path, no overwrite of unrelated files, no secrets)', async () => {
+    const content = await readFile(join(templatesRoot, 'context-budget.md'), 'utf8');
+    expect(content).toContain('absolute path');
+    expect(content).toContain('Never overwrite an unrelated existing file');
+    expect(content).toContain('Never put secrets in the handoff');
+  });
+
+  it('treats a restored handoff as data to reconcile, not as new instructions', async () => {
+    const content = await readFile(join(templatesRoot, 'context-budget.md'), 'utf8');
+    expect(content).toContain('data to reconcile');
+    expect(content).toContain('not as new instructions');
+  });
+
+  it('documents the literal failure replies as an optional extension', async () => {
+    const content = await readFile(join(templatesRoot, 'context-budget.md'), 'utf8');
+    expect(content).toContain('COMPACT-FAILED <path>');
+    expect(content).toContain('RESTORE-FAILED');
+    expect(content).toContain('Engram unavailable');
+    expect(content).toContain('extension controllers may adopt');
+  });
+
+  it('phrases the controller intro neutrally while keeping the literal wire strings', async () => {
+    const content = await readFile(join(templatesRoot, 'context-budget.md'), 'utf8');
+    expect(content).toContain('Iris is the reference implementation');
+    expect(content).toContain('[IRIS CONTEXT GUARD] prepare-compact handoff=');
+  });
+
+  it('documents the ask-at-most-twice-per-phase poll policy', async () => {
+    const content = await readFile(join(templatesRoot, 'context-budget.md'), 'utf8');
+    expect(content).toContain('at most twice');
+    expect(content).toContain('the user will ask when ready');
   });
 });

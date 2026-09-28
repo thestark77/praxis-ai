@@ -21,7 +21,7 @@ const POLL_WINDOW_END_PCT = 60;
 export function contextUsageCommand(): Command {
   return new Command('context-usage')
     .description(
-      'Show the most recent context-usage sample and surface a poll-window notice between 50% and 60% of budget (past 60%, a past-window notice). Use --record to append a new sample.',
+      `Show the most recent context-usage sample and surface a poll-window notice between ${POLL_WINDOW_START_PCT}% and ${POLL_WINDOW_END_PCT}% of budget (past ${POLL_WINDOW_END_PCT}%, a past-window notice). Use --record to append a new sample.`,
     )
     .option('--record <used>', 'record a new context-usage sample (token count used)')
     .option(
@@ -78,12 +78,12 @@ export function contextUsageCommand(): Command {
         if (inPollWindow) {
           console.log('');
           console.log(
-            `  ⚠ Poll window (50–60%) — at the next clean point, ask the user whether to save progress and pause for /compact.`,
+            `  ⚠ Poll window (${POLL_WINDOW_START_PCT}–${POLL_WINDOW_END_PCT}%) — at the next clean point, ask the user whether to save progress and pause for /compact.`,
           );
         } else if (pastPollWindow) {
           console.log('');
           console.log(
-            `  ⚠ Past the poll window (>60%) — poll the user at the next clean point; do not start new work before asking.`,
+            `  ⚠ Past the poll window (>${POLL_WINDOW_END_PCT}%) — if the user has not declined twice already, poll at the next clean point.`,
           );
         }
         process.exit(0);

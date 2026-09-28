@@ -171,6 +171,7 @@ describe('praxis CLI telemetry — stats + context-usage (sandboxed HOME)', () =
       HOME: sandboxHome,
       PRAXIS_HOME: sandboxHome,
     });
+    expect(out).toContain('40.0%');
     expect(out).not.toContain('Poll window');
     expect(out).not.toContain('Past the poll window');
   });
@@ -191,6 +192,57 @@ describe('praxis CLI telemetry — stats + context-usage (sandboxed HOME)', () =
     expect(out).toContain('ask the user whether to save progress and pause for /compact');
   });
 
+  it('context-usage treats exactly 50% as inside the poll window', async () => {
+    const sandboxHome = await makeSandboxHome();
+    runCli('context-usage --record 100000 --budget 200000', {
+      ...process.env,
+      HOME: sandboxHome,
+      PRAXIS_HOME: sandboxHome,
+    });
+    const out = runCli('context-usage', {
+      ...process.env,
+      HOME: sandboxHome,
+      PRAXIS_HOME: sandboxHome,
+    });
+    expect(out).toContain('50.0%');
+    expect(out).toContain('Poll window (50–60%)');
+    expect(out).not.toContain('Past the poll window');
+  });
+
+  it('context-usage treats exactly 60% as inside the poll window', async () => {
+    const sandboxHome = await makeSandboxHome();
+    runCli('context-usage --record 120000 --budget 200000', {
+      ...process.env,
+      HOME: sandboxHome,
+      PRAXIS_HOME: sandboxHome,
+    });
+    const out = runCli('context-usage', {
+      ...process.env,
+      HOME: sandboxHome,
+      PRAXIS_HOME: sandboxHome,
+    });
+    expect(out).toContain('60.0%');
+    expect(out).toContain('Poll window (50–60%)');
+    expect(out).not.toContain('Past the poll window');
+  });
+
+  it('context-usage treats just over 60% as past the poll window', async () => {
+    const sandboxHome = await makeSandboxHome();
+    runCli('context-usage --record 120100 --budget 200000', {
+      ...process.env,
+      HOME: sandboxHome,
+      PRAXIS_HOME: sandboxHome,
+    });
+    const out = runCli('context-usage', {
+      ...process.env,
+      HOME: sandboxHome,
+      PRAXIS_HOME: sandboxHome,
+    });
+    expect(out).toContain('60.1%');
+    expect(out).toContain('Past the poll window (>60%)');
+    expect(out).not.toContain('Poll window (50–60%)');
+  });
+
   it('context-usage surfaces a past-window notice above 60%', async () => {
     const sandboxHome = await makeSandboxHome();
     runCli('context-usage --record 160000 --budget 200000', {
@@ -204,7 +256,9 @@ describe('praxis CLI telemetry — stats + context-usage (sandboxed HOME)', () =
       PRAXIS_HOME: sandboxHome,
     });
     expect(out).toContain('Past the poll window (>60%)');
-    expect(out).toContain('do not start new work before asking');
+    expect(out).toContain(
+      'if the user has not declined twice already, poll at the next clean point',
+    );
   });
 
   it('stats --reset truncates events', async () => {

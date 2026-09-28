@@ -29,5 +29,14 @@ describe('praxis-home upstream-first-debugging module', () => {
     expect(flat).toContain('git merge-base --is-ancestor');
     expect(flat).toContain("only with the user's explicit OK");
     expect(flat).toContain('#102486');
+    expect(flat).toContain('Commenting on an existing issue is also an external send');
+    expect(flat).toContain('Third-party open-source tools only');
+  });
+
+  it('only uses gh search flags the CLI accepts', async () => {
+    const content = await readFile(join(templatesRoot, 'upstream-first-debugging.md'), 'utf8');
+    // `gh search issues --state` accepts only open|closed; omitting it searches both.
+    expect(content).not.toMatch(/gh search issues[^\n]*--state all/);
+    expect(content).toContain('gh search issues --repo <owner/repo> "<symptom>" --include-prs');
   });
 });

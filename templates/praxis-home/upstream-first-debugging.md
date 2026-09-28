@@ -15,7 +15,9 @@ as usual.
 
 1. Search open AND closed issues and PRs for the symptom (error text,
    versions, platform), for example:
-   - `gh search issues --repo <owner/repo> "<symptom>" --state all`
+   - `gh search issues --repo <owner/repo> "<symptom>" --include-prs`
+     (no `--state`: it accepts only `open` or `closed`, and omitting it
+     searches both)
    - `gh issue list --search "<symptom>" --state all`
    - `gh pr list --search "<symptom>" --state all`
 2. Find the canonical issue and read how it was closed and which

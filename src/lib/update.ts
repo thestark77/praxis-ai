@@ -37,6 +37,7 @@ import { spawnSync } from 'node:child_process';
 import { resolvePaths, type PraxisPaths } from './paths.js';
 import { detect } from './detector.js';
 import { POCOCK_SKILLS } from '../data/pocock-skills.js';
+import { PRAXIS_NATIVE_SKILLS } from '../data/praxis-native-skills.js';
 import { PRAXIS_IMPORT_PATH } from '../data/firewall-defaults.js';
 import { findPraxisBlock, patchClaudeMd } from './claudemd-patcher.js';
 import {
@@ -241,32 +242,53 @@ async function repatchClaudeMd(claudeMdPath: string): Promise<boolean> {
   return true;
 }
 
+/** Fetch one skill file from the praxis-ai repo and write it into place,
+ * recording the outcome on `result`. Shared by the lifted-Pocock and
+ * praxis-native refresh loops in `updateSkills` below. */
+async function refreshSkillFile(
+  paths: PraxisPaths,
+  fetchFile: FileFetcher,
+  result: SkillsUpdateResult,
+  skillName: string,
+  file: string,
+): Promise<void> {
+  const { mkdir, writeFile } = await import('node:fs/promises');
+  const { join } = await import('node:path');
+  const rel = `${skillName}/${file}`;
+  const url = `${PRAXIS_SKILLS_BASE_URL}/${rel}`;
+  try {
+    const content = await fetchFile(url);
+    if (content === null) {
+      result.failedFiles.push(`${rel} (not found upstream)`);
+      return;
+    }
+    await mkdir(join(paths.claudeSkillsDir, skillName), { recursive: true });
+    await writeFile(join(paths.claudeSkillsDir, skillName, file), content, 'utf8');
+    result.updatedFiles.push(rel);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    result.failedFiles.push(`${rel} (${message})`);
+  }
+}
+
 async function updateSkills(
   paths: PraxisPaths,
   fetchFile: FileFetcher,
 ): Promise<SkillsUpdateResult> {
-  const { mkdir, writeFile } = await import('node:fs/promises');
-  const { join } = await import('node:path');
   const result: SkillsUpdateResult = { updatedFiles: [], failedFiles: [] };
 
+  // The six skills lifted from mattpocock/skills: NOTICE.md is implied.
   for (const skill of POCOCK_SKILLS) {
-    const destDir = join(paths.claudeSkillsDir, skill.name);
     for (const file of liftedFilesFor(skill.name)) {
-      const rel = `${skill.name}/${file}`;
-      const url = `${PRAXIS_SKILLS_BASE_URL}/${rel}`;
-      try {
-        const content = await fetchFile(url);
-        if (content === null) {
-          result.failedFiles.push(`${rel} (not found upstream)`);
-          continue;
-        }
-        await mkdir(destDir, { recursive: true });
-        await writeFile(join(paths.claudeSkillsDir, skill.name, file), content, 'utf8');
-        result.updatedFiles.push(rel);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        result.failedFiles.push(`${rel} (${message})`);
-      }
+      await refreshSkillFile(paths, fetchFile, result, skill.name, file);
+    }
+  }
+
+  // praxis-native skills (no upstream, so no implied NOTICE.md): refresh
+  // exactly the files each one declares.
+  for (const skill of PRAXIS_NATIVE_SKILLS) {
+    for (const file of skill.files) {
+      await refreshSkillFile(paths, fetchFile, result, skill.name, file);
     }
   }
 

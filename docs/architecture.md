@@ -19,7 +19,8 @@ TypeScript-built CLI distributed via npm.
     ├── diagnose/                               ← M2 lift
     ├── zoom-out/                               ← M2 lift
     ├── prototype/{SKILL,LOGIC,UI,NOTICE}.md   ← M2 lift
-    └── handoff/                                ← M2 lift
+    ├── handoff/                                ← M2 lift
+    └── away-mode/SKILL.md                      ← praxis-native, no NOTICE.md
 
 ~/.praxis/
 ├── main.md             # the @-imported entry point

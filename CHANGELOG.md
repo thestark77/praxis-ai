@@ -6,6 +6,25 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Added - away-mode skill
+
+A new explicit `away-mode` skill ("modo independiente") lets the user hand a
+session off to keep working unattended (sleep, an errand): it runs
+optional unattended-readiness checks (Herdr, `cc-flags` auto-compact/resume,
+Iris context guard, Iris review auto-consent, account-limit status), sizes
+any parallel workflow against `~/.praxis/workflow-policy.md`'s cap, sweeps
+for blockers the user would otherwise be needed for before they leave,
+states the overnight rules (no `AskUserQuestion` while away, defaults for
+small decisions, `NEEDS-USER` escalation to the Iris inbox or Engram, the
+irreversibility firewall still applies, an automatic save-and-continue in
+place of the context-budget poll), and proposes the exact `/loop` command
+to paste so the session wakes itself back up. A `check` invocation runs the
+readiness report only, without changing anything; invoking with "back" /
+"volví" closes it out with a summary and restores interactive rules. Unlike
+the six skills lifted from mattpocock/skills, this is a praxis-native skill
+with no upstream and no `NOTICE.md`; it installs, uninstalls, and updates
+alongside the lifted ones via a new `PRAXIS_NATIVE_SKILL_NAMES` list.
+
 ### Added - a queue-don't-preempt module
 
 A new user in the middle of a request would sometimes get their current work

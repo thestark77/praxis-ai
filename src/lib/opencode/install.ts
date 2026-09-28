@@ -38,6 +38,14 @@ import {
 } from '../skeleton-installer.js';
 import { FIREWALL_DEFAULTS } from '../../data/firewall-defaults.js';
 import { POCOCK_SKILL_NAMES } from '../../data/pocock-skills.js';
+import { PRAXIS_NATIVE_SKILL_NAMES } from '../../data/praxis-native-skills.js';
+
+/**
+ * Every Claude Code skill praxis manages: the six lifted from
+ * mattpocock/skills plus the praxis-native ones (away-mode). See
+ * src/lib/install.ts for the Claude Code counterpart of this union.
+ */
+const CLAUDE_SKILL_NAMES = [...POCOCK_SKILL_NAMES, ...PRAXIS_NATIVE_SKILL_NAMES];
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -90,7 +98,7 @@ export async function detectOpenCode(
   }
 
   const skillsInstalled: string[] = [];
-  for (const skill of POCOCK_SKILL_NAMES) {
+  for (const skill of CLAUDE_SKILL_NAMES) {
     if (await pathExists(join(paths.skillsDir, skill, 'SKILL.md'))) skillsInstalled.push(skill);
   }
 
@@ -220,7 +228,7 @@ export async function runOpenCodeInstall(
   const skills = await installClaudeSkills({
     templatesRoot: skillsTemplatesRoot,
     claudeSkillsDir: paths.skillsDir,
-    skills: POCOCK_SKILL_NAMES,
+    skills: CLAUDE_SKILL_NAMES,
     overwrite: opts.force,
   });
 
@@ -302,7 +310,7 @@ export async function runOpenCodeUninstall(
 
   const pluginRemoved = await removeFirewallPlugin(paths.firewallPlugin);
   const skillsRemoved = removeSkills
-    ? await uninstallClaudeSkills(paths.skillsDir, POCOCK_SKILL_NAMES)
+    ? await uninstallClaudeSkills(paths.skillsDir, CLAUDE_SKILL_NAMES)
     : [];
 
   return {

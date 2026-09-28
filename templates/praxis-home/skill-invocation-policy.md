@@ -15,6 +15,7 @@ the user's workflow:
 - `zoom-out`
 - `handoff`
 - `prototype`
+- `away-mode`
 
 Auto-firing these is a UX failure: it interrupts the user with ceremony they
 did not request.

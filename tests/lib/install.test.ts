@@ -44,6 +44,10 @@ beforeEach(async () => {
   // Two fake lifted skill dirs so installClaudeSkills has a real source.
   await makeClaudeSkillTemplate('grill-with-docs/SKILL.md', '---\nname: grill-with-docs\n---\n');
   await makeClaudeSkillTemplate('grill-with-docs/NOTICE.md', 'notice');
+  // A fake praxis-native skill dir (no NOTICE.md — native skills have no
+  // upstream to attribute) so installClaudeSkills exercises the combined
+  // Pocock + native skill list.
+  await makeClaudeSkillTemplate('away-mode/SKILL.md', '---\nname: away-mode\n---\n');
 });
 
 describe('runInstall', () => {
@@ -94,6 +98,12 @@ describe('runInstall', () => {
 
     const mainExists = await pathExists(join(paths.praxisDir, 'main.md'));
     expect(mainExists).toBe(true);
+
+    // The praxis-native away-mode skill installs alongside the lifted
+    // Pocock ones, without requiring a NOTICE.md.
+    expect(result.claudeSkillsInstalled).toContain('away-mode/SKILL.md');
+    const awayModeExists = await pathExists(join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'));
+    expect(awayModeExists).toBe(true);
   });
 
   it('--dry-run does not write any files', async () => {
@@ -186,6 +196,9 @@ describe('runUninstall', () => {
 
     expect(result.removedClaudeMdBlock).toBe(true);
     expect(result.removedSkeleton).toBe(true);
+    // The praxis-native away-mode skill uninstalls alongside the lifted
+    // Pocock ones.
+    expect(result.removedClaudeSkills).toContain('away-mode');
 
     const claudeMd = await readFile(paths.claudeMd, 'utf8');
     expect(hasPraxisBlock(claudeMd)).toBe(false);

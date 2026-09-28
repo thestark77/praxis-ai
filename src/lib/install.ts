@@ -41,12 +41,21 @@ import {
   claudeEntriesToRemove,
 } from './ownership.js';
 import { POCOCK_SKILL_NAMES } from '../data/pocock-skills.js';
+import { PRAXIS_NATIVE_SKILL_NAMES } from '../data/praxis-native-skills.js';
 import {
   bootstrapGentleAi,
   type GentleAiBootstrapOptions,
   type GentleAiBootstrapResult,
 } from './gentle-ai-bootstrap.js';
 import { checkDependencies, formatMissingDependencies, type DepProbe } from './dependency-check.js';
+
+/**
+ * Every Claude Code skill praxis manages under `~/.claude/skills/`: the six
+ * lifted from mattpocock/skills plus the praxis-native ones (away-mode).
+ * Both install and uninstall use this union so a native skill is never
+ * treated as a stray a user added by hand.
+ */
+const CLAUDE_SKILL_NAMES = [...POCOCK_SKILL_NAMES, ...PRAXIS_NATIVE_SKILL_NAMES];
 
 export interface InstallOptions {
   paths?: PraxisPaths;
@@ -292,7 +301,7 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
     ? await installClaudeSkills({
         templatesRoot: claudeSkillsTemplatesRoot,
         claudeSkillsDir: paths.claudeSkillsDir,
-        skills: POCOCK_SKILL_NAMES,
+        skills: CLAUDE_SKILL_NAMES,
         overwrite: opts.force,
       })
     : { installed: [], skipped: [] };
@@ -437,7 +446,7 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<Uninsta
 
   const removedClaudeSkills =
     removeClaudeSkillsFlag && wantsClaudeCode
-      ? await uninstallClaudeSkills(paths.claudeSkillsDir, POCOCK_SKILL_NAMES)
+      ? await uninstallClaudeSkills(paths.claudeSkillsDir, CLAUDE_SKILL_NAMES)
       : [];
 
   // Was the whole praxis dir actually removed, or did backups/telemetry survive?

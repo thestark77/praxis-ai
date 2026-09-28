@@ -96,6 +96,10 @@ describe('runUpdate — both targets', () => {
     expect(result.skills?.failedFiles).toEqual([]);
     expect(result.skills!.updatedFiles).toContain('handoff/SKILL.md');
     expect(result.skills!.updatedFiles).toContain('prototype/UI.md');
+    // The praxis-native away-mode skill refreshes alongside the lifted ones,
+    // without a NOTICE.md fetch (native skills have no upstream to attribute).
+    expect(result.skills!.updatedFiles).toContain('away-mode/SKILL.md');
+    expect(result.skills!.updatedFiles).not.toContain('away-mode/NOTICE.md');
 
     const written = await readFile(join(paths.claudeSkillsDir, 'caveman', 'SKILL.md'), 'utf8');
     expect(written).toContain('content-of:');

@@ -80,6 +80,12 @@ the whole stack and then layers its own overlay:
      (`grill-with-docs`, `caveman`, `diagnose`, `zoom-out`, `prototype`,
      `handoff`) with per-skill `NOTICE.md` attribution and mechanism-pure
      bodies that don't fight gentle-ai's autonomous orchestrator.
+   - One skill authored natively by praxis (`away-mode`, no upstream and no
+     `NOTICE.md`): explicitly invoked when the user is about to leave the
+     session unattended (sleep, an errand), it runs unattended-readiness
+     checks, sizes any parallel workflow, sweeps for blockers before the
+     user leaves, states the overnight rules, and proposes the exact
+     `/loop` command to keep the session going.
 4. **praxis overlay** into `~/.config/opencode/` — the same three layers
    expressed in OpenCode's own vocabulary (see below).
 
@@ -253,9 +259,9 @@ the rest of the praxis overlay** (your CLAUDE.md block, firewall, AST
 hook, telemetry, and `~/.praxis/` skeleton are left alone):
 
 ```bash
-praxis update              # update both gentle-ai and the lifted skills
+praxis update              # update both gentle-ai and the Claude Code skills
 praxis update --gentle-ai  # only gentle-ai (binary + components)
-praxis update --skills     # only the six lifted mattpocock skills
+praxis update --skills     # only the skills (six lifted mattpocock + away-mode)
 ```
 
 - **gentle-ai** is updated through its own config-preserving primitives

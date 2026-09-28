@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import { POCOCK_SKILLS, POCOCK_LICENSE, repoCommitFor } from '../../src/data/pocock-skills.js';
+import { PRAXIS_NATIVE_SKILL_NAMES } from '../../src/data/praxis-native-skills.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -43,14 +44,22 @@ function parseFrontmatter(content: string): Frontmatter {
 }
 
 describe('templates/claude-skills — directory shape', () => {
-  it('ships exactly the six expected skill directories', async () => {
+  it('ships exactly the six lifted Pocock skill directories plus the praxis-native ones', async () => {
     const entries = await readdir(SKILLS_ROOT, { withFileTypes: true });
     const dirs = entries
       .filter((e) => e.isDirectory())
       .map((e) => e.name)
       .sort();
     expect(dirs).toEqual(
-      ['caveman', 'diagnose', 'grill-with-docs', 'handoff', 'prototype', 'zoom-out'].sort(),
+      [
+        'caveman',
+        'diagnose',
+        'grill-with-docs',
+        'handoff',
+        'prototype',
+        'zoom-out',
+        ...PRAXIS_NATIVE_SKILL_NAMES,
+      ].sort(),
     );
   });
 

@@ -119,6 +119,8 @@ describe('runOpenCodeInstall', () => {
     // Skills.
     expect(result.skillsInstalled.length).toBeGreaterThan(0);
     expect(await exists(join(paths.skillsDir, 'grill-with-docs', 'SKILL.md'))).toBe(true);
+    // The praxis-native away-mode skill installs alongside the lifted ones.
+    expect(await exists(join(paths.skillsDir, 'away-mode', 'SKILL.md'))).toBe(true);
   });
 
   it('never clobbers gentle-ai agents, mcp servers or foreign permissions', async () => {
@@ -207,6 +209,7 @@ describe('runOpenCodeUninstall', () => {
     expect(result.pluginRemoved).toBe(true);
     expect(await exists(paths.firewallPlugin)).toBe(false);
     expect(result.skillsRemoved.length).toBeGreaterThan(0);
+    expect(result.skillsRemoved).toContain('away-mode');
   });
 
   it('leaves a rule praxis had raised at deny, recoverable via rollback', async () => {

@@ -67,6 +67,22 @@ controllers that need to force a handoff, with a trust boundary restricting
 those messages to the controller's own turns and literal `COMPACT-READY` /
 `COMPACT-FAILED` / `CONTEXT-RESTORED` / `RESTORE-FAILED` replies.
 
+### Added - block git-shim evasion, bypass-token reads, and forced branch deletion
+
+Three new AST rules close gaps a determined bypass could walk through: an
+absolute or relative path to `git` (`/usr/bin/git`, `./git`, `~/bin/git`)
+never reaches a shim installed on PATH under the plain `git` name, so
+`git-path-invocation` denies the invocation shape itself regardless of
+subcommand. `read-bypass-token` denies any command that reads, copies, or
+encodes a path whose basename names a guard bypass token — e.g. Iris's
+`~/.local/state/iris-worktrees/bypass.token` — across `cat`, `head`, `less`,
+`cp`, `base64`, `xxd`, and `<` redirection alike. `git-branch-force-delete`
+denies `git branch -D` and every force-delete spelling (`--delete --force`,
+`-d -f`, combined `-df`/`-Df`) while leaving plain `-d` allowed, matching the
+existing Layer 1 `git branch -D` deny with a check that also catches
+`--delete --force`. Layer 1 gained matching `Read(**/bypass.token)` and
+`Read(**/*bypass*token*)` entries.
+
 ## [0.1.0-alpha.27] - 2026-09-24
 
 ### Changed - gentle-ai 3.7.0 and engram 2.1.0 are the expected versions

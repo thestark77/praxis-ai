@@ -31,7 +31,8 @@ Categories covered (see [`src/data/firewall-defaults.ts`](../src/data/firewall-d
   (heuristic), `git rebase -i`
 - **Hook / signing bypass** — `--no-verify`, `--no-gpg-sign`
 - **Secrets paths** — `Read(.env)`, `Read(.env.*)`,
-  `Read(*/credentials*)`, `Read(*/.aws/*)`
+  `Read(*/credentials*)`, `Read(*/.aws/*)`, `Read(**/bypass.token)`,
+  `Read(**/*bypass*token*)`
 - **Block device / format** — `Bash(dd of=/dev/sd*)`,
   `Bash(mkfs*)`, `Bash(wipefs*)`, `Bash(shred*)`
 - **Privilege escalation** — `Bash(sudo *)`, `Bash(doas *)`
@@ -68,6 +69,17 @@ is then run against the rule set in `src/lib/ast/rules.ts`:
 | `encoded-execution` | exec-bypass | `base64`/`base32`/`xxd`/`openssl` paired with `sh`/`bash`/`exec`/`eval`; hex-printf-to-shell |
 | `dd-block-device` | data-loss | `dd of=/dev/(sd|nvme|hd|disk)` |
 | `mkfs` | data-loss | `mkfs*`, `wipefs`, `shred` |
+| `chmod-recursive-permissive` | data-loss | `chmod -R` to a world-writable mode (777, 666, `a+w`, ...) |
+| `chown-recursive` | data-loss | `chown -R` against `/`, `/usr`, `/etc`, `/var` |
+| `tar-absolute-names` | data-loss | `tar -x --absolute-names` / `-xP` (path-traversal extraction) |
+| `curl-pipe-shell` | exec-bypass | `curl`/`wget`/`fetch` piped into a shell |
+| `pip-install-target-root` | data-loss | `pip install --target /`, `/usr`, `/etc` |
+| `git-update-ref` | history-rewrite | `git update-ref` against `refs/heads/*` or `refs/tags/*` |
+| `git-filter-branch` | history-rewrite | any `git filter-branch` invocation |
+| `npm-install-force` | exec-bypass | `npm`/`pnpm`/`yarn` install with `--force`/`-f` |
+| `git-branch-force-delete` | delete | `git branch -D`, or `-d`/`--delete` combined with `-f`/`--force` (including combined flags like `-df`); plain `-d` stays allowed |
+| `git-path-invocation` | guard-evasion | `git` invoked via an absolute or relative path (`/usr/bin/git`, `./git`, `~/bin/git`) instead of the bare `git` on PATH — routes around a shim |
+| `read-bypass-token` | secrets | any command referencing a path whose basename contains both `bypass` and `token` (e.g. `~/.local/state/iris-worktrees/bypass.token`), across readers, copiers, encoders, and `<` redirection |
 
 The hook returns `deny` with a human-readable reason listing every
 rule that hit and its reversibility class. The reason text is the same

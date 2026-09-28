@@ -112,6 +112,12 @@ export const FIREWALL_DEFAULTS: string[] = [
   'Read(~/.ssh/id_*)',
   'Read(~/.aws/credentials)',
   'Read(~/.config/gcloud/*)',
+  // Bypass tokens. A bypass token (e.g. Iris's git-worktree guard token at
+  // `~/.local/state/iris-worktrees/bypass.token`) exists to let a session
+  // skip a guard; reading it is functionally equivalent to reading a
+  // credential, mirrored by the L2 AST rule `read-bypass-token`.
+  'Read(**/bypass.token)',
+  'Read(**/*bypass*token*)',
 
   // MCP tools that destroy remote or shared state.
   //

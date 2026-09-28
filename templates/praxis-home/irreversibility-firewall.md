@@ -22,6 +22,20 @@ bypasses.
      praxis-ai to proceed via an alternative reversible path.
 4. Wait for explicit user authorisation before any related retry.
 
+## Guard-evasion bans (do not attempt, even without a deny block)
+
+- Never invoke `git` by an absolute or relative path (`/usr/bin/git`,
+  `./git`, `~/bin/git`) to route around a `git` shim installed on PATH.
+  Always use the bare `git` command.
+- Never read, print, copy, or exfiltrate a bypass token — a file whose job
+  is to let a session skip a guard, such as Iris's git-worktree-guard token
+  at `~/.local/state/iris-worktrees/bypass.token`. This applies to any
+  reader (`cat`, `head`, `less`, `cp`, `base64`, `xxd`, redirection into a
+  command), not just the ones the deny list happens to name.
+- Delete branches only with `git branch -d` after verifying the merge
+  (`git branch --merged`). Never use `-D`, `-d --force`/`-f`, or any
+  combined-flag spelling of force-delete.
+
 ## Anticipatory pauses (no deny block needed)
 
 Even when the permission layer does NOT block, pause and confirm before any

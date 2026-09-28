@@ -16,7 +16,8 @@ export type ReversibilityClass =
   | 'delete'
   | 'secrets'
   | 'exec-bypass'
-  | 'sudo-escalation';
+  | 'sudo-escalation'
+  | 'guard-evasion';
 
 export interface RuleHit {
   ruleId: string;
@@ -77,6 +78,12 @@ function stripQuoted(command: string): string {
 
 function tokens(command: string): string[] {
   return stripQuoted(command).split(/\s+/).filter(Boolean);
+}
+
+/** Last path segment of a token, whichever slash style it uses. */
+function basename(word: string): string {
+  const cut = Math.max(word.lastIndexOf('/'), word.lastIndexOf('\\'));
+  return cut === -1 ? word : word.slice(cut + 1);
 }
 
 // rm -rf in any form: -rf, -r -f, -fr, -Rf, --recursive --force, etc.
@@ -474,6 +481,138 @@ const npmInstallForce: Rule = {
   },
 };
 
+// git invoked by an absolute or relative path (e.g. `/usr/bin/git`,
+// `./git`, `~/bin/git`) instead of the bare `git` on PATH. The only reason
+// to spell it this way is to route around a shim installed on PATH under
+// the name `git` — the shim never sees the call, so a rule that only
+// checks `git`-branded subcommands (force-push, reset --hard, ...) is
+// trivially bypassed by this one invocation shape. This rule denies the
+// shape itself, regardless of subcommand: a bypass path that only fires on
+// dangerous subcommands still lets an agent probe which subcommands are
+// covered.
+// Wrappers that run the next word as the program. Together with leading
+// `VAR=value` assignments, they would otherwise hide a path-form git from
+// a check that only looks at the first token (`env /usr/bin/git ...`).
+const PROGRAM_WRAPPERS = new Set(['env', 'command', 'exec', 'nohup', 'nice', 'time', 'builtin']);
+
+/**
+ * The program a command actually runs: skips leading env assignments,
+ * wrappers, and the wrappers' flags and numeric arguments (`nice -n 5`).
+ */
+function effectiveProgram(toks: string[]): string | undefined {
+  let i = 0;
+  let wrapped = false;
+  while (i < toks.length) {
+    const t = toks[i]!;
+    const isAssignment = /^[A-Za-z_][A-Za-z0-9_]*=/.test(t);
+    const isWrapperArg = wrapped && (t.startsWith('-') || /^\d+$/.test(t));
+    if (isAssignment || isWrapperArg) {
+      i++;
+      continue;
+    }
+    if (PROGRAM_WRAPPERS.has(t)) {
+      wrapped = true;
+      i++;
+      continue;
+    }
+    return t;
+  }
+  return undefined;
+}
+
+const gitPathInvocation: Rule = {
+  id: 'git-path-invocation',
+  inspect(command) {
+    const prog = effectiveProgram(tokens(command));
+    if (!prog || !prog.includes('/')) return null;
+    if (basename(prog) !== 'git') return null;
+    return {
+      ruleId: 'git-path-invocation',
+      reversibilityClass: 'guard-evasion',
+      message:
+        `Invoking git via a path (\`${prog}\`) instead of the bare \`git\` on PATH routes ` +
+        'around any shim installed under that name. Use plain `git`.',
+    };
+  },
+};
+
+// Reading, copying, dumping, or otherwise touching a bypass-token file —
+// e.g. `~/.local/state/iris-worktrees/bypass.token`, the token that lets a
+// session skip the Iris git-worktree guard. The check is basename-based so
+// it catches every reader (`cat`, `head`, `less`, `cp`, `base64`, `xxd`,
+// redirection `< path`, ...) without enumerating them, but it only looks
+// at whitespace-delimited tokens after quote-stripping, so a quoted prose
+// mention ("bypass token" in a commit message) never trips it.
+const readBypassToken: Rule = {
+  id: 'read-bypass-token',
+  inspect(command) {
+    const toks = tokens(command);
+    for (const t of toks) {
+      if (t.startsWith('-')) continue;
+      const base = basename(t).toLowerCase();
+      if (base.includes('bypass') && base.includes('token')) {
+        return {
+          ruleId: 'read-bypass-token',
+          reversibilityClass: 'secrets',
+          message:
+            `Reading or copying a bypass-token path (\`${t}\`) is denied. A bypass token ` +
+            '(e.g. `~/.local/state/iris-worktrees/bypass.token`) exists to let a session ' +
+            'skip a guard; reading, printing, or exfiltrating it defeats that guard for ' +
+            'every session that trusts it.',
+        };
+      }
+    }
+    return null;
+  },
+};
+
+// `git branch -D` (and every spelling of delete+force: `--delete --force`,
+// `-d --force`/`-f`, combined `-df`/`-Df`) skips the merge check that
+// plain `-d` enforces. `-d` alone stays allowed; so does `--merged`, which
+// only lists branches.
+const gitBranchForceDelete: Rule = {
+  id: 'git-branch-force-delete',
+  inspect(command) {
+    const toks = tokens(command);
+    if (toks[0] !== 'git' || toks[1] !== 'branch') return null;
+    let deleting = false;
+    let forced = false;
+    for (const t of toks.slice(2)) {
+      if (t === '-D') {
+        deleting = true;
+        forced = true;
+        continue;
+      }
+      if (t === '-d' || t === '--delete') {
+        deleting = true;
+        continue;
+      }
+      if (t === '--force' || t === '-f') {
+        forced = true;
+        continue;
+      }
+      if (t.startsWith('-') && !t.startsWith('--')) {
+        for (const ch of t.slice(1)) {
+          if (ch === 'd' || ch === 'D') deleting = true;
+          if (ch === 'D' || ch === 'f') forced = true;
+        }
+      }
+    }
+    if (deleting && forced) {
+      return {
+        ruleId: 'git-branch-force-delete',
+        reversibilityClass: 'delete',
+        message:
+          '`git branch -D` (or `--delete`/`-d` combined with `--force`/`-f`) deletes a ' +
+          'branch even if it is not merged, discarding its commits with no reflog entry ' +
+          'pointing back at them from any other ref. Verify first with `git branch ' +
+          '--merged`, then delete with `-d`.',
+      };
+    }
+    return null;
+  },
+};
+
 export const DEFAULT_RULES: Rule[] = [
   rmDangerous,
   findDelete,
@@ -481,6 +620,9 @@ export const DEFAULT_RULES: Rule[] = [
   gitResetHard,
   gitUpdateRef,
   gitFilterBranch,
+  gitBranchForceDelete,
+  gitPathInvocation,
+  readBypassToken,
   noVerify,
   sudoEscalation,
   encodedExecution,

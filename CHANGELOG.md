@@ -30,6 +30,17 @@ own environment or prompts for it instead. The gap mattered because a handed
 command that assumes the agent's cwd or embeds a real key is easy to
 copy-paste wrong or leak.
 
+### Added - workflow-policy module
+
+Multi-agent workflows now have a written policy: use one only for genuinely
+independent batches of work, one task per worktree, disjoint files across
+parallel agents with a single owner for any shared hot spot (`CHANGELOG.md`,
+an index or import list), never deliver from inside a workflow (push, merge,
+deploy, release, and PR merge stay with the orchestrating session and the
+human), and at most 4 agents writing code at the same time. The gap mattered
+because parallel agents editing the same file, or a workflow that pushes on
+its own, both bite quietly until someone hits the collision.
+
 ## [0.1.0-alpha.27] - 2026-09-24
 
 ### Changed - gentle-ai 3.7.0 and engram 2.1.0 are the expected versions

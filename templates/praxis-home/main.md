@@ -18,4 +18,5 @@ precedence on conflict via recency.
 @grilling.md
 @context-conventions.md
 @command-handoff.md
+@workflow-policy.md
 @presets/balanced.md

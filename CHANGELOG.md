@@ -4,6 +4,21 @@ All notable changes to praxis-ai are documented here.
 This project follows [Semantic Versioning](https://semver.org/) and
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added - a queue-don't-preempt module
+
+A new user in the middle of a request would sometimes get their current work
+dropped when a second message arrived, because nothing in the overlay told
+the agent to keep going instead of switching. `templates/praxis-home/queue-rule.md`
+is now imported from `main.md`: it notes a new request in a visible queue
+line, keeps working on the current task to a clean, resumable checkpoint,
+then continues from the queue highest-priority-first, except for a short list
+of exceptions (an explicit "now"/"ahora"/"ya"/"urgente", a direct question, a
+correction, or an answer to the agent's own blocking question). It is the
+harness-wide home of the rule, so other overlays should depend on it instead
+of shipping their own copy.
+
 ## [0.1.0-alpha.27] - 2026-09-24
 
 ### Changed - gentle-ai 3.7.0 and engram 2.1.0 are the expected versions

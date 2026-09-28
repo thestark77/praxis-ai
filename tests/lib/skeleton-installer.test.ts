@@ -132,6 +132,7 @@ describe('integration: bundled templates resolve at runtime', () => {
     expect(entries).toContain('main.md');
     expect(entries).toContain('philosophy.md');
     expect(entries).toContain('phase-flow.md');
+    expect(entries).toContain('queue-rule.md');
     expect(entries).toContain('irreversibility-firewall.md');
     expect(entries).toContain('skill-invocation-policy.md');
     expect(entries).toContain('precedence-rules.md');

@@ -13,10 +13,13 @@ interface ContextUsageOpts {
 // Praxis-ai balanced preset polls the user between 50% and 60% of effective
 // context capacity at the next clean point (see templates/praxis-home/context-budget.md).
 // Below the window: no notice. Inside it: poll-window notice. Above it: a
-// past-window notice — poll at the next clean point, do not start new work
-// before asking.
+// past-window notice — unless the user already declined twice, poll at the
+// next clean point and do not start new work before asking.
 const POLL_WINDOW_START_PCT = 50;
 const POLL_WINDOW_END_PCT = 60;
+const PAST_WINDOW_NOTICE =
+  `Past the poll window (>${POLL_WINDOW_END_PCT}%) — unless the user already ` +
+  'declined twice, poll at the next clean point and do not start new work before asking.';
 
 export function contextUsageCommand(): Command {
   return new Command('context-usage')
@@ -67,14 +70,19 @@ export function contextUsageCommand(): Command {
           process.exit(0);
         }
 
+        // Round once and classify on that same rounded value used for display,
+        // so a display-boundary value (e.g. 60.04% -> "60.0%") is never shown
+        // inside the window while being classified as past it, or vice versa.
+        const percentDisplay = sample.percent.toFixed(1);
+        const roundedPercent = Number(percentDisplay);
         const inPollWindow =
-          sample.percent >= POLL_WINDOW_START_PCT && sample.percent <= POLL_WINDOW_END_PCT;
-        const pastPollWindow = sample.percent > POLL_WINDOW_END_PCT;
+          roundedPercent >= POLL_WINDOW_START_PCT && roundedPercent <= POLL_WINDOW_END_PCT;
+        const pastPollWindow = roundedPercent > POLL_WINDOW_END_PCT;
         console.log('praxis context-usage');
         console.log('');
         console.log(`  latest sample: ${new Date(sample.ts).toISOString()}`);
         console.log(`  used / budget: ${sample.used} / ${sample.budget}`);
-        console.log(`  percent:       ${sample.percent.toFixed(1)}%`);
+        console.log(`  percent:       ${percentDisplay}%`);
         if (inPollWindow) {
           console.log('');
           console.log(
@@ -82,9 +90,7 @@ export function contextUsageCommand(): Command {
           );
         } else if (pastPollWindow) {
           console.log('');
-          console.log(
-            `  ⚠ Past the poll window (>${POLL_WINDOW_END_PCT}%) — if the user has not declined twice already, poll at the next clean point.`,
-          );
+          console.log(`  ⚠ ${PAST_WINDOW_NOTICE}`);
         }
         process.exit(0);
       } finally {

@@ -21,7 +21,8 @@
 - In-window read: percent line present + "Poll window (50–60%)" + a prompt to
   ask the user whether to save progress and pause for `/compact`.
 - Past-window read: percent line present + "Past the poll window (>60%)" +
-  a note not to start new work before asking.
+  a note that, unless the user already declined twice, it should poll at the
+  next clean point and not start new work before asking.
 
 ## Verification
 - Capture stdout of each call.

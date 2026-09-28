@@ -84,4 +84,20 @@ describe('praxis-home context-budget module', () => {
     expect(content).toContain('at most twice');
     expect(content).toContain('the user will ask when ready');
   });
+
+  it('uses a literal `-` path placeholder in COMPACT-FAILED when the path is empty or missing', async () => {
+    const raw = await readFile(join(templatesRoot, 'context-budget.md'), 'utf8');
+    const content = raw.replace(/\s+/g, ' ');
+    expect(content).toContain('empty or missing');
+    expect(content).toContain('COMPACT-FAILED - <short reason>');
+  });
+
+  it('validates the restore path is absolute and recognizably a handoff document before loading it', async () => {
+    const raw = await readFile(join(templatesRoot, 'context-budget.md'), 'utf8');
+    const content = raw.replace(/\s+/g, ' ');
+    expect(content).toContain('MUST be an absolute path');
+    expect(content).toContain('recognizably a handoff document');
+    expect(content).toContain('do not load it');
+    expect(content).toContain('RESTORE-FAILED <short reason>');
+  });
 });

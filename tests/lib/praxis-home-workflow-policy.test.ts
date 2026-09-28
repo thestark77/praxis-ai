@@ -24,8 +24,12 @@ describe('praxis-home workflow-policy module', () => {
   it('states the disjoint-ownership, no-delivery, and concurrency-cap clauses', async () => {
     const content = await readFile(join(templatesRoot, 'workflow-policy.md'), 'utf8');
     expect(content).toContain('one task per worktree');
-    expect(content).toContain('single owner');
-    expect(content).toContain('never deliver');
-    expect(content).toContain('at most 4');
+    // Assert rule bodies, not only section headings.
+    const flat = content.replace(/\s+/g, ' ');
+    expect(flat).toContain('Files touched by parallel agents must be disjoint');
+    expect(flat).toContain('give it a single owner: one agent writes it');
+    expect(flat).toContain('no push, merge, deploy, release, or PR merge');
+    expect(flat).toContain('Run at most 4 agents writing code at the same time');
+    expect(flat).toContain('Workflow size — the number of agents or batches — is set per session');
   });
 });

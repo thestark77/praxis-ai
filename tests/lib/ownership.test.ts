@@ -10,6 +10,7 @@ import {
   opencodeRulesToRemove,
   ownershipPath,
   emptyLedger,
+  isPraxisOwnedNativeSkillFile,
 } from '../../src/lib/ownership.js';
 
 async function praxisDir(): Promise<string> {
@@ -135,5 +136,51 @@ describe('a ledger inherited from a pre-ledger install', () => {
     const ledger = await readOwnership(dir);
     expect(ledger?.inheritedPreLedgerInstall).toBe(false);
     expect(claudeEntriesToRemove(ledger, firewall)).toEqual(['Read(.env)']);
+  });
+});
+
+describe('isPraxisOwnedNativeSkillFile', () => {
+  it('recognizes a shipped native skill file: matching name + praxis-native: true', () => {
+    const content = '---\nname: away-mode\ninvocation: explicit\npraxis-native: true\n---\nbody\n';
+    expect(isPraxisOwnedNativeSkillFile(content, 'away-mode')).toBe(true);
+  });
+
+  it('rejects a file missing the praxis-native marker (a user-authored file)', () => {
+    const content = '---\nname: away-mode\ndescription: my own thing\n---\nmy body\n';
+    expect(isPraxisOwnedNativeSkillFile(content, 'away-mode')).toBe(false);
+  });
+
+  it('rejects a file whose frontmatter names a different skill', () => {
+    const content = '---\nname: something-else\npraxis-native: true\n---\n';
+    expect(isPraxisOwnedNativeSkillFile(content, 'away-mode')).toBe(false);
+  });
+
+  it('rejects a file with no frontmatter at all', () => {
+    expect(isPraxisOwnedNativeSkillFile('just some markdown\n', 'away-mode')).toBe(false);
+  });
+
+  it('rejects praxis-native set to a non-true value', () => {
+    const content = '---\nname: away-mode\npraxis-native: false\n---\n';
+    expect(isPraxisOwnedNativeSkillFile(content, 'away-mode')).toBe(false);
+  });
+
+  it('is case-insensitive for the praxis-native boolean value', () => {
+    const content = '---\nname: away-mode\npraxis-native: TRUE\n---\n';
+    expect(isPraxisOwnedNativeSkillFile(content, 'away-mode')).toBe(true);
+  });
+
+  it('tolerates CRLF line endings in the frontmatter block', () => {
+    const content = '---\r\nname: away-mode\r\npraxis-native: true\r\n---\r\nbody\r\n';
+    expect(isPraxisOwnedNativeSkillFile(content, 'away-mode')).toBe(true);
+  });
+
+  it('tolerates a leading UTF-8 BOM', () => {
+    const content = '﻿---\nname: away-mode\npraxis-native: true\n---\nbody\n';
+    expect(isPraxisOwnedNativeSkillFile(content, 'away-mode')).toBe(true);
+  });
+
+  it('tolerates a leading UTF-8 BOM combined with CRLF line endings', () => {
+    const content = '﻿---\r\nname: away-mode\r\npraxis-native: true\r\n---\r\nbody\r\n';
+    expect(isPraxisOwnedNativeSkillFile(content, 'away-mode')).toBe(true);
   });
 });

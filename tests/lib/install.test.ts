@@ -44,6 +44,15 @@ beforeEach(async () => {
   // Two fake lifted skill dirs so installClaudeSkills has a real source.
   await makeClaudeSkillTemplate('grill-with-docs/SKILL.md', '---\nname: grill-with-docs\n---\n');
   await makeClaudeSkillTemplate('grill-with-docs/NOTICE.md', 'notice');
+  // A fake praxis-native skill dir (no NOTICE.md — native skills have no
+  // upstream to attribute) so installClaudeSkills exercises the combined
+  // Pocock + native skill list. Carries the praxis-native marker, matching
+  // the real shipped away-mode/SKILL.md, so an install-then-uninstall round
+  // trip is recognized as praxis-owned.
+  await makeClaudeSkillTemplate(
+    'away-mode/SKILL.md',
+    '---\nname: away-mode\npraxis-native: true\n---\n',
+  );
 });
 
 describe('runInstall', () => {
@@ -94,6 +103,12 @@ describe('runInstall', () => {
 
     const mainExists = await pathExists(join(paths.praxisDir, 'main.md'));
     expect(mainExists).toBe(true);
+
+    // The praxis-native away-mode skill installs alongside the lifted
+    // Pocock ones, without requiring a NOTICE.md.
+    expect(result.claudeSkillsInstalled).toContain('away-mode/SKILL.md');
+    const awayModeExists = await pathExists(join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'));
+    expect(awayModeExists).toBe(true);
   });
 
   it('--dry-run does not write any files', async () => {
@@ -186,6 +201,10 @@ describe('runUninstall', () => {
 
     expect(result.removedClaudeMdBlock).toBe(true);
     expect(result.removedSkeleton).toBe(true);
+    // The praxis-native away-mode skill uninstalls alongside the lifted
+    // Pocock ones.
+    expect(result.removedClaudeSkills).toContain('away-mode');
+    expect(result.claudeSkillsSkippedNotOwned).toEqual([]);
 
     const claudeMd = await readFile(paths.claudeMd, 'utf8');
     expect(hasPraxisBlock(claudeMd)).toBe(false);
@@ -201,6 +220,87 @@ describe('runUninstall', () => {
     expect(mainExists).toBe(false);
     const backupsDirExists = await pathExists(paths.backupsDir);
     expect(backupsDirExists).toBe(true);
+  });
+
+  it('leaves a user-authored away-mode skill directory in place on uninstall', async () => {
+    const paths = resolvePaths(home);
+    await mkdir(paths.claudeDir, { recursive: true });
+    await writeFile(paths.claudeMd, '', 'utf8');
+    await writeFile(paths.settingsJson, '{}\n', 'utf8');
+    const firewall = ['Bash(rm -rf *)'];
+
+    await runInstall({
+      paths,
+      templatesRoot,
+      claudeSkillsTemplatesRoot,
+      firewallEntries: firewall,
+    });
+    // The user replaces the installed away-mode skill with their own,
+    // unmarked, version before uninstalling.
+    await writeFile(
+      join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'),
+      '---\nname: away-mode\ndescription: my own thing\n---\nmy own body\n',
+      'utf8',
+    );
+
+    const result = await runUninstall({ paths, firewallEntries: firewall });
+
+    expect(result.removedClaudeSkills).not.toContain('away-mode');
+    expect(result.claudeSkillsSkippedNotOwned).toContain('away-mode');
+    const preserved = await readFile(join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'), 'utf8');
+    expect(preserved).toContain('my own body');
+  });
+
+  it('does not overwrite a user-authored away-mode skill dir even with force: true', async () => {
+    const paths = resolvePaths(home);
+    await mkdir(paths.claudeDir, { recursive: true });
+    await writeFile(paths.claudeMd, '', 'utf8');
+    await writeFile(paths.settingsJson, '{}\n', 'utf8');
+
+    await runInstall({ paths, templatesRoot, claudeSkillsTemplatesRoot });
+    // The user replaces the installed away-mode skill with their own,
+    // unmarked, version before reinstalling with --force.
+    await writeFile(
+      join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'),
+      '---\nname: away-mode\ndescription: my own thing\n---\nmy own body\n',
+      'utf8',
+    );
+
+    const result = await runInstall({
+      paths,
+      templatesRoot,
+      claudeSkillsTemplatesRoot,
+      force: true,
+    });
+
+    expect(result.claudeSkillsInstalled).not.toContain('away-mode/SKILL.md');
+    expect(result.claudeSkillsSkippedNotOwned).toContain('away-mode');
+    const preserved = await readFile(join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'), 'utf8');
+    expect(preserved).toContain('my own body');
+  });
+
+  it('still overwrites a praxis-owned away-mode skill dir with force: true', async () => {
+    const paths = resolvePaths(home);
+    await mkdir(paths.claudeDir, { recursive: true });
+    await writeFile(paths.claudeMd, '', 'utf8');
+    await writeFile(paths.settingsJson, '{}\n', 'utf8');
+
+    await runInstall({ paths, templatesRoot, claudeSkillsTemplatesRoot });
+    await writeFile(
+      join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'),
+      '---\nname: away-mode\npraxis-native: true\n---\nstale body\n',
+      'utf8',
+    );
+
+    const result = await runInstall({
+      paths,
+      templatesRoot,
+      claudeSkillsTemplatesRoot,
+      force: true,
+    });
+
+    expect(result.claudeSkillsInstalled).toContain('away-mode/SKILL.md');
+    expect(result.claudeSkillsSkippedNotOwned).toEqual([]);
   });
 
   it('keeps skeleton when removeSkeleton is false', async () => {

@@ -40,7 +40,8 @@ import {
   clearOwnership,
   claudeEntriesToRemove,
 } from './ownership.js';
-import { POCOCK_SKILL_NAMES } from '../data/pocock-skills.js';
+import { PRAXIS_NATIVE_SKILL_NAMES } from '../data/praxis-native-skills.js';
+import { CLAUDE_SKILL_NAMES } from '../data/skill-registry.js';
 import {
   bootstrapGentleAi,
   type GentleAiBootstrapOptions,
@@ -88,6 +89,11 @@ export interface InstallResult {
   skeletonSkipped: string[];
   claudeSkillsInstalled: string[];
   claudeSkillsSkipped: string[];
+  /**
+   * Native skill dirs left untouched (even under --force) because the
+   * on-disk SKILL.md was not praxis-owned. See src/lib/skeleton-installer.ts.
+   */
+  claudeSkillsSkippedNotOwned: string[];
   firewallEntriesAdded: number;
   claudeMdPatched: boolean;
   astHookRegistered: boolean;
@@ -215,6 +221,7 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
       skeletonSkipped: [],
       claudeSkillsInstalled: [],
       claudeSkillsSkipped: [],
+      claudeSkillsSkippedNotOwned: [],
       firewallEntriesAdded: 0,
       claudeMdPatched: false,
       astHookRegistered: false,
@@ -292,10 +299,11 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
     ? await installClaudeSkills({
         templatesRoot: claudeSkillsTemplatesRoot,
         claudeSkillsDir: paths.claudeSkillsDir,
-        skills: POCOCK_SKILL_NAMES,
+        skills: CLAUDE_SKILL_NAMES,
         overwrite: opts.force,
+        nativeSkillNames: PRAXIS_NATIVE_SKILL_NAMES,
       })
-    : { installed: [], skipped: [] };
+    : { installed: [], skipped: [], skippedNotOwned: [] };
 
   // An upgrade from a version that predates the ledger finds praxis
   // already installed and no record of what it installed. Every rule then
@@ -343,6 +351,7 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
     skeletonSkipped: skeleton.skipped,
     claudeSkillsInstalled: claudeSkills.installed,
     claudeSkillsSkipped: claudeSkills.skipped,
+    claudeSkillsSkippedNotOwned: claudeSkills.skippedNotOwned,
     firewallEntriesAdded: claudeEntriesAdded.length,
     claudeMdPatched: wantsClaudeCode,
     astHookRegistered: wantsClaudeCode,
@@ -381,6 +390,13 @@ export interface UninstallResult {
    */
   praxisDirFullyRemoved: boolean;
   removedClaudeSkills: string[];
+  /**
+   * Native skill directories left in place because they were not
+   * praxis-owned (missing the `praxis-native` frontmatter marker, or a
+   * different skill's frontmatter) — most likely a user's own directory
+   * sharing the name. See src/lib/ownership.ts.
+   */
+  claudeSkillsSkippedNotOwned: string[];
   removedAstHook: boolean;
   /** Present only when OpenCode was one of the targets. */
   opencode: OpenCodeUninstallResult | null;
@@ -435,10 +451,12 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<Uninsta
     await uninstallSkeleton(paths.praxisDir);
   }
 
-  const removedClaudeSkills =
+  const claudeSkillsResult =
     removeClaudeSkillsFlag && wantsClaudeCode
-      ? await uninstallClaudeSkills(paths.claudeSkillsDir, POCOCK_SKILL_NAMES)
-      : [];
+      ? await uninstallClaudeSkills(paths.claudeSkillsDir, CLAUDE_SKILL_NAMES, {
+          nativeSkillNames: PRAXIS_NATIVE_SKILL_NAMES,
+        })
+      : { removed: [], skippedNotOwned: [] };
 
   // Was the whole praxis dir actually removed, or did backups/telemetry survive?
   const { stat } = await import('node:fs/promises');
@@ -457,7 +475,8 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<Uninsta
     preservedFirewallEntries: wantsClaudeCode ? claudeEntriesPreserved : 0,
     removedSkeleton: removeSkeleton,
     praxisDirFullyRemoved,
-    removedClaudeSkills,
+    removedClaudeSkills: claudeSkillsResult.removed,
+    claudeSkillsSkippedNotOwned: claudeSkillsResult.skippedNotOwned,
     removedAstHook,
     opencode,
     restoredFromBackup: null,

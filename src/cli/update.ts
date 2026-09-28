@@ -44,8 +44,13 @@ export function updateCommand(): Command {
         }
 
         if (result.skills) {
+          const skippedSuffix =
+            result.skills.skippedNotOwned.length > 0
+              ? `, ${result.skills.skippedNotOwned.length} skipped (not praxis-owned)`
+              : '';
           console.log(
-            `  skills: ${result.skills.updatedFiles.length} updated, ${result.skills.failedFiles.length} failed`,
+            `  skills: ${result.skills.updatedFiles.length} updated, ` +
+              `${result.skills.failedFiles.length} failed${skippedSuffix}`,
           );
         }
 

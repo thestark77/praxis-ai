@@ -40,6 +40,12 @@ export function uninstallCommand(): Command {
           console.log(`  ~/.praxis/ left in place (--keep-skeleton)`);
         }
         console.log(`  claude-skills removed: ${result.removedClaudeSkills.length}`);
+        if (result.claudeSkillsSkippedNotOwned.length > 0) {
+          console.log(
+            `  claude-skills skipped (not praxis-owned): ` +
+              result.claudeSkillsSkippedNotOwned.join(', '),
+          );
+        }
         console.log(`  AST PreToolUse hook removed: ${result.removedAstHook}`);
         if (result.opencode) {
           const oc = result.opencode;
@@ -50,6 +56,11 @@ export function uninstallCommand(): Command {
           console.log(`    instructions entry removed: ${oc.instructionsRemoved}`);
           console.log(`    firewall plugin removed: ${oc.pluginRemoved}`);
           console.log(`    skills removed: ${oc.skillsRemoved.length}`);
+          if (oc.skillsSkippedNotOwned.length > 0) {
+            console.log(
+              `    skills skipped (not praxis-owned): ${oc.skillsSkippedNotOwned.join(', ')}`,
+            );
+          }
         }
         if (!opts.keepSkeleton && !result.praxisDirFullyRemoved) {
           console.log('');

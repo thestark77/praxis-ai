@@ -12,6 +12,7 @@ import {
   EXPECTED_ENGRAM_VERSION,
 } from '../../src/lib/update.js';
 import type { CommandResult } from '../../src/lib/gentle-ai-bootstrap.js';
+import { PRAXIS_NATIVE_SKILL_NAMES } from '../../src/data/praxis-native-skills.js';
 
 let home: string;
 
@@ -38,11 +39,32 @@ function fakeRun(results: Record<string, CommandResult> = {}) {
 }
 
 // Fetcher that returns deterministic content per URL, or null for 404.
+//
+// For a praxis-native skill's SKILL.md (currently just away-mode), the
+// fetched content must carry the `name: <skill>` + `praxis-native: true`
+// marker itself, since refreshSkillFile validates the fetched content when
+// ownership checking is on — not just the pre-existing on-disk file.
 function fakeFetch(missing: string[] = []) {
   const fetched: string[] = [];
   const fetchFile = async (url: string): Promise<string | null> => {
     fetched.push(url);
     if (missing.some((m) => url.includes(m))) return null;
+    const nativeName = PRAXIS_NATIVE_SKILL_NAMES.find((name) => url.includes(`/${name}/SKILL.md`));
+    if (nativeName) {
+      return `---\nname: ${nativeName}\npraxis-native: true\n---\ncontent-of:${url}`;
+    }
+    return `content-of:${url}`;
+  };
+  return { fetchFile, fetched };
+}
+
+// Fetcher that always returns marker-less content, regardless of skill —
+// used to exercise the fetched-content validation rejecting a native
+// skill's SKILL.md when the fetch itself is not a praxis-native skill.
+function fakeFetchMarkerless() {
+  const fetched: string[] = [];
+  const fetchFile = async (url: string): Promise<string | null> => {
+    fetched.push(url);
     return `content-of:${url}`;
   };
   return { fetchFile, fetched };
@@ -96,6 +118,10 @@ describe('runUpdate — both targets', () => {
     expect(result.skills?.failedFiles).toEqual([]);
     expect(result.skills!.updatedFiles).toContain('handoff/SKILL.md');
     expect(result.skills!.updatedFiles).toContain('prototype/UI.md');
+    // The praxis-native away-mode skill refreshes alongside the lifted ones,
+    // without a NOTICE.md fetch (native skills have no upstream to attribute).
+    expect(result.skills!.updatedFiles).toContain('away-mode/SKILL.md');
+    expect(result.skills!.updatedFiles).not.toContain('away-mode/NOTICE.md');
 
     const written = await readFile(join(paths.claudeSkillsDir, 'caveman', 'SKILL.md'), 'utf8');
     expect(written).toContain('content-of:');
@@ -133,6 +159,131 @@ describe('parseToolVersion', () => {
   it('returns null when no version is present', () => {
     expect(parseToolVersion('')).toBeNull();
     expect(parseToolVersion('command not found')).toBeNull();
+  });
+});
+
+describe('runUpdate — skills ownership (native skills only)', () => {
+  it('leaves a user-authored away-mode/SKILL.md in place and reports it skipped', async () => {
+    const paths = resolvePaths(home);
+    await writeFile(paths.claudeMd, '', 'utf8');
+    await mkdir(join(paths.claudeSkillsDir, 'away-mode'), { recursive: true });
+    await writeFile(
+      join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'),
+      '---\nname: away-mode\ndescription: my own thing\n---\nmy own body\n',
+      'utf8',
+    );
+    const { run } = fakeRun();
+    const { fetchFile, fetched } = fakeFetch();
+
+    const result = await runUpdate({
+      paths,
+      gentleAi: false,
+      run,
+      fetchFile,
+      hasGentleAi: () => true,
+    });
+
+    expect(result.skills!.skippedNotOwned.some((f) => f.includes('away-mode/SKILL.md'))).toBe(true);
+    expect(result.skills!.updatedFiles).not.toContain('away-mode/SKILL.md');
+    // Never fetched at all: the ownership check short-circuits before the request.
+    expect(fetched.some((u) => u.includes('away-mode/SKILL.md'))).toBe(false);
+    const preserved = await readFile(join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'), 'utf8');
+    expect(preserved).toContain('my own body');
+    // Lifted skills are unaffected.
+    expect(result.skills!.updatedFiles).toContain('handoff/SKILL.md');
+  });
+
+  it('overwrites a praxis-owned away-mode/SKILL.md (marker + matching name present)', async () => {
+    const paths = resolvePaths(home);
+    await writeFile(paths.claudeMd, '', 'utf8');
+    await mkdir(join(paths.claudeSkillsDir, 'away-mode'), { recursive: true });
+    await writeFile(
+      join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'),
+      '---\nname: away-mode\npraxis-native: true\n---\nold body\n',
+      'utf8',
+    );
+    const { run } = fakeRun();
+    const { fetchFile } = fakeFetch();
+
+    const result = await runUpdate({
+      paths,
+      gentleAi: false,
+      run,
+      fetchFile,
+      hasGentleAi: () => true,
+    });
+
+    expect(result.skills!.updatedFiles).toContain('away-mode/SKILL.md');
+    expect(result.skills!.skippedNotOwned).toEqual([]);
+    const written = await readFile(join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'), 'utf8');
+    expect(written).toContain('content-of:');
+  });
+
+  it('writes away-mode/SKILL.md normally when nothing exists at the destination yet', async () => {
+    const paths = resolvePaths(home);
+    await writeFile(paths.claudeMd, '', 'utf8');
+    const { run } = fakeRun();
+    const { fetchFile } = fakeFetch();
+    const result = await runUpdate({
+      paths,
+      gentleAi: false,
+      run,
+      fetchFile,
+      hasGentleAi: () => true,
+    });
+    expect(result.skills!.updatedFiles).toContain('away-mode/SKILL.md');
+    expect(result.skills!.skippedNotOwned).toEqual([]);
+  });
+
+  it('rejects a marker-less fetched away-mode/SKILL.md instead of writing it', async () => {
+    const paths = resolvePaths(home);
+    await writeFile(paths.claudeMd, '', 'utf8');
+    const { run } = fakeRun();
+    const { fetchFile } = fakeFetchMarkerless();
+
+    const result = await runUpdate({
+      paths,
+      gentleAi: false,
+      run,
+      fetchFile,
+      hasGentleAi: () => true,
+    });
+
+    expect(result.skills!.updatedFiles).not.toContain('away-mode/SKILL.md');
+    expect(
+      result.skills!.failedFiles.some(
+        (f) => f.includes('away-mode/SKILL.md') && f.includes('not a praxis-native skill'),
+      ),
+    ).toBe(true);
+    await expect(stat(join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'))).rejects.toThrow();
+    // Lifted skills are unaffected: they have no marker requirement.
+    expect(result.skills!.updatedFiles).toContain('handoff/SKILL.md');
+  });
+
+  it('rejects a marker-less fetch even when overwriting an existing praxis-owned file', async () => {
+    const paths = resolvePaths(home);
+    await writeFile(paths.claudeMd, '', 'utf8');
+    await mkdir(join(paths.claudeSkillsDir, 'away-mode'), { recursive: true });
+    await writeFile(
+      join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'),
+      '---\nname: away-mode\npraxis-native: true\n---\nold body\n',
+      'utf8',
+    );
+    const { run } = fakeRun();
+    const { fetchFile } = fakeFetchMarkerless();
+
+    const result = await runUpdate({
+      paths,
+      gentleAi: false,
+      run,
+      fetchFile,
+      hasGentleAi: () => true,
+    });
+
+    expect(result.skills!.updatedFiles).not.toContain('away-mode/SKILL.md');
+    expect(result.skills!.failedFiles.some((f) => f.includes('away-mode/SKILL.md'))).toBe(true);
+    const preserved = await readFile(join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'), 'utf8');
+    expect(preserved).toContain('old body');
   });
 });
 
@@ -357,6 +508,29 @@ describe('runUpdate — guards + failures', () => {
       hasGentleAi: () => true,
     });
     expect(result.skills!.failedFiles.some((f) => f.includes('handoff/NOTICE.md'))).toBe(true);
+  });
+
+  it('records a missing upstream away-mode file as a per-file failure while lifted skills still update', async () => {
+    const paths = resolvePaths(home);
+    await writeFile(paths.claudeMd, '', 'utf8');
+    const { run } = fakeRun();
+    const { fetchFile } = fakeFetch(['away-mode/SKILL.md']);
+    const result = await runUpdate({
+      paths,
+      gentleAi: false,
+      run,
+      fetchFile,
+      hasGentleAi: () => true,
+    });
+    expect(
+      result.skills!.failedFiles.some(
+        (f) => f.includes('away-mode/SKILL.md') && f.includes('not found upstream'),
+      ),
+    ).toBe(true);
+    // Lifted skills are a separate loop and are unaffected by away-mode's failure.
+    expect(result.skills!.updatedFiles).toContain('handoff/SKILL.md');
+    expect(result.skills!.updatedFiles).toContain('caveman/SKILL.md');
+    expect(result.skills!.updatedFiles).toContain('prototype/UI.md');
   });
 
   it('does not touch the praxis overlay (only skill dirs are written)', async () => {

@@ -152,6 +152,62 @@ function ruleKey(rule: OwnedOpenCodeRule): string {
   return `${rule.tool} ${rule.pattern}`;
 }
 
+/**
+ * Frontmatter key a shipped praxis-native skill file carries, so update and
+ * uninstall can tell "praxis installed this" from "a user's own file
+ * happens to live at the same path".
+ *
+ * There is no per-file install ledger for skills the way `OwnershipLedger`
+ * above tracks permission rules: a skill is a markdown file, installed by
+ * copying a template, and nothing records that copy per file. Rather than
+ * build a parallel ledger for a single file, the shipped file carries its
+ * own marker in frontmatter — the same place `name` already lives.
+ */
+export const PRAXIS_NATIVE_SKILL_MARKER = 'praxis-native';
+
+interface SkillFrontmatter {
+  name?: string;
+  praxisNative?: boolean;
+}
+
+function parseSkillFrontmatter(content: string): SkillFrontmatter {
+  // Tolerate a leading UTF-8 BOM and CRLF line endings: some editors and
+  // Windows checkouts write both, and a shipped or user-authored SKILL.md
+  // with either must still be recognized rather than silently falling
+  // through to "no frontmatter".
+  if (content.charCodeAt(0) === 0xfeff) content = content.slice(1);
+  content = content.replace(/\r\n/g, '\n');
+  if (!content.startsWith('---\n')) return {};
+  const end = content.indexOf('\n---', 4);
+  if (end === -1) return {};
+  const block = content.slice(4, end);
+  const out: SkillFrontmatter = {};
+  for (const line of block.split('\n')) {
+    const m = line.match(/^([a-zA-Z][\w-]*):\s*(.*)$/);
+    if (!m) continue;
+    const [, key, val] = m;
+    if (key === 'name') out.name = val.trim();
+    else if (key === PRAXIS_NATIVE_SKILL_MARKER)
+      out.praxisNative = val.trim().toLowerCase() === 'true';
+  }
+  return out;
+}
+
+/**
+ * Whether an on-disk native-skill file was installed by praxis, as opposed
+ * to a user-authored file that merely shares the skill's directory and file
+ * name.
+ *
+ * A shipped native-skill file declares both `name: <skillName>` and
+ * `praxis-native: true` in its frontmatter. A user's own file at the same
+ * path either omits the marker entirely or names a different skill (e.g. it
+ * was copied from elsewhere), and update/uninstall leave it alone.
+ */
+export function isPraxisOwnedNativeSkillFile(content: string, skillName: string): boolean {
+  const fm = parseSkillFrontmatter(content);
+  return fm.name === skillName && fm.praxisNative === true;
+}
+
 export async function clearOwnership(praxisDir: string): Promise<void> {
   await rm(ownershipPath(praxisDir), { force: true });
 }

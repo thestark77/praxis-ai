@@ -119,6 +119,8 @@ describe('runOpenCodeInstall', () => {
     // Skills.
     expect(result.skillsInstalled.length).toBeGreaterThan(0);
     expect(await exists(join(paths.skillsDir, 'grill-with-docs', 'SKILL.md'))).toBe(true);
+    // The praxis-native away-mode skill installs alongside the lifted ones.
+    expect(await exists(join(paths.skillsDir, 'away-mode', 'SKILL.md'))).toBe(true);
   });
 
   it('never clobbers gentle-ai agents, mcp servers or foreign permissions', async () => {
@@ -207,6 +209,48 @@ describe('runOpenCodeUninstall', () => {
     expect(result.pluginRemoved).toBe(true);
     expect(await exists(paths.firewallPlugin)).toBe(false);
     expect(result.skillsRemoved.length).toBeGreaterThan(0);
+    expect(result.skillsRemoved).toContain('away-mode');
+    expect(result.skillsSkippedNotOwned).toEqual([]);
+  });
+
+  it('leaves a user-authored away-mode skill directory in place on uninstall', async () => {
+    const paths = await sandbox();
+    await runOpenCodeInstall({ paths, skillsTemplatesRoot, firewallModulePath: engine });
+    // The user replaces the installed away-mode skill with their own,
+    // unmarked, version before uninstalling.
+    await writeFile(
+      join(paths.skillsDir, 'away-mode', 'SKILL.md'),
+      '---\nname: away-mode\ndescription: my own thing\n---\nmy own body\n',
+      'utf8',
+    );
+
+    const result = await runOpenCodeUninstall({ paths });
+
+    expect(result.skillsRemoved).not.toContain('away-mode');
+    expect(result.skillsSkippedNotOwned).toContain('away-mode');
+    const preserved = await readFile(join(paths.skillsDir, 'away-mode', 'SKILL.md'), 'utf8');
+    expect(preserved).toContain('my own body');
+  });
+
+  it('does not overwrite a user-authored away-mode skill dir even with force: true', async () => {
+    const paths = await sandbox();
+    await runOpenCodeInstall({ paths, skillsTemplatesRoot, firewallModulePath: engine });
+    await writeFile(
+      join(paths.skillsDir, 'away-mode', 'SKILL.md'),
+      '---\nname: away-mode\ndescription: my own thing\n---\nmy own body\n',
+      'utf8',
+    );
+
+    const result = await runOpenCodeInstall({
+      paths,
+      skillsTemplatesRoot,
+      firewallModulePath: engine,
+      force: true,
+    });
+
+    expect(result.skillsInstalled).not.toContain('away-mode/SKILL.md');
+    const preserved = await readFile(join(paths.skillsDir, 'away-mode', 'SKILL.md'), 'utf8');
+    expect(preserved).toContain('my own body');
   });
 
   it('leaves a rule praxis had raised at deny, recoverable via rollback', async () => {
@@ -269,5 +313,7 @@ describe('detectOpenCode', () => {
     expect(report.plugin.present).toBe(true);
     expect(report.plugin.engineResolvable).toBe(true);
     expect(report.skillsInstalled.length).toBeGreaterThan(0);
+    // The praxis-native away-mode skill is reported alongside the lifted ones.
+    expect(report.skillsInstalled).toContain('away-mode');
   });
 });

@@ -70,12 +70,21 @@ the Iris-specific decision-model evaluation.
   effective command. Closes the T4 known limits (`env -S`, `bash -lc`,
   `xargs -I {}`, chained `sh -c` bodies, backslash escapes) and a
   pre-existing gap: `bash -c "rm -rf /"` evades every rule today.
-- [ ] T8 `away-mode` — explicit skill for unattended sessions (Iris backlog
+- [x] T8 `away-mode` — explicit skill for unattended sessions (Iris backlog
   item #1836, topic `praxis/backlog/away-mode`): readiness checks and flags
   (herdr, `cc-flags` auto_compact/auto_resume, context guard, review
   consent, `cc-status`), workflow sizing, blocker sweep before leaving,
   overnight rules, exact `/loop` command, return summary. Must be tested
   live. Route: delegated writer, branch `feat/away-mode`.
+
+- [ ] T9 `upstream-first-debugging` — new module: when a third-party
+  open-source tool fails or misbehaves and the cause isn't obvious, check
+  its source repo first (search open AND closed issues/PRs, find the
+  canonical fix, check with `git merge-base --is-ancestor` whether the
+  installed version has it) before local workarounds or deep local
+  debugging; filing or commenting upstream is an external send needing the
+  user's explicit OK first. Source: Iris session relay of a user request,
+  2026-09-28. Route: delegated writer.
 
 ## Acceptance criteria
 
@@ -108,6 +117,7 @@ deleted with `git branch -d`):
 | T6 effort-policy | #17 | 1 | Claims trimmed to the documented evidence |
 | T2 context-budget | #18 | 4 | Trust boundary, failure replies, poll policy, rounding |
 | T4 firewall-shim-bypass | #19 | 4 | Retry cap reached; remaining variants documented as known limits, durable fix proposed as T7 |
+| T8 away-mode | #21 | 3 | Live-tested `/away-mode check`; remaining follow-ups: native-skill ownership fail-open when SKILL.md missing, orphaned partial dir |
 
 Verification on each merged branch: `pnpm test`, `pnpm typecheck`,
 `pnpm lint`, `pnpm format:check` passing (final main: 684 tests).
@@ -126,4 +136,4 @@ Open follow-ups (non-blocking review suggestions):
 
 ## Next step
 
-T8 away-mode (in progress). T7 waits for the user's decision.
+T9 in progress. T7 waits for the user's decision.

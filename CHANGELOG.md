@@ -108,6 +108,23 @@ Known limits: `env -S`, `bash -lc`, `xargs -I {}`, a chained `sh -c "a &&
 git ..."` tail, and quote-concatenated bypass-token names are not yet
 caught; see `docs/firewall.md`'s Known limits section.
 
+### Added - upstream-first-debugging module
+
+A new `templates/praxis-home/upstream-first-debugging.md` module, imported
+from `main.md`, tells the agent to check a third-party open-source tool's
+own source repository first when it fails or misbehaves and the cause
+isn't obvious, before reaching for a local workaround or a deep local
+debugging session: search open AND closed issues and PRs for the symptom
+(`gh search issues`/`gh issue list`/`gh pr list --state all`), find the
+canonical issue and its fix commit, and check whether that fix is in the
+installed version (`git merge-base --is-ancestor <fix-commit>
+<installed-ref>` with a source checkout). Filing a new upstream issue, or
+commenting on an existing one, is an external send under the
+irreversibility firewall and needs the user's explicit OK first. The gap
+mattered because a fix that already exists upstream can otherwise be
+rediscovered the hard way locally, as it was for a Hermes `OOMPolicy` cron
+failure on systemd 249 that upstream issue #102486 had already fixed.
+
 ## [0.1.0-alpha.27] - 2026-09-24
 
 ### Changed - gentle-ai 3.7.0 and engram 2.1.0 are the expected versions

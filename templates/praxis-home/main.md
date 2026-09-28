@@ -21,4 +21,5 @@ precedence on conflict via recency.
 @workflow-policy.md
 @effort-policy.md
 @context-budget.md
+@upstream-first-debugging.md
 @presets/balanced.md

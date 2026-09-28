@@ -210,16 +210,88 @@ describe('installClaudeSkills (HOME sandbox)', () => {
 
   it('uninstallClaudeSkills removes only the named skill dirs', async () => {
     await installClaudeSkills({ templatesRoot, claudeSkillsDir });
-    const removed = await uninstallClaudeSkills(claudeSkillsDir, ['alpha']);
-    expect(removed).toEqual(['alpha']);
+    const result = await uninstallClaudeSkills(claudeSkillsDir, ['alpha']);
+    expect(result.removed).toEqual(['alpha']);
+    expect(result.skippedNotOwned).toEqual([]);
     await expect(stat(join(claudeSkillsDir, 'alpha'))).rejects.toThrow();
     const betaSkill = await stat(join(claudeSkillsDir, 'beta'));
     expect(betaSkill.isDirectory()).toBe(true);
   });
 
   it('uninstallClaudeSkills is safe when target dirs do not exist', async () => {
-    const removed = await uninstallClaudeSkills(claudeSkillsDir, ['ghost']);
-    expect(removed).toEqual([]);
+    const result = await uninstallClaudeSkills(claudeSkillsDir, ['ghost']);
+    expect(result.removed).toEqual([]);
+    expect(result.skippedNotOwned).toEqual([]);
+  });
+
+  describe('uninstallClaudeSkills — native skill ownership', () => {
+    it('removes a praxis-owned native skill (name + praxis-native marker present)', async () => {
+      await mkdir(join(claudeSkillsDir, 'away-mode'), { recursive: true });
+      await writeFile(
+        join(claudeSkillsDir, 'away-mode', 'SKILL.md'),
+        '---\nname: away-mode\npraxis-native: true\n---\nbody\n',
+        'utf8',
+      );
+      const result = await uninstallClaudeSkills(claudeSkillsDir, ['away-mode'], {
+        nativeSkillNames: ['away-mode'],
+      });
+      expect(result.removed).toEqual(['away-mode']);
+      expect(result.skippedNotOwned).toEqual([]);
+      await expect(stat(join(claudeSkillsDir, 'away-mode'))).rejects.toThrow();
+    });
+
+    it('leaves a user-authored away-mode directory in place (no praxis-native marker)', async () => {
+      await mkdir(join(claudeSkillsDir, 'away-mode'), { recursive: true });
+      await writeFile(
+        join(claudeSkillsDir, 'away-mode', 'SKILL.md'),
+        '---\nname: away-mode\ndescription: my own thing\n---\nmy own body\n',
+        'utf8',
+      );
+      const result = await uninstallClaudeSkills(claudeSkillsDir, ['away-mode'], {
+        nativeSkillNames: ['away-mode'],
+      });
+      expect(result.removed).toEqual([]);
+      expect(result.skippedNotOwned).toEqual(['away-mode']);
+      const preserved = await readFile(join(claudeSkillsDir, 'away-mode', 'SKILL.md'), 'utf8');
+      expect(preserved).toContain('my own body');
+    });
+
+    it('leaves a directory in place when SKILL.md names a different skill', async () => {
+      await mkdir(join(claudeSkillsDir, 'away-mode'), { recursive: true });
+      await writeFile(
+        join(claudeSkillsDir, 'away-mode', 'SKILL.md'),
+        '---\nname: something-else\npraxis-native: true\n---\n',
+        'utf8',
+      );
+      const result = await uninstallClaudeSkills(claudeSkillsDir, ['away-mode'], {
+        nativeSkillNames: ['away-mode'],
+      });
+      expect(result.skippedNotOwned).toEqual(['away-mode']);
+    });
+
+    it('leaves a directory in place when SKILL.md is missing entirely', async () => {
+      await mkdir(join(claudeSkillsDir, 'away-mode'), { recursive: true });
+      await writeFile(join(claudeSkillsDir, 'away-mode', 'other.md'), 'not a skill file', 'utf8');
+      const result = await uninstallClaudeSkills(claudeSkillsDir, ['away-mode'], {
+        nativeSkillNames: ['away-mode'],
+      });
+      expect(result.skippedNotOwned).toEqual(['away-mode']);
+    });
+
+    it('removes non-native skills unconditionally alongside a skipped native one', async () => {
+      await installClaudeSkills({ templatesRoot, claudeSkillsDir }); // alpha, beta
+      await mkdir(join(claudeSkillsDir, 'away-mode'), { recursive: true });
+      await writeFile(
+        join(claudeSkillsDir, 'away-mode', 'SKILL.md'),
+        '---\nname: away-mode\n---\nno marker\n',
+        'utf8',
+      );
+      const result = await uninstallClaudeSkills(claudeSkillsDir, ['alpha', 'away-mode'], {
+        nativeSkillNames: ['away-mode'],
+      });
+      expect(result.removed).toEqual(['alpha']);
+      expect(result.skippedNotOwned).toEqual(['away-mode']);
+    });
   });
 });
 

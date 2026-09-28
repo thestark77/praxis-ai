@@ -40,22 +40,14 @@ import {
   clearOwnership,
   claudeEntriesToRemove,
 } from './ownership.js';
-import { POCOCK_SKILL_NAMES } from '../data/pocock-skills.js';
 import { PRAXIS_NATIVE_SKILL_NAMES } from '../data/praxis-native-skills.js';
+import { CLAUDE_SKILL_NAMES } from '../data/skill-registry.js';
 import {
   bootstrapGentleAi,
   type GentleAiBootstrapOptions,
   type GentleAiBootstrapResult,
 } from './gentle-ai-bootstrap.js';
 import { checkDependencies, formatMissingDependencies, type DepProbe } from './dependency-check.js';
-
-/**
- * Every Claude Code skill praxis manages under `~/.claude/skills/`: the six
- * lifted from mattpocock/skills plus the praxis-native ones (away-mode).
- * Both install and uninstall use this union so a native skill is never
- * treated as a stray a user added by hand.
- */
-const CLAUDE_SKILL_NAMES = [...POCOCK_SKILL_NAMES, ...PRAXIS_NATIVE_SKILL_NAMES];
 
 export interface InstallOptions {
   paths?: PraxisPaths;
@@ -390,6 +382,13 @@ export interface UninstallResult {
    */
   praxisDirFullyRemoved: boolean;
   removedClaudeSkills: string[];
+  /**
+   * Native skill directories left in place because they were not
+   * praxis-owned (missing the `praxis-native` frontmatter marker, or a
+   * different skill's frontmatter) — most likely a user's own directory
+   * sharing the name. See src/lib/ownership.ts.
+   */
+  claudeSkillsSkippedNotOwned: string[];
   removedAstHook: boolean;
   /** Present only when OpenCode was one of the targets. */
   opencode: OpenCodeUninstallResult | null;
@@ -444,10 +443,12 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<Uninsta
     await uninstallSkeleton(paths.praxisDir);
   }
 
-  const removedClaudeSkills =
+  const claudeSkillsResult =
     removeClaudeSkillsFlag && wantsClaudeCode
-      ? await uninstallClaudeSkills(paths.claudeSkillsDir, CLAUDE_SKILL_NAMES)
-      : [];
+      ? await uninstallClaudeSkills(paths.claudeSkillsDir, CLAUDE_SKILL_NAMES, {
+          nativeSkillNames: PRAXIS_NATIVE_SKILL_NAMES,
+        })
+      : { removed: [], skippedNotOwned: [] };
 
   // Was the whole praxis dir actually removed, or did backups/telemetry survive?
   const { stat } = await import('node:fs/promises');
@@ -466,7 +467,8 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<Uninsta
     preservedFirewallEntries: wantsClaudeCode ? claudeEntriesPreserved : 0,
     removedSkeleton: removeSkeleton,
     praxisDirFullyRemoved,
-    removedClaudeSkills,
+    removedClaudeSkills: claudeSkillsResult.removed,
+    claudeSkillsSkippedNotOwned: claudeSkillsResult.skippedNotOwned,
     removedAstHook,
     opencode,
     restoredFromBackup: null,

@@ -1,7 +1,8 @@
-import { mkdir, readdir, copyFile, stat, rm } from 'node:fs/promises';
+import { mkdir, readdir, copyFile, stat, rm, readFile } from 'node:fs/promises';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve as resolvePath } from 'node:path';
+import { isPraxisOwnedNativeSkillFile } from './ownership.js';
 
 /**
  * Render a relative path as a stable, platform-independent identifier.
@@ -166,17 +167,53 @@ export async function installClaudeSkills(
   return { installed, skipped };
 }
 
+export interface UninstallClaudeSkillsOptions {
+  /**
+   * Names in `skills` that are praxis-native. Their SKILL.md is ownership-
+   * checked (via the `praxis-native` frontmatter marker, see
+   * src/lib/ownership.ts) before the directory is removed, so a
+   * user-authored directory that merely shares the name survives uninstall.
+   * Names not listed here (the lifted Pocock skills) are removed
+   * unconditionally, matching existing behaviour.
+   */
+  nativeSkillNames?: string[];
+}
+
+export interface UninstallClaudeSkillsResult {
+  removed: string[];
+  /** Native skill directories left in place because SKILL.md was not praxis-owned. */
+  skippedNotOwned: string[];
+}
+
 export async function uninstallClaudeSkills(
   claudeSkillsDir: string,
   skills: string[],
-): Promise<string[]> {
+  opts: UninstallClaudeSkillsOptions = {},
+): Promise<UninstallClaudeSkillsResult> {
+  const nativeSkillNames = new Set(opts.nativeSkillNames ?? []);
   const removed: string[] = [];
+  const skippedNotOwned: string[] = [];
+
   for (const name of skills) {
     const dir = join(claudeSkillsDir, name);
-    if (await pathExists(dir)) {
-      await rm(dir, { recursive: true, force: true });
-      removed.push(name);
+    if (!(await pathExists(dir))) continue;
+
+    if (nativeSkillNames.has(name)) {
+      let content: string | null = null;
+      try {
+        content = await readFile(join(dir, 'SKILL.md'), 'utf8');
+      } catch {
+        content = null;
+      }
+      if (content === null || !isPraxisOwnedNativeSkillFile(content, name)) {
+        skippedNotOwned.push(name);
+        continue;
+      }
     }
+
+    await rm(dir, { recursive: true, force: true });
+    removed.push(name);
   }
-  return removed;
+
+  return { removed, skippedNotOwned };
 }

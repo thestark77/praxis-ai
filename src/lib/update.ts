@@ -40,6 +40,7 @@ import { POCOCK_SKILLS } from '../data/pocock-skills.js';
 import { PRAXIS_NATIVE_SKILLS } from '../data/praxis-native-skills.js';
 import { PRAXIS_IMPORT_PATH } from '../data/firewall-defaults.js';
 import { findPraxisBlock, patchClaudeMd } from './claudemd-patcher.js';
+import { isPraxisOwnedNativeSkillFile } from './ownership.js';
 import {
   defaultCommandRunner,
   GENTLE_AI_VERSION,
@@ -95,6 +96,13 @@ export interface ToolVersionCheck {
 export interface SkillsUpdateResult {
   updatedFiles: string[];
   failedFiles: string[];
+  /**
+   * Native skill files left in place because the on-disk file was not
+   * praxis-owned (missing the `praxis-native` frontmatter marker, or a
+   * different skill's frontmatter) — most likely a user's own file living
+   * at the same path. See src/lib/ownership.ts.
+   */
+  skippedNotOwned: string[];
 }
 
 export interface UpdateResult {
@@ -244,26 +252,51 @@ async function repatchClaudeMd(claudeMdPath: string): Promise<boolean> {
 
 /** Fetch one skill file from the praxis-ai repo and write it into place,
  * recording the outcome on `result`. Shared by the lifted-Pocock and
- * praxis-native refresh loops in `updateSkills` below. */
+ * praxis-native refresh loops in `updateSkills` below.
+ *
+ * `checkOwnership` gates a fetch-and-overwrite behind the on-disk file's
+ * ownership: when a file already exists at the destination and is not
+ * praxis-owned (see src/lib/ownership.ts), the file is left untouched and
+ * recorded on `result.skippedNotOwned` instead of being overwritten. This
+ * only applies to native skills' SKILL.md — the file that carries the
+ * ownership marker; the lifted Pocock skills have no marker and keep the
+ * original unconditional-overwrite behaviour. */
 async function refreshSkillFile(
   paths: PraxisPaths,
   fetchFile: FileFetcher,
   result: SkillsUpdateResult,
   skillName: string,
   file: string,
+  opts: { checkOwnership?: boolean } = {},
 ): Promise<void> {
-  const { mkdir, writeFile } = await import('node:fs/promises');
+  const { mkdir, writeFile, readFile } = await import('node:fs/promises');
   const { join } = await import('node:path');
   const rel = `${skillName}/${file}`;
   const url = `${PRAXIS_SKILLS_BASE_URL}/${rel}`;
+  const destDir = join(paths.claudeSkillsDir, skillName);
+  const destPath = join(destDir, file);
+
+  if (opts.checkOwnership) {
+    let existing: string | null = null;
+    try {
+      existing = await readFile(destPath, 'utf8');
+    } catch {
+      existing = null;
+    }
+    if (existing !== null && !isPraxisOwnedNativeSkillFile(existing, skillName)) {
+      result.skippedNotOwned.push(`${rel} (skipped: not praxis-owned)`);
+      return;
+    }
+  }
+
   try {
     const content = await fetchFile(url);
     if (content === null) {
       result.failedFiles.push(`${rel} (not found upstream)`);
       return;
     }
-    await mkdir(join(paths.claudeSkillsDir, skillName), { recursive: true });
-    await writeFile(join(paths.claudeSkillsDir, skillName, file), content, 'utf8');
+    await mkdir(destDir, { recursive: true });
+    await writeFile(destPath, content, 'utf8');
     result.updatedFiles.push(rel);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -275,7 +308,7 @@ async function updateSkills(
   paths: PraxisPaths,
   fetchFile: FileFetcher,
 ): Promise<SkillsUpdateResult> {
-  const result: SkillsUpdateResult = { updatedFiles: [], failedFiles: [] };
+  const result: SkillsUpdateResult = { updatedFiles: [], failedFiles: [], skippedNotOwned: [] };
 
   // The six skills lifted from mattpocock/skills: NOTICE.md is implied.
   for (const skill of POCOCK_SKILLS) {
@@ -285,10 +318,16 @@ async function updateSkills(
   }
 
   // praxis-native skills (no upstream, so no implied NOTICE.md): refresh
-  // exactly the files each one declares.
+  // exactly the files each one declares. SKILL.md is ownership-checked
+  // before being overwritten so a user-authored file survives `praxis
+  // update`; a native skill has no other files today, but the check is
+  // scoped to SKILL.md specifically since that is the file carrying the
+  // frontmatter marker.
   for (const skill of PRAXIS_NATIVE_SKILLS) {
     for (const file of skill.files) {
-      await refreshSkillFile(paths, fetchFile, result, skill.name, file);
+      await refreshSkillFile(paths, fetchFile, result, skill.name, file, {
+        checkOwnership: file === 'SKILL.md',
+      });
     }
   }
 
@@ -324,6 +363,9 @@ export async function runUpdate(opts: UpdateOptions = {}): Promise<UpdateResult>
   if (doSkills) {
     result.skills = await updateSkills(paths, fetchFile);
     for (const f of result.skills.failedFiles) {
+      result.warnings.push(`skills: ${f}`);
+    }
+    for (const f of result.skills.skippedNotOwned) {
       result.warnings.push(`skills: ${f}`);
     }
   }

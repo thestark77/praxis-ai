@@ -140,6 +140,80 @@ describe('parseToolVersion', () => {
   });
 });
 
+describe('runUpdate — skills ownership (native skills only)', () => {
+  it('leaves a user-authored away-mode/SKILL.md in place and reports it skipped', async () => {
+    const paths = resolvePaths(home);
+    await writeFile(paths.claudeMd, '', 'utf8');
+    await mkdir(join(paths.claudeSkillsDir, 'away-mode'), { recursive: true });
+    await writeFile(
+      join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'),
+      '---\nname: away-mode\ndescription: my own thing\n---\nmy own body\n',
+      'utf8',
+    );
+    const { run } = fakeRun();
+    const { fetchFile, fetched } = fakeFetch();
+
+    const result = await runUpdate({
+      paths,
+      gentleAi: false,
+      run,
+      fetchFile,
+      hasGentleAi: () => true,
+    });
+
+    expect(result.skills!.skippedNotOwned.some((f) => f.includes('away-mode/SKILL.md'))).toBe(true);
+    expect(result.skills!.updatedFiles).not.toContain('away-mode/SKILL.md');
+    // Never fetched at all: the ownership check short-circuits before the request.
+    expect(fetched.some((u) => u.includes('away-mode/SKILL.md'))).toBe(false);
+    const preserved = await readFile(join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'), 'utf8');
+    expect(preserved).toContain('my own body');
+    // Lifted skills are unaffected.
+    expect(result.skills!.updatedFiles).toContain('handoff/SKILL.md');
+  });
+
+  it('overwrites a praxis-owned away-mode/SKILL.md (marker + matching name present)', async () => {
+    const paths = resolvePaths(home);
+    await writeFile(paths.claudeMd, '', 'utf8');
+    await mkdir(join(paths.claudeSkillsDir, 'away-mode'), { recursive: true });
+    await writeFile(
+      join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'),
+      '---\nname: away-mode\npraxis-native: true\n---\nold body\n',
+      'utf8',
+    );
+    const { run } = fakeRun();
+    const { fetchFile } = fakeFetch();
+
+    const result = await runUpdate({
+      paths,
+      gentleAi: false,
+      run,
+      fetchFile,
+      hasGentleAi: () => true,
+    });
+
+    expect(result.skills!.updatedFiles).toContain('away-mode/SKILL.md');
+    expect(result.skills!.skippedNotOwned).toEqual([]);
+    const written = await readFile(join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'), 'utf8');
+    expect(written).toContain('content-of:');
+  });
+
+  it('writes away-mode/SKILL.md normally when nothing exists at the destination yet', async () => {
+    const paths = resolvePaths(home);
+    await writeFile(paths.claudeMd, '', 'utf8');
+    const { run } = fakeRun();
+    const { fetchFile } = fakeFetch();
+    const result = await runUpdate({
+      paths,
+      gentleAi: false,
+      run,
+      fetchFile,
+      hasGentleAi: () => true,
+    });
+    expect(result.skills!.updatedFiles).toContain('away-mode/SKILL.md');
+    expect(result.skills!.skippedNotOwned).toEqual([]);
+  });
+});
+
 describe('runUpdate — scoped upgrade + version drift', () => {
   it('never upgrades engram: the upgrade is filtered to gentle-ai', async () => {
     const paths = resolvePaths(home);
@@ -361,6 +435,29 @@ describe('runUpdate — guards + failures', () => {
       hasGentleAi: () => true,
     });
     expect(result.skills!.failedFiles.some((f) => f.includes('handoff/NOTICE.md'))).toBe(true);
+  });
+
+  it('records a missing upstream away-mode file as a per-file failure while lifted skills still update', async () => {
+    const paths = resolvePaths(home);
+    await writeFile(paths.claudeMd, '', 'utf8');
+    const { run } = fakeRun();
+    const { fetchFile } = fakeFetch(['away-mode/SKILL.md']);
+    const result = await runUpdate({
+      paths,
+      gentleAi: false,
+      run,
+      fetchFile,
+      hasGentleAi: () => true,
+    });
+    expect(
+      result.skills!.failedFiles.some(
+        (f) => f.includes('away-mode/SKILL.md') && f.includes('not found upstream'),
+      ),
+    ).toBe(true);
+    // Lifted skills are a separate loop and are unaffected by away-mode's failure.
+    expect(result.skills!.updatedFiles).toContain('handoff/SKILL.md');
+    expect(result.skills!.updatedFiles).toContain('caveman/SKILL.md');
+    expect(result.skills!.updatedFiles).toContain('prototype/UI.md');
   });
 
   it('does not touch the praxis overlay (only skill dirs are written)', async () => {

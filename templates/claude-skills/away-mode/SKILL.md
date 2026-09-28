@@ -4,6 +4,7 @@ description: Prepare this session to keep working unattended while the user is a
 invocation: explicit
 disable-model-invocation: true
 argument-hint: "(blank to activate) | check | back | volví"
+praxis-native: true
 ---
 
 # away-mode — Mechanism
@@ -14,62 +15,74 @@ an explicit invocation naming one of its triggers or `/away-mode`. It
 prepares THIS session to keep working while the user is unreachable, and
 closes that state out cleanly when they return.
 
-Every readiness tool below is optional. Detect it with `command -v <tool>`
-first; if it is missing, report that in the readiness summary and continue
-with the rest of the procedure — a missing tool must never fail the whole
-skill.
-
 ## Dry run
 
-Invoke with the `check` argument to run step 1 (readiness checks) and
-report the summary, without turning anything on, asking any question, or
-writing anything to Engram or the task document. Use this to preview what
+Invoke with the `check` argument to run **only step 1a** (readiness checks)
+and print the readiness report. Step 1a is read-only and has no side
+effects: with `check`, run ONLY step 1a, print the readiness report, then
+STOP — no step 1b activation, no `AskUserQuestion`, no writes to Engram or
+the task document, and none of steps 2-6 run. Use this to preview what
 away mode would do before committing to it.
 
-## Step 1 — Unattended-readiness checks and activation
+## Step 1a — Readiness checks (read-only)
 
-Run for THIS session only.
+Run for THIS session only. Nothing in this step changes any state — it
+only detects and reports.
 
-1. **Herdr.** Unattended auto-resume and the context guard both need to type
+1. **Detect tools.** Every readiness tool below is optional. Detect each
+   one with `command -v <tool>` first; if it is missing, report that in the
+   readiness summary and continue with the rest of the procedure — a
+   missing tool must never fail the whole skill.
+
+2. **Herdr.** Unattended auto-resume and the context guard both need to type
    into this session's pane, which only works inside Herdr. Check
    `HERDR_PANE_ID`: if unset, warn the user that auto-resume and the context
    guard cannot type into this session, and continue with the rest of the
    checks anyway.
 
-2. **cc-flags.** Usage: `cc-flags [-h] target [{auto_compact,auto_resume}] [{on,off}]`,
-   where `target` is the Herdr pane id, the session name, or the Claude
-   session id.
-   - Read current state first: `cc-flags <target>` with no flag, if it
-     prints state.
-   - Turn both on: `cc-flags <target> auto_compact on` and
-     `cc-flags <target> auto_resume on`.
-   - Read back to verify each one actually took.
-   - If `cc-flags` is not on PATH, report it missing and continue; away mode
-     then relies on the context-budget poll instead of auto-compaction.
+3. **cc-flags — read current state.** Usage:
+   `cc-flags [-h] target [{auto_compact,auto_resume}] [{on,off}]`, where
+   `target` is the Herdr pane id, the session name, or the Claude session
+   id. Read current state first: `cc-flags <target>` with no flag, if it
+   prints state. Do not turn anything on here — that is step 1b. If
+   `cc-flags` is not on PATH, report it missing and continue.
 
-3. **Iris context guard.** If `iris-context-guard` is installed, run
+4. **Account limits.** Run `cc-status --json --session <id>` (and
+   `--all` for the full picture) and summarize remaining capacity in the
+   readiness report. If another account is available, note that
+   `cc-switch` / auto-switch exists as an option — never switch without the
+   user's yes, even overnight; an account switch is a live, consequential
+   change the user should make deliberately, and reporting its
+   availability here does not switch anything.
+
+Report the readiness summary: which tools were found, which were missing
+and what that means for this session, and the current cc-flags state.
+
+## Step 1b — Activation
+
+Only reached on a plain (non-`check`) invocation, after step 1a's report.
+
+1. **cc-flags — turn on.** Turn both on:
+   `cc-flags <target> auto_compact on` and `cc-flags <target> auto_resume
+   on`. Read back to verify each one actually took. If `cc-flags` is not on
+   PATH, away mode relies on the context-budget poll instead of
+   auto-compaction.
+
+2. **Iris context guard.** If `iris-context-guard` is installed, run
    `iris-context-guard enable --session <id>`. If it is not installed, rely
    on `auto_compact` plus the ordinary praxis context-budget protocol
    (`~/.praxis/context-budget.md`) instead — do not treat its absence as a
    blocker.
 
-4. **Review auto-consent.** If `iris-review-consent` is installed, run
-   `iris-review-consent set always-yes --session <id>` so native-review
-   consent prompts do not block progress while unattended. If it is not
-   installed, note explicitly that gentle-ai consent prompts will be
-   answered `granted` per the user's standing order, and only proceed on
+3. **Review auto-consent and standing order.** If `iris-review-consent` is
+   installed, run `iris-review-consent set always-yes --session <id>` so
+   native-review consent prompts do not block progress while unattended. If
+   it is not installed, note explicitly that gentle-ai consent prompts will
+   be answered `granted` per the user's standing order, and only proceed on
    that footing if the user confirms that standing order right now — this
    is a real product decision, not a default to assume silently.
 
-5. **Account limits.** Run `cc-status --json --session <id>` (and
-   `--all` for the full picture) and summarize remaining capacity in the
-   readiness report. If another account is available, offer
-   `cc-switch` / auto-switch as an option — never switch without the
-   user's yes, even overnight; an account switch is a live, consequential
-   change the user should make deliberately.
-
-Report the readiness summary: which tools were found, which were missing
-and what that means for this session, and what got turned on and verified.
+Report what got turned on and verified.
 
 ## Step 2 — Workflow sizing
 

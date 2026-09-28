@@ -13,6 +13,8 @@ interface Frontmatter {
   description?: string;
   invocation?: string;
   disableModelInvocation?: string;
+  argumentHint?: string;
+  praxisNative?: string;
 }
 
 function parseFrontmatter(content: string): Frontmatter {
@@ -29,6 +31,8 @@ function parseFrontmatter(content: string): Frontmatter {
     else if (key === 'description') out.description = val.trim();
     else if (key === 'invocation') out.invocation = val.trim();
     else if (key === 'disable-model-invocation') out.disableModelInvocation = val.trim();
+    else if (key === 'argument-hint') out.argumentHint = val.trim();
+    else if (key === 'praxis-native') out.praxisNative = val.trim();
   }
   return out;
 }
@@ -70,40 +74,70 @@ describe('away-mode SKILL.md — frontmatter', () => {
     expect(description).toMatch(/me voy a dormir/i);
     expect(description).toMatch(/\/away-mode/);
   });
+
+  it('marks itself praxis-native, so update/uninstall recognize the shipped file as praxis-owned', async () => {
+    const fm = parseFrontmatter(await content());
+    expect(fm.praxisNative).toBe('true');
+  });
+
+  it('lists `check` in argument-hint, alongside the return triggers', async () => {
+    const fm = parseFrontmatter(await content());
+    expect(fm.argumentHint ?? '').toMatch(/\bcheck\b/);
+  });
 });
 
-describe('away-mode SKILL.md — unattended-readiness checks (step 1)', () => {
-  it('treats every readiness tool as optional, detected via command -v', async () => {
+describe('away-mode SKILL.md — step 1 is split into 1a (read-only) and 1b (activation)', () => {
+  it('has a "1a — Readiness checks (read-only)" heading and a "1b — Activation" heading', async () => {
     const c = await content();
-    expect(c).toContain('command -v');
+    expect(containsClause(c, '1a — Readiness checks (read-only)')).toBe(true);
+    expect(containsClause(c, '1b — Activation')).toBe(true);
   });
 
-  it('names Herdr and HERDR_PANE_ID as the unattended-session prerequisite', async () => {
+  /**
+   * The exact slice of content for one `## <heading>` markdown heading, up
+   * to the next `## ` heading. Anchored to the actual heading line (not a
+   * prose mention of the same words elsewhere, e.g. in the "Dry run"
+   * section) by requiring the `## ` markdown prefix.
+   */
+  async function stepSection(heading: string): Promise<string> {
     const c = await content();
-    expect(c).toContain('HERDR_PANE_ID');
-    expect(containsClause(c, 'Herdr')).toBe(true);
+    const marker = `## ${heading}`;
+    const start = c.indexOf(marker);
+    expect(start, `heading not found: ${marker}`).toBeGreaterThanOrEqual(0);
+    const rest = c.slice(start + marker.length);
+    const nextHeadingOffset = rest.indexOf('\n## ');
+    return nextHeadingOffset === -1 ? rest : rest.slice(0, nextHeadingOffset);
+  }
+
+  it('keeps 1a read-only: tool detection, current cc-flags state, HERDR_PANE_ID, cc-status', async () => {
+    const section = await stepSection('Step 1a');
+    expect(section).toContain('command -v');
+    expect(section).toContain('HERDR_PANE_ID');
+    expect(containsClause(section, 'Herdr')).toBe(true);
+    expect(section).toContain('cc-status');
+    expect(
+      containsClause(section, 'cc-flags [-h] target [{auto_compact,auto_resume}] [{on,off}]'),
+    ).toBe(true);
+    // 1a reads current state; it must not turn cc-flags on.
+    expect(section).not.toMatch(/auto_compact on/);
+    expect(section).not.toMatch(/auto_resume on/);
   });
 
-  it('documents cc-flags for auto_compact and auto_resume, read then set then verify', async () => {
-    const c = await content();
-    expect(c).toContain('cc-flags');
-    expect(c).toContain('auto_compact');
-    expect(c).toContain('auto_resume');
-    expect(containsClause(c, 'cc-flags [-h] target [{auto_compact,auto_resume}] [{on,off}]')).toBe(
-      true,
-    );
+  it('confines activation to 1b: cc-flags on + read-back, context guard, review consent', async () => {
+    const section = await stepSection('Step 1b');
+    expect(containsClause(section, 'auto_compact on')).toBe(true);
+    expect(containsClause(section, 'auto_resume on')).toBe(true);
+    expect(containsClause(section, 'read back')).toBe(true);
+    expect(section).toContain('iris-context-guard');
+    expect(section).toContain('iris-review-consent');
+    expect(containsClause(section, 'always-yes')).toBe(true);
+    expect(containsClause(section, 'standing order')).toBe(true);
   });
 
   it('documents the iris-context-guard fallback to the praxis context-budget protocol', async () => {
     const c = await content();
     expect(c).toContain('iris-context-guard');
     expect(c).toContain('~/.praxis/context-budget.md');
-  });
-
-  it('documents iris-review-consent always-yes and the standing-order confirmation', async () => {
-    const c = await content();
-    expect(c).toContain('iris-review-consent');
-    expect(containsClause(c, 'always-yes')).toBe(true);
   });
 
   it('documents account-limit checks via cc-status and never auto-switching accounts', async () => {
@@ -170,18 +204,37 @@ describe('away-mode SKILL.md — /loop proposal (step 5)', () => {
 });
 
 describe('away-mode SKILL.md — on return (step 6)', () => {
-  it('handles the "back"/"volví" return trigger with a summary and restored interactive rules', async () => {
+  it('declares the "back"/"volví" return trigger in the parsed frontmatter, not an unanchored body match', async () => {
+    // Regression: an unanchored /back/ against the whole file trivially
+    // matches unrelated prose (e.g. "background", "fall back"). The actual
+    // contract is that the trigger is declared where invocation triggers
+    // live: the frontmatter description and argument-hint.
+    const fm = parseFrontmatter(await content());
+    expect(fm.description ?? '').toMatch(/\bback\b/i);
+    expect(fm.description ?? '').toMatch(/volv[íi]/i);
+    expect(fm.argumentHint ?? '').toMatch(/\bback\b/i);
+    expect(fm.argumentHint ?? '').toMatch(/volv[íi]/i);
+  });
+
+  it('summarizes the away-mode close-out and restores interactive rules', async () => {
     const c = await content();
-    expect(c).toMatch(/back/);
-    expect(c).toMatch(/volv[íi]/i);
     expect(containsClause(c, 'restore interactive rules')).toBe(true);
   });
 });
 
 describe('away-mode SKILL.md — dry run', () => {
-  it('documents a check-only invocation that changes nothing', async () => {
+  it('documents a check-only invocation via the parsed argument-hint, not a bare word match', async () => {
+    const fm = parseFrontmatter(await content());
+    expect(fm.argumentHint ?? '').toMatch(/\bcheck\b/);
+  });
+
+  it('states the check invocation is read-only and stops after step 1a', async () => {
     const c = await content();
     expect(containsClause(c, 'Dry run')).toBe(true);
-    expect(c).toMatch(/\bcheck\b/);
+    expect(containsClause(c, 'run ONLY step 1a')).toBe(true);
+    expect(containsClause(c, 'no step 1b activation')).toBe(true);
+    expect(containsClause(c, 'no `AskUserQuestion`')).toBe(true);
+    expect(containsClause(c, 'no writes to Engram or')).toBe(true);
+    expect(containsClause(c, 'none of steps 2-6 run')).toBe(true);
   });
 });

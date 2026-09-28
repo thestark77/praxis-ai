@@ -37,15 +37,8 @@ import {
   DEFAULT_CLAUDE_SKILLS_TEMPLATES_ROOT,
 } from '../skeleton-installer.js';
 import { FIREWALL_DEFAULTS } from '../../data/firewall-defaults.js';
-import { POCOCK_SKILL_NAMES } from '../../data/pocock-skills.js';
 import { PRAXIS_NATIVE_SKILL_NAMES } from '../../data/praxis-native-skills.js';
-
-/**
- * Every Claude Code skill praxis manages: the six lifted from
- * mattpocock/skills plus the praxis-native ones (away-mode). See
- * src/lib/install.ts for the Claude Code counterpart of this union.
- */
-const CLAUDE_SKILL_NAMES = [...POCOCK_SKILL_NAMES, ...PRAXIS_NATIVE_SKILL_NAMES];
+import { CLAUDE_SKILL_NAMES } from '../../data/skill-registry.js';
 
 async function pathExists(path: string): Promise<boolean> {
   try {
@@ -266,6 +259,13 @@ export interface OpenCodeUninstallResult {
   instructionsRemoved: boolean;
   pluginRemoved: boolean;
   skillsRemoved: string[];
+  /**
+   * Native skill directories left in place because they were not
+   * praxis-owned (missing the `praxis-native` frontmatter marker, or a
+   * different skill's frontmatter) — most likely a user's own directory
+   * sharing the name. See src/lib/ownership.ts.
+   */
+  skillsSkippedNotOwned: string[];
 }
 
 export async function runOpenCodeUninstall(
@@ -309,15 +309,18 @@ export async function runOpenCodeUninstall(
   }
 
   const pluginRemoved = await removeFirewallPlugin(paths.firewallPlugin);
-  const skillsRemoved = removeSkills
-    ? await uninstallClaudeSkills(paths.skillsDir, CLAUDE_SKILL_NAMES)
-    : [];
+  const claudeSkillsResult = removeSkills
+    ? await uninstallClaudeSkills(paths.skillsDir, CLAUDE_SKILL_NAMES, {
+        nativeSkillNames: PRAXIS_NATIVE_SKILL_NAMES,
+      })
+    : { removed: [], skippedNotOwned: [] };
 
   return {
     configFile,
     permissionRulesRemoved,
     instructionsRemoved,
     pluginRemoved,
-    skillsRemoved,
+    skillsRemoved: claudeSkillsResult.removed,
+    skillsSkippedNotOwned: claudeSkillsResult.skippedNotOwned,
   };
 }

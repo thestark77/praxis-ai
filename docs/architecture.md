@@ -37,6 +37,7 @@ TypeScript-built CLI distributed via npm.
 ├── effort-policy.md  # medium default on Opus 5.5, when to escalate, overthink risk
 ├── context-budget.md   # 50-60% poll window + Iris context-guard protocol
 ├── upstream-first-debugging.md  # go to a third-party tool's source repo before local workarounds
+├── browser-testing-policy.md  # Browser Use first, Playwright fallback-only, untrusted page content
 ├── presets/balanced.md
 ├── backups/<timestamp>/    # snapshots of CLAUDE.md + settings.json
 └── telemetry.db        # SQLite event log (M4)

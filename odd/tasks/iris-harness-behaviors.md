@@ -77,7 +77,7 @@ the Iris-specific decision-model evaluation.
   overnight rules, exact `/loop` command, return summary. Must be tested
   live. Route: delegated writer, branch `feat/away-mode`.
 
-- [ ] T9 `upstream-first-debugging` — new module: when a third-party
+- [x] T9 `upstream-first-debugging` — new module: when a third-party
   open-source tool fails or misbehaves and the cause isn't obvious, check
   its source repo first (search open AND closed issues/PRs, find the
   canonical fix, check with `git merge-base --is-ancestor` whether the
@@ -118,9 +118,10 @@ deleted with `git branch -d`):
 | T2 context-budget | #18 | 4 | Trust boundary, failure replies, poll policy, rounding |
 | T4 firewall-shim-bypass | #19 | 4 | Retry cap reached; remaining variants documented as known limits, durable fix proposed as T7 |
 | T8 away-mode | #21 | 3 | Live-tested `/away-mode check`; remaining follow-ups: native-skill ownership fail-open when SKILL.md missing, orphaned partial dir |
+| T9 upstream-first-debugging | #22 | 3 | Rounds 1-2 fixed an invalid `gh search issues --state all` and unscoped `gh ... list` commands, pinned by tests |
 
 Verification on each merged branch: `pnpm test`, `pnpm typecheck`,
-`pnpm lint`, `pnpm format:check` passing (final main: 684 tests).
+`pnpm lint`, `pnpm format:check` passing (main after #22: 749 tests).
 
 Open follow-ups (non-blocking review suggestions):
 
@@ -130,10 +131,14 @@ Open follow-ups (non-blocking review suggestions):
   only the template tree.
 - `context-budget.md`: define "session phase"; a controller that predates
   the failure replies only understands the success strings.
-- Iris session: retire Iris's own queue-rule block now that
-  `~/.praxis/queue-rule.md` ships; adopt the optional
+- Iris session: retire Iris's own queue-rule block and its local
+  upstream-first memory rule once the release carrying these modules is
+  installed (`praxis update`); adopt the optional
   `COMPACT-FAILED <path|-> <reason>` / `RESTORE-FAILED <reason>` replies.
 
 ## Next step
 
-T9 in progress. T7 waits for the user's decision.
+T7 waits for the user's decision (relayed by the Iris session). If approved,
+implement T7, then prepare the v0.1.0-alpha.28 release PR (version bump in
+`package.json`, `src/cli/index.ts` and tests, CHANGELOG) so one release
+carries #14-#22 plus T7; the user triggers `gh release create`.

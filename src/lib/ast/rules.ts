@@ -632,26 +632,57 @@ function argv(command: string): string[] {
   return argvWithSpans(command).map((s) => s.value);
 }
 
+/** Long options of `sh`/`bash`/`ksh`/`zsh`/`dash` that consume a separate
+ * following word as their value (`--rcfile x`, `--init-file x`; the
+ * attached `--rcfile=x` form needs no extra word and is handled by the
+ * caller before it ever reaches this set). */
+const SHELL_C_VALUE_LONG_OPTS = new Set(['--rcfile', '--init-file']);
+
 /**
- * Search a shell's own argv (everything after the shell word itself) for
- * a `-c`/`-lc`/`-o pipefail -c`-style flag cluster and return the command
- * string that follows it. Returns `undefined` when no such flag is
- * present (`bash script.sh`, `bash -n script.sh`) — a positional argument
- * reached before any `-c` cluster means this is not a `-c` invocation.
+ * Search a shell's own argv (everything after the shell word itself) by
+ * walking its leading option grammar — single-dash clusters (`-c`, `-lc`,
+ * `-ec`), `+`-clusters (`+o`, `+O`), and long `--opt` options — consuming
+ * the value word of value-taking options (`-o`/`+o <name>`, `-O`/`+O
+ * <shopt>`, `--rcfile`/`--init-file <file>`, with `--rcfile=x` needing no
+ * extra word) along the way. Scanning stops at a bare `--` or at the
+ * first non-option word, whichever comes first. If any cluster scanned
+ * contained the letter `c`, the command body is the first non-option word
+ * reached (after `--`, when present); otherwise this is not a `-c`
+ * invocation at all (`bash script.sh`, `bash -n script.sh`, `bash --
+ * script.sh`) and `undefined` is returned.
  */
 function findShellCArgument(rest: string[]): string | undefined {
-  for (let i = 0; i < rest.length; i++) {
+  let hasC = false;
+  let i = 0;
+  while (i < rest.length) {
     const t = rest[i]!;
-    if (t === '-o') {
+    if (t === '--') {
+      i++;
+      break;
+    }
+    if (t.startsWith('--')) {
+      const eq = t.indexOf('=');
+      const name = eq === -1 ? t : t.slice(0, eq);
+      if (SHELL_C_VALUE_LONG_OPTS.has(name) && eq === -1) {
+        i += 2;
+        continue;
+      }
       i++;
       continue;
     }
-    if (/^-[A-Za-z]+$/.test(t) && t.includes('c')) {
-      return rest[i + 1];
+    if ((t[0] === '-' || t[0] === '+') && t.length > 1) {
+      const body = t.slice(1);
+      if (body.includes('c')) hasC = true;
+      if (body.includes('o') || body.includes('O')) {
+        i += 2;
+        continue;
+      }
+      i++;
+      continue;
     }
-    if (!t.startsWith('-')) break;
+    break;
   }
-  return undefined;
+  return hasC ? rest[i] : undefined;
 }
 
 interface EffectiveInvocation {
@@ -692,8 +723,35 @@ function resolveEffectiveInvocation(argvList: string[]): EffectiveInvocation {
       i++;
       continue;
     }
-    if (currentWrapper === 'env' && (t === '-S' || t === '--split-string')) {
-      return argvList[i + 1] !== undefined ? { nestedCommand: argvList[i + 1] } : {};
+    if (currentWrapper === 'env') {
+      // `-S`/`--split-string`'s value is a full command line, not an inert
+      // argument — in every spelling: attached (`-S<cmd>`, `-S'<cmd>'` —
+      // the latter already merged into one token by `argvWithSpans`'s
+      // quote handling), `--split-string=<cmd>`, or the separate-word form
+      // (`-S <cmd>` / `--split-string <cmd>`). Real `env` also appends any
+      // further argv words after the split-string value as additional
+      // arguments to the program it names, so those words belong in the
+      // nested command line too — `env -S git push --force origin main`
+      // (all unquoted, no quotes at all around the argument) hands
+      // `git push --force origin main` to the shell exactly the same way
+      // the shebang idiom `#!/usr/bin/env -S python3 -u` hands `python3 -u`
+      // plus the script path.
+      let sValue: string | undefined;
+      let restStart = i + 1;
+      if (t === '-S' || t === '--split-string') {
+        sValue = argvList[i + 1];
+        restStart = i + 2;
+      } else if (t.startsWith('-S') && t.length > 2) {
+        sValue = t.slice(2);
+      } else if (t.startsWith('--split-string=')) {
+        sValue = t.slice('--split-string='.length);
+      }
+      if (sValue !== undefined) {
+        const remainder = argvList.slice(restStart);
+        return {
+          nestedCommand: remainder.length > 0 ? `${sValue} ${remainder.join(' ')}` : sValue,
+        };
+      }
     }
     if (currentWrapper) {
       const valueFlags = WRAPPER_VALUE_FLAGS[currentWrapper];
@@ -1014,12 +1072,19 @@ const gitBranchForceDelete: Rule = {
       }
       // An unambiguous prefix of `--delete` or `--force` — git itself
       // accepts any long option abbreviated down to the shortest prefix
-      // that still identifies it uniquely. Length 4 keeps `--d`/`--f` (too
-      // short to be unambiguous against git's fuller option set) excluded
-      // while still catching `--del`, `--delet`, `--forc`, and the like.
-      if (t.startsWith('--') && t.length >= 4) {
-        if ('--delete'.startsWith(t)) deleting = true;
-        else if ('--force'.startsWith(t)) forced = true;
+      // that still identifies it uniquely, and the two options need
+      // different minimum lengths to reach that point. `--delete` has no
+      // other `git branch` long option sharing a prefix with it, so any
+      // prefix from `--del` (length 5) onward is already unambiguous;
+      // shorter than that (`--d`, `--de`) is excluded on principle, not
+      // because git itself would reject it. `--force`, on the other hand,
+      // shares its first four characters with `--format` (`f`, `o`, `r`,
+      // then `c` vs `m`), so `--for` (and shorter) is genuinely ambiguous
+      // between the two — only `--forc` (length 6) and the full `--force`
+      // uniquely identify the force flag.
+      if (t.startsWith('--')) {
+        if (t.length >= 5 && '--delete'.startsWith(t)) deleting = true;
+        else if (t.length >= 6 && '--force'.startsWith(t)) forced = true;
       }
     }
     if (deleting && forced) {

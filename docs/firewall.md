@@ -122,6 +122,20 @@ blocks legitimate work when its own machinery is broken.
   `alias g=git`) redefines what a bare word runs; the hook has no
   visibility into session-local alias/function tables, only the command
   string itself.
+- The shell `-c` option-grammar parser (`findShellCArgument`) models
+  `sh`/`bash`/`zsh`/`dash`/`ksh` conventions: leading `-`/`+` clusters,
+  long `--opt` options, and the value-taking flags those shells define
+  (`-o`/`+o`, `-O`/`+O`, `--rcfile`/`--init-file`). A shell outside that
+  fixed set (fish, csh, tcsh, PowerShell, ...) is not recognized as a
+  `-c` hand-off at all, so its own — possibly different — option grammar
+  is never modeled; a dangerous body passed through one of those shells'
+  `-c` equivalent is inspected only as an opaque argument to an unknown
+  program, the same as any other unrecognized command.
+- `env -S`'s split-string value is reconstructed by tokenising and
+  rejoining argv words with a single space, not by re-deriving the
+  shell's own quoting/escaping rules for that value; unusual internal
+  quoting inside the split string beyond ordinary whitespace-separated
+  words is not specially modeled.
 
 The inspector (`src/lib/ast/inspect.ts`) normalizes every command segment
 before running rules against it — stripping `VAR=value` assignments and
@@ -139,7 +153,34 @@ and a pre-existing hole where `bash -c "rm -rf /"` evaded every rule
 because the `-c` body was never re-inspected at all. Nesting beyond the
 cap fails closed: the inspector denies with "command nesting too deep to
 inspect" rather than silently allowing content it never actually looked
-at.
+at — this applies equally to a chain of shell `-c` hand-offs and to plain
+command-substitution nesting (`$(...)`) with no shell hand-off involved at
+all; either shape denies once the bound is crossed, regardless of how
+harmless the unreached innermost command actually is.
+
+The `-c`-body detector (`findShellCArgument`) walks the shell's own
+leading-option grammar instead of a single-flag heuristic: it scans
+`-`/`+` clusters and long `--opt` options, consumes the value word of
+`-o`/`+o`, `-O`/`+O`, and `--rcfile`/`--init-file` (the attached
+`--rcfile=x` form needs no extra word), and stops at a bare `--` or the
+first non-option word. If any cluster scanned contained the letter `c`,
+the first non-option word reached is treated as the `-c` body — covering
+`bash -c -- "..."`, `bash -c -e "..."`, `bash -O extglob -c "..."`,
+`bash --rcfile x -c "..."`, and `sh -ec "..."` alike, not just a bare
+`-c` in isolation. `env -S`'s value is recognized in every spelling —
+attached (`-S<cmd>`, `-S'<cmd>'`), `--split-string=<cmd>`, and the
+separate-word form — and in the unquoted separate-word form the nested
+command is the `-S` value joined with whatever argv words follow it,
+matching how `env` itself appends trailing arguments to the split
+command.
+
+`git-branch-force-delete` also accepts git's own unambiguous long-option
+abbreviations, but the two flags need different minimum lengths to reach
+that point: `--delete` has no other `git branch` long option sharing a
+prefix with it, so `--del` (5 characters) onward is accepted, while
+`--force` shares its first four characters with `--format` (`--for` is
+genuinely ambiguous between the two) — only `--forc` (6 characters) and
+the full `--force` are accepted.
 
 ## Customisation
 

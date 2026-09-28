@@ -52,7 +52,7 @@ security-sensitive work, and corrections after a review, reserve
 and use `low` for simple delegated subagent tasks. The gap mattered because
 effort was otherwise raised by habit rather than by task.
 
-### Changed - poll the user once per phase inside 50-60% context instead of warning at a flat 75%
+### Changed - poll the user at a clean point between 50% and 60% context instead of warning at a flat 75%
 
 A single fixed threshold either fires too late to act on or nags before a
 clean stopping point exists. `praxis context-usage` and the balanced preset

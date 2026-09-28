@@ -32,7 +32,7 @@ Categories covered (see [`src/data/firewall-defaults.ts`](../src/data/firewall-d
 - **Hook / signing bypass** — `--no-verify`, `--no-gpg-sign`
 - **Secrets paths** — `Read(.env)`, `Read(.env.*)`,
   `Read(*/credentials*)`, `Read(*/.aws/*)`, `Read(**/bypass.token)`,
-  `Read(**/*bypass*token*)`
+  `Read(**/*bypass*token*)`, `Read(**/*token*bypass*)`
 - **Block device / format** — `Bash(dd of=/dev/sd*)`,
   `Bash(mkfs*)`, `Bash(wipefs*)`, `Bash(shred*)`
 - **Privilege escalation** — `Bash(sudo *)`, `Bash(doas *)`
@@ -56,7 +56,10 @@ quotes do not split, and `$(...)` / backtick bodies are extracted for
 separate inspection.
 
 Each token (and the original full string, and each substitution body)
-is then run against the rule set in `src/lib/ast/rules.ts`:
+is then run against the rule set in `src/lib/ast/rules.ts`. This table
+also backfills eight rules (`chmod-recursive-permissive` through
+`npm-install-force` below) that existed in the code before they were
+ever listed here, alongside the three added for guard-evasion coverage.
 
 | Rule ID | Reversibility class | Pattern |
 |---|---|---|
@@ -77,9 +80,9 @@ is then run against the rule set in `src/lib/ast/rules.ts`:
 | `git-update-ref` | history-rewrite | `git update-ref` against `refs/heads/*` or `refs/tags/*` |
 | `git-filter-branch` | history-rewrite | any `git filter-branch` invocation |
 | `npm-install-force` | exec-bypass | `npm`/`pnpm`/`yarn` install with `--force`/`-f` |
-| `git-branch-force-delete` | delete | `git branch -D`, or `-d`/`--delete` combined with `-f`/`--force` (including combined flags like `-df`); plain `-d` stays allowed |
-| `git-path-invocation` | guard-evasion | `git` invoked via an absolute or relative path (`/usr/bin/git`, `./git`, `~/bin/git`) instead of the bare `git` on PATH — routes around a shim |
-| `read-bypass-token` | secrets | any command referencing a path whose basename contains both `bypass` and `token` (e.g. `~/.local/state/iris-worktrees/bypass.token`), across readers, copiers, encoders, and `<` redirection |
+| `git-branch-force-delete` | delete | `git branch -D`, or `-d`/`--delete` combined with `-f`/`--force` (including combined flags like `-df`); plain `-d` stays allowed. Resolves git through the same wrapper/env detection as `git-path-invocation` and walks past git's own global options (`-C`, `-c`, `--git-dir`, `--work-tree`, `--namespace`) before looking for `branch` |
+| `git-path-invocation` | guard-evasion | `git` invoked via an absolute or relative path (`/usr/bin/git`, `./git`, `~/bin/git`) instead of the bare `git` on PATH — routes around a shim. Also resolves through `env`/`timeout`/`stdbuf`/`setsid`/`xargs`/... wrappers (including `env`'s `-u`/`-C`/`-S` value flags) and one level of `sh -c "..."` / `bash -c '...'` nesting |
+| `read-bypass-token` | secrets | any command referencing a path whose basename contains both `bypass` and `token` (e.g. `~/.local/state/iris-worktrees/bypass.token`), across readers, copiers, encoders, `<` redirection, and `--opt=<path>` values. Inspects quoted content too (`cat "$HOME/.../bypass.token"`), splitting it on whitespace so quoted prose ("bypass token" as two words) still passes. A glob that avoids spelling the words out (e.g. `by*`) cannot be caught by this syntactic check |
 
 The hook returns `deny` with a human-readable reason listing every
 rule that hit and its reversibility class. The reason text is the same

@@ -83,6 +83,57 @@ existing Layer 1 `git branch -D` deny with a check that also catches
 `--delete --force`. Layer 1 gained matching `Read(**/bypass.token)` and
 `Read(**/*bypass*token*)` entries.
 
+### Fixed - quoting, wrapper, and global-option gaps in the guard-evasion rules
+
+Post-review correction on the three rules above. `read-bypass-token` was
+fooled by quoting: `cat "$HOME/.../bypass.token"` and `cat
+'/x/bypass.token'` both evaded it, because the rule read tokens after
+quote-stripping, which discards quoted content entirely rather than
+inspecting it. It now inspects quoted content too, splitting it on
+whitespace so a quoted path stays one word (basename catches it) while
+quoted prose like `"bypass token"` still becomes two separate words
+(stays allowed). It also now checks the value in `--opt=<path>`, instead
+of skipping every token that starts with `-`. A syntactic, basename-based
+check still cannot catch a glob that avoids spelling the words out (e.g.
+`by*`) — that residual gap is intent-level, and is what the
+anticipatory-pause protocol text in
+`templates/praxis-home/irreversibility-firewall.md` covers instead of the
+rule itself.
+
+The suite's own fixture, `tests/data/firewall-defaults-bypass-token.test.ts`,
+had a basename that the rule and the L1 `Read(**/*bypass*token*)` glob would
+both have denied — anyone editing that file would have tripped the very
+guard it tests. Renamed to `firewall-defaults-guard-tokens.test.ts`; a repo
+sweep found no other path with both words in its basename. The deny message
+also no longer says "reading or copying" for a rule that fires on any
+touching command.
+
+`git-path-invocation` and `git-branch-force-delete` shared an
+`effectiveProgram` helper that resolved through `env`/`nohup`/`nice`/...
+and leading `VAR=value` assignments, but not through `timeout`, `stdbuf`,
+`setsid`, `xargs`, `env`'s value-taking flags (`-u NAME`, `-C dir`, `-S
+str`), or one level of `sh -c "..."` / `bash -c '...'` nesting — so
+`timeout 5 /usr/bin/git push --force` or `sh -c "/usr/bin/git status"`
+reached git unchecked. All of those now resolve to the same effective
+program. `sudo`/`doas` are deliberately not added to the wrapper list:
+they are already denied outright by `sudo-escalation`. A path to git that
+is merely an *argument* to a non-executing command (`ls -l /usr/bin/git`,
+`which git`) still stays allowed. `git-branch-force-delete` additionally
+now walks past git's own global options (`-C`, `-c`, `--git-dir`,
+`--work-tree`, `--namespace`, both the space-separated and `--flag=value`
+forms) before looking for the `branch` subcommand, so `git -C repo branch
+-D x` and `env git branch -D x` are caught the same as the bare form.
+
+Layer 1 gained a `Read(**/*token*bypass*)` entry for the reverse basename
+order; the existing comment above the bypass-token entries no longer
+claims L1 "mirrors" L2 — L1 is case-sensitive and order-specific, L2 is
+neither, so the two complement each other rather than duplicate. The
+`docs/firewall.md` rule table was also backfilled in the same commit that
+introduced these three rules to include eight rules that already existed
+in code but were never listed there; that backfill is called out
+explicitly in the docs now, since the table's growth from 9 to 20 rows
+was not all attributable to this change.
+
 ## [0.1.0-alpha.27] - 2026-09-24
 
 ### Changed - gentle-ai 3.7.0 and engram 2.1.0 are the expected versions

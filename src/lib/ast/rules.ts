@@ -481,6 +481,162 @@ const npmInstallForce: Rule = {
   },
 };
 
+// Wrappers that run the next word as the program. Together with leading
+// `VAR=value` assignments, they would otherwise hide a path-form git from
+// a check that only looks at the first token (`env /usr/bin/git ...`).
+//
+// `sudo` and `doas` are deliberately absent: they are already denied
+// outright by `sudo-escalation` regardless of what they wrap, so adding
+// them here would be redundant, not more thorough.
+const PROGRAM_WRAPPERS = new Set([
+  'env',
+  'command',
+  'exec',
+  'nohup',
+  'nice',
+  'time',
+  'builtin',
+  'timeout',
+  'stdbuf',
+  'setsid',
+  'xargs',
+]);
+
+/**
+ * Wrapper flags that consume a separate following argument as their value
+ * (`env -u NAME`, not `env -uNAME`), so that argument must not be
+ * mistaken for the program name. Flags not listed here are assumed to take
+ * no value and are skipped on their own (`stdbuf -oL`, `nice -5`).
+ */
+const WRAPPER_VALUE_FLAGS: Record<string, Set<string>> = {
+  env: new Set(['-u', '--unset', '-C', '--chdir', '-S', '--split-string']),
+  timeout: new Set(['-k', '--kill-after', '--signal', '-s']),
+};
+
+/** Shells whose `-c <body>` argument is a nested command line, not a plain program name. */
+const SHELL_C_INTERPRETERS = new Set(['sh', 'bash', 'zsh', 'dash']);
+
+/** Bounds how many nested `sh -c "sh -c ..."` layers are followed. */
+const MAX_SHELL_C_DEPTH = 3;
+
+/**
+ * Parse `command` into shell-like argv entries: unquoted runs split on
+ * whitespace, while single- and double-quoted regions each become part of
+ * the surrounding argument with their quotes removed (so a quoted value
+ * containing whitespace, such as a `sh -c "..."` body, stays one entry
+ * instead of being split apart).
+ */
+function argv(command: string): string[] {
+  const args: string[] = [];
+  let buf = '';
+  let hasContent = false;
+  let i = 0;
+  while (i < command.length) {
+    const ch = command[i]!;
+    if (ch === "'") {
+      const end = command.indexOf("'", i + 1);
+      buf += end === -1 ? command.slice(i + 1) : command.slice(i + 1, end);
+      hasContent = true;
+      i = end === -1 ? command.length : end + 1;
+      continue;
+    }
+    if (ch === '"') {
+      let j = i + 1;
+      while (j < command.length) {
+        if (command[j] === '\\' && j + 1 < command.length) {
+          buf += command[j + 1];
+          j += 2;
+          continue;
+        }
+        if (command[j] === '"') break;
+        buf += command[j];
+        j++;
+      }
+      hasContent = true;
+      i = j < command.length ? j + 1 : command.length;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      if (hasContent) {
+        args.push(buf);
+        buf = '';
+        hasContent = false;
+      }
+      i++;
+      continue;
+    }
+    buf += ch;
+    hasContent = true;
+    i++;
+  }
+  if (hasContent) args.push(buf);
+  return args;
+}
+
+/**
+ * Index in `argvList` of the actual program token: skips leading
+ * `VAR=value` assignments and `PROGRAM_WRAPPERS` (with their flags and
+ * value-taking arguments). Callers that need the position — to walk
+ * further arguments, e.g. git's own global options after `env git ...` —
+ * use this instead of `effectiveProgram`, which additionally follows
+ * `sh -c` bodies and therefore cannot report a position in the original
+ * argv array once it has recursed into a nested one.
+ */
+function effectiveProgramIndex(argvList: string[]): number | undefined {
+  let i = 0;
+  let currentWrapper: string | undefined;
+  while (i < argvList.length) {
+    const t = argvList[i]!;
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) {
+      i++;
+      continue;
+    }
+    if (currentWrapper) {
+      const valueFlags = WRAPPER_VALUE_FLAGS[currentWrapper];
+      if (valueFlags?.has(t)) {
+        i += 2;
+        continue;
+      }
+      if (t.startsWith('-') || /^\d+[a-zA-Z]*$/.test(t)) {
+        i++;
+        continue;
+      }
+    }
+    if (PROGRAM_WRAPPERS.has(t)) {
+      currentWrapper = t;
+      i++;
+      continue;
+    }
+    return i;
+  }
+  return undefined;
+}
+
+/**
+ * The program a command actually runs: resolves `effectiveProgramIndex`,
+ * then — when that program is a shell and it is invoked as `-c <body>` —
+ * recurses into the body's own argv so `sh -c "/usr/bin/git status"`
+ * resolves to `/usr/bin/git`, not `sh`. Bounded by `MAX_SHELL_C_DEPTH`.
+ *
+ * This does not split a chain inside the body (`sh -c "cd /x && rm -rf /"`
+ * only ever inspects `cd`, the first word); the caller decides whether
+ * that residual gap matters for its rule.
+ */
+function effectiveProgram(argvList: string[], depth = 0): string | undefined {
+  const idx = effectiveProgramIndex(argvList);
+  if (idx === undefined) return undefined;
+  const prog = argvList[idx]!;
+  if (
+    depth < MAX_SHELL_C_DEPTH &&
+    SHELL_C_INTERPRETERS.has(basename(prog)) &&
+    argvList[idx + 1] === '-c' &&
+    argvList[idx + 2] !== undefined
+  ) {
+    return effectiveProgram(argv(argvList[idx + 2]!), depth + 1);
+  }
+  return prog;
+}
+
 // git invoked by an absolute or relative path (e.g. `/usr/bin/git`,
 // `./git`, `~/bin/git`) instead of the bare `git` on PATH. The only reason
 // to spell it this way is to route around a shim installed on PATH under
@@ -490,40 +646,17 @@ const npmInstallForce: Rule = {
 // shape itself, regardless of subcommand: a bypass path that only fires on
 // dangerous subcommands still lets an agent probe which subcommands are
 // covered.
-// Wrappers that run the next word as the program. Together with leading
-// `VAR=value` assignments, they would otherwise hide a path-form git from
-// a check that only looks at the first token (`env /usr/bin/git ...`).
-const PROGRAM_WRAPPERS = new Set(['env', 'command', 'exec', 'nohup', 'nice', 'time', 'builtin']);
-
-/**
- * The program a command actually runs: skips leading env assignments,
- * wrappers, and the wrappers' flags and numeric arguments (`nice -n 5`).
- */
-function effectiveProgram(toks: string[]): string | undefined {
-  let i = 0;
-  let wrapped = false;
-  while (i < toks.length) {
-    const t = toks[i]!;
-    const isAssignment = /^[A-Za-z_][A-Za-z0-9_]*=/.test(t);
-    const isWrapperArg = wrapped && (t.startsWith('-') || /^\d+$/.test(t));
-    if (isAssignment || isWrapperArg) {
-      i++;
-      continue;
-    }
-    if (PROGRAM_WRAPPERS.has(t)) {
-      wrapped = true;
-      i++;
-      continue;
-    }
-    return t;
-  }
-  return undefined;
-}
-
+//
+// `effectiveProgram` resolves through `VAR=value` assignments, the
+// wrappers in `PROGRAM_WRAPPERS` (`env`, `timeout`, `xargs`, ...), and one
+// level of `sh -c "..."` / `bash -c '...'` nesting, so all of those hiding
+// spots collapse to the same check. A path that merely appears as an
+// *argument* to a non-executing command (`ls -l /usr/bin/git`, `which
+// git`) is not the effective program and stays allowed.
 const gitPathInvocation: Rule = {
   id: 'git-path-invocation',
   inspect(command) {
-    const prog = effectiveProgram(tokens(command));
+    const prog = effectiveProgram(argv(command));
     if (!prog || !prog.includes('/')) return null;
     if (basename(prog) !== 'git') return null;
     return {
@@ -536,29 +669,112 @@ const gitPathInvocation: Rule = {
   },
 };
 
+/**
+ * Words in a command, including quoted content — unlike `tokens()`, which
+ * strips quoted regions away entirely for the simpler prose-insensitive
+ * rules. Quoted content is itself split on whitespace, so a quoted path
+ * (`"$HOME/.../bypass.token"`) stays one word when it has no internal
+ * space, while quoted prose (`"bypass token"`) still splits into the two
+ * separate words a human would read it as. This is what lets
+ * `read-bypass-token` see through quoting without also flagging prose.
+ */
+function wordsIncludingQuoted(command: string): string[] {
+  const words: string[] = [];
+  let buf = '';
+  const flushBuf = (): void => {
+    if (buf.length > 0) words.push(buf);
+    buf = '';
+  };
+  const appendQuoted = (inner: string): void => {
+    const parts = inner.split(/\s+/);
+    if (parts.length === 1) {
+      buf += parts[0];
+      return;
+    }
+    buf += parts[0];
+    flushBuf();
+    for (let k = 1; k < parts.length - 1; k++) {
+      if (parts[k]) words.push(parts[k]);
+    }
+    buf = parts[parts.length - 1] ?? '';
+  };
+  let i = 0;
+  while (i < command.length) {
+    const ch = command[i]!;
+    if (ch === "'") {
+      const end = command.indexOf("'", i + 1);
+      appendQuoted(end === -1 ? command.slice(i + 1) : command.slice(i + 1, end));
+      i = end === -1 ? command.length : end + 1;
+      continue;
+    }
+    if (ch === '"') {
+      let j = i + 1;
+      let inner = '';
+      while (j < command.length) {
+        if (command[j] === '\\' && j + 1 < command.length) {
+          inner += command[j + 1];
+          j += 2;
+          continue;
+        }
+        if (command[j] === '"') break;
+        inner += command[j];
+        j++;
+      }
+      appendQuoted(inner);
+      i = j < command.length ? j + 1 : command.length;
+      continue;
+    }
+    if (/\s/.test(ch)) {
+      flushBuf();
+      i++;
+      continue;
+    }
+    buf += ch;
+    i++;
+  }
+  flushBuf();
+  return words;
+}
+
 // Reading, copying, dumping, or otherwise touching a bypass-token file —
 // e.g. `~/.local/state/iris-worktrees/bypass.token`, the token that lets a
 // session skip the Iris git-worktree guard. The check is basename-based so
 // it catches every reader (`cat`, `head`, `less`, `cp`, `base64`, `xxd`,
-// redirection `< path`, ...) without enumerating them, but it only looks
-// at whitespace-delimited tokens after quote-stripping, so a quoted prose
-// mention ("bypass token" in a commit message) never trips it.
+// redirection `< path`, ...) without enumerating them.
+//
+// It inspects `wordsIncludingQuoted`, not the quote-stripping `tokens()`,
+// so a quoted path (`cat "$HOME/.../bypass.token"`, `cat '/x/bypass.token'`)
+// cannot evade it by quoting alone — quoted prose ("bypass token" in a
+// commit message, as two separate words) still stays allowed, because
+// quoted content is itself split on whitespace before the basename check.
+// A word starting with `-` is checked past its `=`, so `--opt=<path>`
+// values are covered instead of every flag-shaped word being skipped.
+//
+// This is still a syntactic, basename-based check: a glob that avoids
+// spelling the words out (e.g. `by*` expanding to the token file) cannot
+// be caught here. That residual gap is intent-level, not a parsing bug —
+// see Layer 1 (`FIREWALL_DEFAULTS`) and the anticipatory-pause protocol in
+// `templates/praxis-home/irreversibility-firewall.md` for the broader net.
 const readBypassToken: Rule = {
   id: 'read-bypass-token',
   inspect(command) {
-    const toks = tokens(command);
-    for (const t of toks) {
-      if (t.startsWith('-')) continue;
-      const base = basename(t).toLowerCase();
+    for (const word of wordsIncludingQuoted(command)) {
+      let candidate = word;
+      if (word.startsWith('-')) {
+        const eq = word.indexOf('=');
+        if (eq === -1) continue;
+        candidate = word.slice(eq + 1);
+      }
+      const base = basename(candidate).toLowerCase();
       if (base.includes('bypass') && base.includes('token')) {
         return {
           ruleId: 'read-bypass-token',
           reversibilityClass: 'secrets',
           message:
-            `Reading or copying a bypass-token path (\`${t}\`) is denied. A bypass token ` +
+            `Touching a bypass-token path (\`${word}\`) is denied. A bypass token ` +
             '(e.g. `~/.local/state/iris-worktrees/bypass.token`) exists to let a session ' +
-            'skip a guard; reading, printing, or exfiltrating it defeats that guard for ' +
-            'every session that trusts it.',
+            'skip a guard; reading, printing, copying, or exfiltrating it defeats that ' +
+            'guard for every session that trusts it.',
         };
       }
     }
@@ -566,18 +782,60 @@ const readBypassToken: Rule = {
   },
 };
 
+// Git global options that take a separate value before the subcommand
+// (`git -C repo branch ...`, `git -c k=v branch ...`). Their `--flag=value`
+// spelling is handled separately: any leading `--xxx=yyy` token is skipped
+// on its own regardless of which flag it is.
+const GIT_GLOBAL_OPTS_WITH_VALUE = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace']);
+
+/**
+ * Index of git's subcommand (`branch`, `push`, ...) in `argvList`, given
+ * the index of `git` itself. Walks past global options — both the
+ * space-separated form (`-C repo`, `--git-dir .git`) and the `--flag=value`
+ * form — so `git -C repo branch -D x` is not missed by a check that only
+ * ever looked at `argvList[gitIndex + 1]`.
+ */
+function gitSubcommandIndex(argvList: string[], gitIndex: number): number {
+  let i = gitIndex + 1;
+  while (i < argvList.length) {
+    const t = argvList[i]!;
+    if (t.startsWith('--') && t.includes('=')) {
+      i++;
+      continue;
+    }
+    if (GIT_GLOBAL_OPTS_WITH_VALUE.has(t)) {
+      i += 2;
+      continue;
+    }
+    if (t.startsWith('-')) {
+      i++;
+      continue;
+    }
+    break;
+  }
+  return i;
+}
+
 // `git branch -D` (and every spelling of delete+force: `--delete --force`,
 // `-d --force`/`-f`, combined `-df`/`-Df`) skips the merge check that
 // plain `-d` enforces. `-d` alone stays allowed; so does `--merged`, which
 // only lists branches.
+//
+// Uses the same program detection as `git-path-invocation` (`env`,
+// `GIT_DIR=... git ...`, path-form `git`, ...) and walks past git's own
+// global options before looking for `branch`, so `git -C repo branch -D x`
+// and `env git branch -D x` are caught the same as the bare form.
 const gitBranchForceDelete: Rule = {
   id: 'git-branch-force-delete',
   inspect(command) {
-    const toks = tokens(command);
-    if (toks[0] !== 'git' || toks[1] !== 'branch') return null;
+    const args = argv(command);
+    const gitIndex = effectiveProgramIndex(args);
+    if (gitIndex === undefined || basename(args[gitIndex]!) !== 'git') return null;
+    const subIndex = gitSubcommandIndex(args, gitIndex);
+    if (args[subIndex] !== 'branch') return null;
     let deleting = false;
     let forced = false;
-    for (const t of toks.slice(2)) {
+    for (const t of args.slice(subIndex + 1)) {
       if (t === '-D') {
         deleting = true;
         forced = true;

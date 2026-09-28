@@ -44,6 +44,32 @@ describe('git-path-invocation', () => {
     expect(r.hits.some((h) => h.ruleId === 'git-path-invocation')).toBe(true);
   });
 
+  it.each([
+    'env -u NAME /usr/bin/git status',
+    'env -C /some/dir /usr/bin/git status',
+    'timeout 5 /usr/bin/git push --force',
+    'stdbuf -oL /usr/bin/git log',
+    'setsid /usr/bin/git status',
+    'xargs /usr/bin/git status',
+  ])('denies path-form git behind a wrapper this rule previously missed: %s', (cmd) => {
+    const r = inspectBashCommand(cmd);
+    expect(r.decision).toBe('deny');
+    expect(r.hits.some((h) => h.ruleId === 'git-path-invocation')).toBe(true);
+  });
+
+  it.each(['sh -c "/usr/bin/git status"', "bash -c '/usr/bin/git push --force origin main'"])(
+    'denies path-form git hidden inside a `sh -c` / `bash -c` body: %s',
+    (cmd) => {
+      const r = inspectBashCommand(cmd);
+      expect(r.decision).toBe('deny');
+      expect(r.hits.some((h) => h.ruleId === 'git-path-invocation')).toBe(true);
+    },
+  );
+
+  it('denies `sudo -u x /usr/bin/git status` (via sudo-escalation, whichever rule fires)', () => {
+    expect(inspectBashCommand('sudo -u x /usr/bin/git status').decision).toBe('deny');
+  });
+
   it('allows plain `git` behind a wrapper or env prefix', () => {
     expect(inspectBashCommand('GIT_PAGER=cat env git log').decision).toBe('allow');
   });
@@ -59,6 +85,11 @@ describe('git-path-invocation', () => {
   it('does not false-positive on a different program that merely contains "git"', () => {
     expect(inspectBashCommand('/usr/bin/gitk --all').decision).toBe('allow');
     expect(inspectBashCommand('/usr/local/bin/git-lfs pull').decision).toBe('allow');
+  });
+
+  it('allows a path to git appearing only as an argument to a non-executing command', () => {
+    expect(inspectBashCommand('ls -l /usr/bin/git').decision).toBe('allow');
+    expect(inspectBashCommand('which git').decision).toBe('allow');
   });
 
   it('reports a guard-evasion reversibility class', () => {
@@ -98,6 +129,46 @@ describe('read-bypass-token', () => {
 
   it('denies input redirection from the bypass token (`cmd < path`)', () => {
     expect(inspectBashCommand(`cat < ${TOKEN_PATH}`).decision).toBe('deny');
+  });
+
+  it('denies a double-quoted path with an unexpanded env var (`cat "$HOME/.../bypass.token"`)', () => {
+    const r = inspectBashCommand('cat "$HOME/.local/state/iris-worktrees/bypass.token"');
+    expect(r.decision).toBe('deny');
+    expect(r.hits.some((h) => h.ruleId === 'read-bypass-token')).toBe(true);
+  });
+
+  it("denies a single-quoted path (`cat '/x/bypass.token'`)", () => {
+    const r = inspectBashCommand("cat '/x/bypass.token'");
+    expect(r.decision).toBe('deny');
+    expect(r.hits.some((h) => h.ruleId === 'read-bypass-token')).toBe(true);
+  });
+
+  it('denies a bypass-token path passed as an `--opt=<path>` value', () => {
+    const r = inspectBashCommand(
+      'some-tool --input-file=~/.local/state/iris-worktrees/bypass.token',
+    );
+    expect(r.decision).toBe('deny');
+    expect(r.hits.some((h) => h.ruleId === 'read-bypass-token')).toBe(true);
+  });
+
+  it('allows an unrelated `--opt=<path>` value', () => {
+    expect(
+      inspectBashCommand('some-tool --input-file=~/.local/state/iris-worktrees/session.json')
+        .decision,
+    ).toBe('allow');
+  });
+
+  it('allows a quoted prose mention split across two words even without stripping quotes first', () => {
+    // "bypass" and "token" land as two separate words once the quoted
+    // content is split on whitespace, so the pair-of-words check never
+    // fires. This complements (does not replace) the existing quote-strip
+    // based test above.
+    expect(inspectBashCommand('echo "please avoid any bypass token here"').decision).toBe('allow');
+  });
+
+  it('uses a "touching" message that also fits non-read commands like `cp`', () => {
+    const r = inspectBashCommand(`cp ${TOKEN_PATH} /tmp/x`);
+    expect(r.hits[0].message).toMatch(/Touching a bypass-token path/);
   });
 
   it('denies a differently-ordered basename ("token" before "bypass")', () => {
@@ -181,6 +252,22 @@ describe('git-branch-force-delete', () => {
 
   it('allows `git branch` (list branches)', () => {
     expect(inspectBashCommand('git branch').decision).toBe('allow');
+  });
+
+  it.each([
+    'git -C repo branch -D x',
+    'git -c k=v branch -D x',
+    'git --git-dir=.git branch -D x',
+    'env git branch -D x',
+    'GIT_DIR=.git git branch -D x',
+  ])('denies force-delete behind a git global option or a wrapper/env prefix: %s', (cmd) => {
+    const r = inspectBashCommand(cmd);
+    expect(r.decision).toBe('deny');
+    expect(r.hits.some((h) => h.ruleId === 'git-branch-force-delete')).toBe(true);
+  });
+
+  it('allows a safe delete behind a git global option (`git -C repo branch -d x`)', () => {
+    expect(inspectBashCommand('git -C repo branch -d x').decision).toBe('allow');
   });
 
   it('reports a delete reversibility class and tells the agent to verify the merge', () => {

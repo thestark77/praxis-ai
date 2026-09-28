@@ -31,7 +31,11 @@ bypasses.
   is to let a session skip a guard, such as Iris's git-worktree-guard token
   at `~/.local/state/iris-worktrees/bypass.token`. This applies to any
   reader (`cat`, `head`, `less`, `cp`, `base64`, `xxd`, redirection into a
-  command), not just the ones the deny list happens to name.
+  command), not just the ones the deny list happens to name — and it
+  applies just as much to a path spelled to avoid the word (a glob like
+  `by*`, or splitting the name across variables) as to the literal name.
+  The rules below can only catch the literal spelling; this line is what
+  covers the intent.
 - Delete branches only with `git branch -d` after verifying the merge
   (`git branch --merged`). Never use `-D`, `-d --force`/`-f`, or any
   combined-flag spelling of force-delete.

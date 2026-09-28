@@ -71,19 +71,23 @@ those messages to the controller's own turns and literal `COMPACT-READY` /
 
 Three new AST rules. `git-path-invocation` denies running git by a path
 (`/usr/bin/git`, `./git`, `~/bin/git`) instead of the bare `git` on PATH,
-because that shape skips any shim installed under that name. It resolves
+because that shape skips any shim installed under that name; it resolves
 through env assignments, common wrappers (`env`, `timeout`, `nice`,
-`xargs`, ...) and a simple `sh -c` body, and still allows the path as a
-plain argument (`ls -l /usr/bin/git`). `read-bypass-token` denies commands
-that touch a path whose basename names a guard bypass token, such as
-Iris's `~/.local/state/iris-worktrees/bypass.token`, quoted or not. A glob
-that avoids spelling the name (e.g. `by*`) cannot be caught syntactically;
-the firewall protocol text covers that intent. `git-branch-force-delete`
+`xargs`, ..., matched by basename so a path-form wrapper counts too), and
+up to three levels of nested `sh -c`/`bash -c` bodies, and still allows
+the path as a plain argument (`ls -l /usr/bin/git`). `read-bypass-token`
+denies commands that touch a path whose basename contains `bypass` and
+ends in the literal `.token` extension, such as Iris's
+`~/.local/state/iris-worktrees/bypass.token`, quoted or not; Layer 1
+gained a matching `Read(**/*bypass*.token)` glob. `git-branch-force-delete`
 denies `git branch -D` and every force-delete spelling, including after
-git global options (`git -C repo branch -D x`), while plain `-d` stays
-allowed. Layer 1 gained matching `Read()` globs for bypass-token names.
-The `docs/firewall.md` rule table also lists eight existing rules that
-were never documented.
+git global options or a wrapper/path-form git, while plain `-d` stays
+allowed. The `docs/firewall.md` rule table also lists eight existing
+rules that were never documented.
+
+Known limits: `env -S`, `bash -lc`, `xargs -I {}`, a chained `sh -c "a &&
+git ..."` tail, and quote-concatenated bypass-token names are not yet
+caught; see `docs/firewall.md`'s Known limits section.
 
 ## [0.1.0-alpha.27] - 2026-09-24
 

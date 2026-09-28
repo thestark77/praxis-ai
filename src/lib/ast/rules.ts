@@ -597,13 +597,22 @@ function effectiveProgramIndex(argvList: string[]): number | undefined {
         i += 2;
         continue;
       }
+      // Skip a bare numeric argument the wrapper consumes as its own value
+      // rather than as the program to run (`timeout 5 ...`, `nice -n 5 ...`
+      // once `-n` itself has been skipped as a flag): a duration or a
+      // niceness level, not a program name.
       if (t.startsWith('-') || /^\d+[a-zA-Z]*$/.test(t)) {
         i++;
         continue;
       }
     }
-    if (PROGRAM_WRAPPERS.has(t)) {
-      currentWrapper = t;
+    // Matched by basename, like `SHELL_C_INTERPRETERS` below, so a
+    // path-form wrapper (`/usr/bin/env`, `/usr/bin/timeout`, ...) is
+    // recognised as a wrapper instead of being mistaken for the effective
+    // program itself — which would stop the walk one token too early and
+    // let a path-form git hide behind a path-form wrapper undetected.
+    if (PROGRAM_WRAPPERS.has(basename(t))) {
+      currentWrapper = basename(t);
       i++;
       continue;
     }
@@ -648,11 +657,15 @@ function effectiveProgram(argvList: string[], depth = 0): string | undefined {
 // covered.
 //
 // `effectiveProgram` resolves through `VAR=value` assignments, the
-// wrappers in `PROGRAM_WRAPPERS` (`env`, `timeout`, `xargs`, ...), and one
-// level of `sh -c "..."` / `bash -c '...'` nesting, so all of those hiding
-// spots collapse to the same check. A path that merely appears as an
-// *argument* to a non-executing command (`ls -l /usr/bin/git`, `which
-// git`) is not the effective program and stays allowed.
+// wrappers in `PROGRAM_WRAPPERS` (`env`, `timeout`, `xargs`, ..., matched
+// by basename so a path-form wrapper counts too), and up to
+// `MAX_SHELL_C_DEPTH` levels of nested `sh -c "..."` / `bash -c '...'`
+// bodies, so all of those hiding spots collapse to the same check. Only
+// the body's first command is ever inspected — `sh -c "cd /x && /usr/bin/git
+// ..."` resolves to `cd`, not the git call after `&&` — see `effectiveProgram`'s
+// own doc comment. A path that merely appears as an *argument* to a
+// non-executing command (`ls -l /usr/bin/git`, `which git`) is not the
+// effective program and stays allowed.
 const gitPathInvocation: Rule = {
   id: 'git-path-invocation',
   inspect(command) {
@@ -742,6 +755,14 @@ function wordsIncludingQuoted(command: string): string[] {
 // it catches every reader (`cat`, `head`, `less`, `cp`, `base64`, `xxd`,
 // redirection `< path`, ...) without enumerating them.
 //
+// The basename must contain `bypass` AND end with the literal `.token`
+// extension (case-insensitive). An earlier version matched any basename
+// containing both substrings anywhere, which denied unrelated commands
+// that merely mention both words — a branch named `feat/bypass-token`, a
+// grep for `bypass_token`, a `--grep=bypass-token` filter — none of which
+// touch the actual token file. Requiring the `.token` suffix keeps the
+// rule aimed at the file shape it exists to catch.
+//
 // It inspects `wordsIncludingQuoted`, not the quote-stripping `tokens()`,
 // so a quoted path (`cat "$HOME/.../bypass.token"`, `cat '/x/bypass.token'`)
 // cannot evade it by quoting alone — quoted prose ("bypass token" in a
@@ -752,10 +773,16 @@ function wordsIncludingQuoted(command: string): string[] {
 // A word that exists only inside quotes must also look like a path
 // (contain `/`, or start with `~` or `$`), so a commit message that merely
 // names `bypass.token` stays allowed while `cat "./bypass.token"` does not.
+// This filter still earns its keep under the narrower `.token`-suffix
+// check above: without it, a quoted prose mention like `"remove
+// bypass.token handling"` would itself parse as a bare `bypass.token`
+// word and get denied.
 //
 // This is still a syntactic, basename-based check: a glob that avoids
 // spelling the words out (e.g. `by*` expanding to the token file) cannot
-// be caught here. That residual gap is intent-level, not a parsing bug —
+// be caught here, and neither can a quote-concatenated or otherwise
+// obfuscated name (e.g. `"byp"'ass.to'"ken"`) that never appears as one
+// literal word. That residual gap is intent-level, not a parsing bug —
 // see Layer 1 (`FIREWALL_DEFAULTS`) and the anticipatory-pause protocol in
 // `templates/praxis-home/irreversibility-firewall.md` for the broader net.
 const readBypassToken: Rule = {
@@ -771,7 +798,7 @@ const readBypassToken: Rule = {
         candidate = word.slice(eq + 1);
       }
       const base = basename(candidate).toLowerCase();
-      if (base.includes('bypass') && base.includes('token')) {
+      if (base.includes('bypass') && base.endsWith('.token')) {
         return {
           ruleId: 'read-bypass-token',
           reversibilityClass: 'secrets',
@@ -826,10 +853,15 @@ function gitSubcommandIndex(argvList: string[], gitIndex: number): number {
 // plain `-d` enforces. `-d` alone stays allowed; so does `--merged`, which
 // only lists branches.
 //
-// Uses the same program detection as `git-path-invocation` (`env`,
-// `GIT_DIR=... git ...`, path-form `git`, ...) and walks past git's own
-// global options before looking for `branch`, so `git -C repo branch -D x`
-// and `env git branch -D x` are caught the same as the bare form.
+// Uses `effectiveProgramIndex` — the same env/wrapper/path-form detection
+// as `git-path-invocation` (`env`, `GIT_DIR=... git ...`, path-form `git`,
+// ...) — and walks past git's own global options before looking for
+// `branch`, so `git -C repo branch -D x` and `env git branch -D x` are
+// caught the same as the bare form. It does NOT go through
+// `effectiveProgram`, so unlike `git-path-invocation` it does not follow a
+// `sh -c`/`bash -c` body: `sh -c "git branch -D x"` resolves its
+// effective program to `sh`, not `git`, and this rule never sees the
+// branch-delete inside.
 const gitBranchForceDelete: Rule = {
   id: 'git-branch-force-delete',
   inspect(command) {

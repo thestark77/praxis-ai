@@ -51,7 +51,22 @@ describe('git-path-invocation', () => {
     'stdbuf -oL /usr/bin/git log',
     'setsid /usr/bin/git status',
     'xargs /usr/bin/git status',
-  ])('denies path-form git behind a wrapper this rule previously missed: %s', (cmd) => {
+  ])(
+    'denies path-form git behind a wrapper with a value-taking flag or a bare secondary wrapper: %s',
+    (cmd) => {
+      const r = inspectBashCommand(cmd);
+      expect(r.decision).toBe('deny');
+      expect(r.hits.some((h) => h.ruleId === 'git-path-invocation')).toBe(true);
+    },
+  );
+
+  it.each([
+    '/usr/bin/env /usr/bin/git push --force origin main',
+    '/usr/bin/env -u NAME /usr/bin/git status',
+    '/usr/bin/timeout 5 /usr/bin/git push --force',
+    '/usr/bin/nice -n 5 /usr/bin/git fetch',
+    '/usr/bin/xargs /usr/bin/git status',
+  ])('denies path-form git behind a path-form wrapper (basename match): %s', (cmd) => {
     const r = inspectBashCommand(cmd);
     expect(r.decision).toBe('deny');
     expect(r.hits.some((h) => h.ruleId === 'git-path-invocation')).toBe(true);
@@ -170,9 +185,10 @@ describe('read-bypass-token', () => {
 
   it('allows a quoted prose mention split across two words even without stripping quotes first', () => {
     // "bypass" and "token" land as two separate words once the quoted
-    // content is split on whitespace, so the pair-of-words check never
+    // content is split on whitespace, so the basename check (which needs
+    // both "bypass" and a literal `.token` suffix in the SAME word) never
     // fires. This complements (does not replace) the existing quote-strip
-    // based test above.
+    // based test below.
     expect(inspectBashCommand('echo "please avoid any bypass token here"').decision).toBe('allow');
   });
 
@@ -181,8 +197,21 @@ describe('read-bypass-token', () => {
     expect(r.hits[0].message).toMatch(/Touching a bypass-token path/);
   });
 
-  it('denies a differently-ordered basename ("token" before "bypass")', () => {
-    expect(inspectBashCommand('cat /tmp/token-bypass.txt').decision).toBe('deny');
+  it('denies a differently-ordered basename ("token" before "bypass"), still ending in `.token`', () => {
+    expect(inspectBashCommand('cat /tmp/token-bypass.token').decision).toBe('deny');
+  });
+
+  it('allows a basename containing "bypass" and "token" that is not a `.token` file (false-positive fix)', () => {
+    expect(inspectBashCommand('cat /tmp/token-bypass.txt').decision).toBe('allow');
+  });
+
+  it.each([
+    'git checkout -b fix/bypass-token-reader',
+    'git branch -d feat/bypass-token',
+    'rg -n bypass_token src',
+    'git log --grep=bypass-token',
+  ])('allows a "bypass"+"token" word that is not a `.token` basename: %s', (cmd) => {
+    expect(inspectBashCommand(cmd).decision).toBe('allow');
   });
 
   it('denies mixed-case basenames', () => {
@@ -196,7 +225,7 @@ describe('read-bypass-token', () => {
     expect(r.reason).toContain('secrets');
   });
 
-  it('allows a mere quoted mention ("bypass token") — the tokeniser strips quoted text', () => {
+  it('allows a mere quoted mention ("bypass token") — quoted content splits into separate words', () => {
     expect(inspectBashCommand('echo "bypass token"').decision).toBe('allow');
   });
 
@@ -270,6 +299,7 @@ describe('git-branch-force-delete', () => {
     'git --git-dir=.git branch -D x',
     'env git branch -D x',
     'GIT_DIR=.git git branch -D x',
+    '/usr/bin/env git branch -D x',
   ])('denies force-delete behind a git global option or a wrapper/env prefix: %s', (cmd) => {
     const r = inspectBashCommand(cmd);
     expect(r.decision).toBe('deny');

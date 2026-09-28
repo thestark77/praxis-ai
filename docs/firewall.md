@@ -32,7 +32,7 @@ Categories covered (see [`src/data/firewall-defaults.ts`](../src/data/firewall-d
 - **Hook / signing bypass** — `--no-verify`, `--no-gpg-sign`
 - **Secrets paths** — `Read(.env)`, `Read(.env.*)`,
   `Read(*/credentials*)`, `Read(*/.aws/*)`, `Read(**/bypass.token)`,
-  `Read(**/*bypass*token*)`, `Read(**/*token*bypass*)`
+  `Read(**/*bypass*.token)`
 - **Block device / format** — `Bash(dd of=/dev/sd*)`,
   `Bash(mkfs*)`, `Bash(wipefs*)`, `Bash(shred*)`
 - **Privilege escalation** — `Bash(sudo *)`, `Bash(doas *)`
@@ -80,9 +80,9 @@ ever listed here, alongside the three added for guard-evasion coverage.
 | `git-update-ref` | history-rewrite | `git update-ref` against `refs/heads/*` or `refs/tags/*` |
 | `git-filter-branch` | history-rewrite | any `git filter-branch` invocation |
 | `npm-install-force` | exec-bypass | `npm`/`pnpm`/`yarn` install with `--force`/`-f` |
-| `git-branch-force-delete` | delete | `git branch -D`, or `-d`/`--delete` combined with `-f`/`--force` (including combined flags like `-df`); plain `-d` stays allowed. Resolves git through the same wrapper/env detection as `git-path-invocation` and walks past git's own global options (`-C`, `-c`, `--git-dir`, `--work-tree`, `--namespace`) before looking for `branch` |
-| `git-path-invocation` | guard-evasion | `git` invoked via an absolute or relative path (`/usr/bin/git`, `./git`, `~/bin/git`) instead of the bare `git` on PATH — routes around a shim. Also resolves through `env`/`timeout`/`stdbuf`/`setsid`/`xargs`/... wrappers (including `env`'s `-u`/`-C`/`-S` value flags) and one level of `sh -c "..."` / `bash -c '...'` nesting |
-| `read-bypass-token` | secrets | any command referencing a path whose basename contains both `bypass` and `token` (e.g. `~/.local/state/iris-worktrees/bypass.token`), across readers, copiers, encoders, `<` redirection, and `--opt=<path>` values. Inspects quoted content too (`cat "$HOME/.../bypass.token"`), splitting it on whitespace so quoted prose ("bypass token" as two words) still passes. A glob that avoids spelling the words out (e.g. `by*`) cannot be caught by this syntactic check |
+| `git-branch-force-delete` | delete | `git branch -D`, or `-d`/`--delete` combined with `-f`/`--force` (including combined flags like `-df`); plain `-d` stays allowed. Resolves git through the same wrapper/env/path-form detection as `git-path-invocation` (`env`, `GIT_DIR=...`, a path-form `git`, ...) and walks past git's own global options (`-C`, `-c`, `--git-dir`, `--work-tree`, `--namespace`) before looking for `branch`. Unlike `git-path-invocation`, it does **not** follow a `sh -c`/`bash -c` body — `sh -c "git branch -D x"` is not resolved through this rule |
+| `git-path-invocation` | guard-evasion | `git` invoked via an absolute or relative path (`/usr/bin/git`, `./git`, `~/bin/git`) instead of the bare `git` on PATH — routes around a shim. Also resolves through `env`/`timeout`/`stdbuf`/`setsid`/`xargs`/... wrappers, matched by basename so a path-form wrapper (`/usr/bin/env`) is recognised too (including `env`'s `-u`/`-C`/`-S` value flags), and up to `MAX_SHELL_C_DEPTH` (3) levels of nested `sh -c "..."` / `bash -c '...'` bodies — only ever inspecting the first command of each body, not a `&&`/`;`-chained tail |
+| `read-bypass-token` | secrets | any command referencing a path whose basename contains `bypass` AND ends with the literal `.token` extension (e.g. `~/.local/state/iris-worktrees/bypass.token`), across readers, copiers, encoders, `<` redirection, and `--opt=<path>` values. Inspects quoted content too (`cat "$HOME/.../bypass.token"`), splitting it on whitespace so quoted prose ("bypass token" as two words) still passes. This is a literal-name check: a glob that avoids spelling the words out (e.g. `by*`), or a name built from quote-concatenated or otherwise obfuscated fragments that never appear as one literal word, cannot be caught by this syntactic check |
 
 The hook returns `deny` with a human-readable reason listing every
 rule that hit and its reversibility class. The reason text is the same
@@ -107,6 +107,23 @@ blocks legitimate work when its own machinery is broken.
 - It does not exhaustively cover every dangerous Unix command. The rule
   set is opinionated — see `~/.praxis/irreversibility-firewall.md` for
   the broader anticipatory-pause protocol the model also follows.
+
+### Known limits
+
+- `env -S`, `bash -lc`, and `xargs -I {}` are wrapper/invocation shapes
+  the guard-evasion rules do not yet normalize through; a path-form or
+  chained git hidden behind one of these can still slip past
+  `git-path-invocation` and `git-branch-force-delete`.
+- A chained `sh -c "a && git ..."` body is only ever inspected for its
+  first command; the tail after `&&`/`;`/`|` inside the body is not
+  walked.
+- `read-bypass-token` is a literal-name check: a quote-concatenated or
+  glob-obfuscated name that never appears as one literal word (e.g.
+  `"byp"'ass.to'"ken"`) evades it.
+
+These are known gaps pending inspector-level normalization (tokenising
+and canonicalising a command once, ahead of every rule, instead of each
+rule re-deriving the effective program on its own).
 
 ## Customisation
 

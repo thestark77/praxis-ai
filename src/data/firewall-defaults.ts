@@ -116,16 +116,17 @@ export const FIREWALL_DEFAULTS: string[] = [
   // `~/.local/state/iris-worktrees/bypass.token`) exists to let a session
   // skip a guard; reading it is functionally equivalent to reading a
   // credential. This complements the L2 AST rule `read-bypass-token`, it
-  // does not mirror it: L1 globs are case-sensitive and order-specific
-  // (`*bypass*token*` never matches a `token`-before-`bypass` basename),
-  // while L2 lower-cases the basename and checks both words regardless of
-  // order. `Read(**/bypass.token)` is kept even though `*bypass*token*`
-  // already covers it, as a literal, self-documenting entry for the exact
-  // known filename. Like L2, none of these can catch a basename that
-  // avoids spelling the words out (e.g. a glob such as `by*`).
+  // does not mirror it: L1 globs are case-sensitive, while L2 lower-cases
+  // the basename before checking it. Both layers require the basename to
+  // end with the literal `.token` extension, not merely contain the word
+  // `token` anywhere — a basename like `feat/bypass-token` or
+  // `bypass_token` is a false positive, not a copy of the guarded file.
+  // `Read(**/bypass.token)` is kept even though `*bypass*.token` already
+  // covers it, as a literal, self-documenting entry for the exact known
+  // filename. Like L2, neither entry can catch a basename that avoids
+  // spelling the words out (e.g. a glob such as `by*`).
   'Read(**/bypass.token)',
-  'Read(**/*bypass*token*)',
-  'Read(**/*token*bypass*)',
+  'Read(**/*bypass*.token)',
 
   // MCP tools that destroy remote or shared state.
   //

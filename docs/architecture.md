@@ -34,6 +34,7 @@ TypeScript-built CLI distributed via npm.
 ├── command-handoff.md  # absolute paths + secret placeholders in handed-off commands
 ├── workflow-policy.md  # when to use parallel subagents, disjoint files, delivery boundary
 ├── effort-policy.md  # medium default on Opus 5.5, when to escalate, overthink risk
+├── context-budget.md   # 50-60% poll window + Iris context-guard protocol
 ├── presets/balanced.md
 ├── backups/<timestamp>/    # snapshots of CLAUDE.md + settings.json
 └── telemetry.db        # SQLite event log (M4)
@@ -77,7 +78,7 @@ src/
 │   ├── doctor.ts
 │   ├── rollback.ts
 │   ├── stats.ts            # M4: real telemetry implementation
-│   ├── context-usage.ts    # M4: --record + threshold warning
+│   ├── context-usage.ts    # M4: --record + 50-60% poll-window notice
 │   ├── sync-pocock.ts      # M2: drift detector
 │   ├── upgrade.ts          # stub for v0.2
 │   └── ast-hook.ts         # M3: separate dist entry. Reads stdin, writes decision.

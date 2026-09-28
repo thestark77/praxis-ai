@@ -105,9 +105,9 @@ describe('praxis CLI sync-pocock — offline path', () => {
     // This assertion used to carry its own copy of the number, so it did not
     // catch the drift it existed to catch -- it locked the stale value in and
     // passed while `praxis --version` disagreed with package.json.
-    const pkg = JSON.parse(
-      readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
-    ) as { version: string };
+    const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+      version: string;
+    };
     const out = runCli('--version').trim();
     expect(out).toBe(pkg.version);
   });
@@ -159,7 +159,39 @@ describe('praxis CLI telemetry — stats + context-usage (sandboxed HOME)', () =
     expect(JSON.parse(stats).contextSamples).toBe(1);
   });
 
-  it('context-usage warns when usage crosses 75%', async () => {
+  it('context-usage shows no notice below the 50% poll window', async () => {
+    const sandboxHome = await makeSandboxHome();
+    runCli('context-usage --record 80000 --budget 200000', {
+      ...process.env,
+      HOME: sandboxHome,
+      PRAXIS_HOME: sandboxHome,
+    });
+    const out = runCli('context-usage', {
+      ...process.env,
+      HOME: sandboxHome,
+      PRAXIS_HOME: sandboxHome,
+    });
+    expect(out).not.toContain('Poll window');
+    expect(out).not.toContain('Past the poll window');
+  });
+
+  it('context-usage surfaces a poll-window notice between 50% and 60%', async () => {
+    const sandboxHome = await makeSandboxHome();
+    runCli('context-usage --record 110000 --budget 200000', {
+      ...process.env,
+      HOME: sandboxHome,
+      PRAXIS_HOME: sandboxHome,
+    });
+    const out = runCli('context-usage', {
+      ...process.env,
+      HOME: sandboxHome,
+      PRAXIS_HOME: sandboxHome,
+    });
+    expect(out).toContain('Poll window (50–60%)');
+    expect(out).toContain('ask the user whether to save progress and pause for /compact');
+  });
+
+  it('context-usage surfaces a past-window notice above 60%', async () => {
     const sandboxHome = await makeSandboxHome();
     runCli('context-usage --record 160000 --budget 200000', {
       ...process.env,
@@ -171,7 +203,8 @@ describe('praxis CLI telemetry — stats + context-usage (sandboxed HOME)', () =
       HOME: sandboxHome,
       PRAXIS_HOME: sandboxHome,
     });
-    expect(out).toContain('Above 75% threshold');
+    expect(out).toContain('Past the poll window (>60%)');
+    expect(out).toContain('do not start new work before asking');
   });
 
   it('stats --reset truncates events', async () => {

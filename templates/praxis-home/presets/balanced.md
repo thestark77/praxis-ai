@@ -20,9 +20,10 @@ detected from the lists in `phase-flow.md`.
 
 ## Context-budget warnings
 
-Warn at 75% of effective context capacity (typically ~30k tokens for
-common Claude Code session shapes). Surface a recommendation to `/clear`
-or `praxis context-usage` when the warning fires.
+Poll the user between 50% and 60% of effective context capacity (typically
+~20k-24k tokens for common Claude Code session shapes) instead of warning at
+a single fixed threshold. See `context-budget.md` for the full poll-window
+and context-guard protocol.
 
 ## Firewall
 

@@ -52,6 +52,21 @@ security-sensitive work, and corrections after a review, reserve
 and use `low` for simple delegated subagent tasks. The gap mattered because
 effort was otherwise raised by habit rather than by task.
 
+### Changed - poll the user at a clean point between 50% and 60% context instead of warning at a flat 75%
+
+A single fixed threshold either fires too late to act on or nags before a
+clean stopping point exists. `praxis context-usage` and the balanced preset
+now treat 50-60% of the effective window as a poll window: at the first clean
+point inside it the harness asks the user whether to save progress and pause
+for a compaction; if declined, it asks at most once more at the first clean
+point past 60%, then stays silent until the next compaction resets the cycle.
+A new `templates/praxis-home/context-budget.md` module documents the poll
+window, the save-and-stop sequence, and a context-guard protocol
+(`[IRIS CONTEXT GUARD] prepare-compact` / `... restore`) for harness
+controllers that need to force a handoff, with a trust boundary restricting
+those messages to the controller's own turns and literal `COMPACT-READY` /
+`COMPACT-FAILED` / `CONTEXT-RESTORED` / `RESTORE-FAILED` replies.
+
 ## [0.1.0-alpha.27] - 2026-09-24
 
 ### Changed - gentle-ai 3.7.0 and engram 2.1.0 are the expected versions

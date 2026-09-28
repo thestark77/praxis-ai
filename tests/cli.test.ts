@@ -105,9 +105,9 @@ describe('praxis CLI sync-pocock — offline path', () => {
     // This assertion used to carry its own copy of the number, so it did not
     // catch the drift it existed to catch -- it locked the stale value in and
     // passed while `praxis --version` disagreed with package.json.
-    const pkg = JSON.parse(
-      readFileSync(new URL('../package.json', import.meta.url), 'utf8'),
-    ) as { version: string };
+    const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as {
+      version: string;
+    };
     const out = runCli('--version').trim();
     expect(out).toBe(pkg.version);
   });
@@ -159,20 +159,40 @@ describe('praxis CLI telemetry — stats + context-usage (sandboxed HOME)', () =
     expect(JSON.parse(stats).contextSamples).toBe(1);
   });
 
-  it('context-usage warns when usage crosses 75%', async () => {
-    const sandboxHome = await makeSandboxHome();
-    runCli('context-usage --record 160000 --budget 200000', {
-      ...process.env,
-      HOME: sandboxHome,
-      PRAXIS_HOME: sandboxHome,
-    });
-    const out = runCli('context-usage', {
-      ...process.env,
-      HOME: sandboxHome,
-      PRAXIS_HOME: sandboxHome,
-    });
-    expect(out).toContain('Above 75% threshold');
-  });
+  it.each([
+    ['below the window', 80000, 200000, '40.0%', 'none'],
+    ['exactly 50%', 100000, 200000, '50.0%', 'poll'],
+    ['inside the window at 55%', 110000, 200000, '55.0%', 'poll'],
+    ['exactly 60%', 120000, 200000, '60.0%', 'poll'],
+    ['49.96% rounded up to 50.0%', 99920, 200000, '50.0%', 'poll'],
+    ['60.04% rounded down to 60.0%', 120080, 200000, '60.0%', 'poll'],
+    ['60.1% past the rounding tie', 120200, 200000, '60.1%', 'past'],
+    ['80% well past the window', 160000, 200000, '80.0%', 'past'],
+  ] as const)(
+    'context-usage classifies %s on the same rounded value it displays',
+    async (_label, used, budget, expectedPercent, notice) => {
+      const sandboxHome = await makeSandboxHome();
+      const env = { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome };
+      runCli(`context-usage --record ${used} --budget ${budget}`, env);
+      const out = runCli('context-usage', env);
+
+      expect(out).toContain(expectedPercent);
+      if (notice === 'none') {
+        expect(out).not.toContain('Poll window');
+        expect(out).not.toContain('Past the poll window');
+      } else if (notice === 'poll') {
+        expect(out).toContain('Poll window (50–60%)');
+        expect(out).toContain('ask the user whether to save progress and pause for /compact');
+        expect(out).not.toContain('Past the poll window');
+      } else {
+        expect(out).toContain('Past the poll window (>60%)');
+        expect(out).toContain(
+          'unless the user already declined twice, poll at the next clean point and do not start new work before asking',
+        );
+        expect(out).not.toContain('Poll window (50–60%)');
+      }
+    },
+  );
 
   it('stats --reset truncates events', async () => {
     const sandboxHome = await makeSandboxHome();

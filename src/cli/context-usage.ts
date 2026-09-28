@@ -10,14 +10,21 @@ interface ContextUsageOpts {
   json?: boolean;
 }
 
-// Praxis-ai balanced preset warns at 75% of effective context capacity.
-// Override per-invocation via CLI flags if needed.
-const DEFAULT_WARN_THRESHOLD_PCT = 75;
+// Praxis-ai balanced preset polls the user between 50% and 60% of effective
+// context capacity at the next clean point (see templates/praxis-home/context-budget.md).
+// Below the window: no notice. Inside it: poll-window notice. Above it: a
+// past-window notice — unless the user already declined twice, poll at the
+// next clean point and do not start new work before asking.
+const POLL_WINDOW_START_PCT = 50;
+const POLL_WINDOW_END_PCT = 60;
+const PAST_WINDOW_NOTICE =
+  `Past the poll window (>${POLL_WINDOW_END_PCT}%) — unless the user already ` +
+  'declined twice, poll at the next clean point and do not start new work before asking.';
 
 export function contextUsageCommand(): Command {
   return new Command('context-usage')
     .description(
-      'Show the most recent context-usage sample and surface a warning when usage crosses the configured threshold (default 75%). Use --record to append a new sample.',
+      `Show the most recent context-usage sample and surface a poll-window notice between ${POLL_WINDOW_START_PCT}% and ${POLL_WINDOW_END_PCT}% of budget (past ${POLL_WINDOW_END_PCT}%, a past-window notice). Use --record to append a new sample.`,
     )
     .option('--record <used>', 'record a new context-usage sample (token count used)')
     .option(
@@ -63,17 +70,27 @@ export function contextUsageCommand(): Command {
           process.exit(0);
         }
 
-        const warn = sample.percent >= DEFAULT_WARN_THRESHOLD_PCT;
+        // Round once and classify on that same rounded value used for display,
+        // so a display-boundary value (e.g. 60.04% -> "60.0%") is never shown
+        // inside the window while being classified as past it, or vice versa.
+        const percentDisplay = sample.percent.toFixed(1);
+        const roundedPercent = Number(percentDisplay);
+        const inPollWindow =
+          roundedPercent >= POLL_WINDOW_START_PCT && roundedPercent <= POLL_WINDOW_END_PCT;
+        const pastPollWindow = roundedPercent > POLL_WINDOW_END_PCT;
         console.log('praxis context-usage');
         console.log('');
         console.log(`  latest sample: ${new Date(sample.ts).toISOString()}`);
         console.log(`  used / budget: ${sample.used} / ${sample.budget}`);
-        console.log(`  percent:       ${sample.percent.toFixed(1)}%`);
-        if (warn) {
+        console.log(`  percent:       ${percentDisplay}%`);
+        if (inPollWindow) {
           console.log('');
           console.log(
-            `  ⚠ Above ${DEFAULT_WARN_THRESHOLD_PCT}% threshold — consider /clear before continuing.`,
+            `  ⚠ Poll window (${POLL_WINDOW_START_PCT}–${POLL_WINDOW_END_PCT}%) — at the next clean point, ask the user whether to save progress and pause for /compact.`,
           );
+        } else if (pastPollWindow) {
+          console.log('');
+          console.log(`  ⚠ ${PAST_WINDOW_NOTICE}`);
         }
         process.exit(0);
       } finally {

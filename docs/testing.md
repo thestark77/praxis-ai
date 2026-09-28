@@ -139,7 +139,7 @@ Bold = current minimum on that platform. Highlights:
 | P1 Plan ≠ execution | TR1, TR2 |
 | P2 Reversibility | T14 (round-trip), Tier 1 install-tests |
 | P3 Verification closes the work | T10, TR5 |
-| P4 Context is binding | T13 (75 % threshold warning) |
+| P4 Context is binding | T13 (50-60 % poll-window notice) |
 | P5 Tools are first-class | Implicit across all tiers |
 | P6 Irreversibility ⇒ confirm | T1–T6, TR3, Tier 1 rule tests |
 | P7 Incremental autonomy | Partial — TR1/TR2 cover F0 but not F2 retry-cap |

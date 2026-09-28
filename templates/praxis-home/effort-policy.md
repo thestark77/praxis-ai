@@ -24,9 +24,8 @@ Use `high` for:
 
 Reserve `xhigh` and `max` for work where a measured quality gain justifies
 the cost — do not reach for them by default on hard-looking tasks. `max`
-in particular can show diminishing returns and is prone to overthink: past
-a point, extra reasoning budget adds hedging and second-guessing rather
-than a better answer. Use `xhigh`/`max` only when testing on the actual
+in particular can show diminishing returns and can be prone to overthink.
+Use `xhigh`/`max` only when testing on the actual
 task has shown it helps.
 
 ## Lower effort for simple delegated work

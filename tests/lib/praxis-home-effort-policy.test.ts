@@ -23,10 +23,15 @@ describe('praxis-home effort-policy module', () => {
 
   it('states the medium-default, escalation, and overthinking-risk clauses', async () => {
     const content = await readFile(join(templatesRoot, 'effort-policy.md'), 'utf8');
-    expect(content).toContain('medium');
-    expect(content).toContain('architecture');
-    expect(content).toContain('security');
-    expect(content).toContain('overthink');
-    expect(content).toContain('xhigh');
+    // Assert rule bodies, not only headings or stray words.
+    const flat = content.replace(/\s+/g, ' ');
+    expect(flat).toContain('Default to `medium` on Opus 5.5 for routine work');
+    expect(flat).toContain('Opus 5.5 at `medium` exceeds Opus 5 at `high`');
+    expect(flat).toMatch(
+      /Use `high` for: - architecture decisions - security-sensitive work - corrections after a review/,
+    );
+    expect(flat).toContain('Reserve `xhigh` and `max` for work where a measured quality gain');
+    expect(flat).toContain('prone to overthink');
+    expect(flat).toContain('https://platform.claude.com/docs/en/build-with-claude/effort');
   });
 });

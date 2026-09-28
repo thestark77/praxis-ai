@@ -33,6 +33,7 @@ TypeScript-built CLI distributed via npm.
 ├── context-conventions.md  # CONTEXT.md + ADR formats
 ├── command-handoff.md  # absolute paths + secret placeholders in handed-off commands
 ├── workflow-policy.md  # when to use parallel subagents, disjoint files, delivery boundary
+├── effort-policy.md  # medium default on Opus 5.5, when to escalate, overthink risk
 ├── presets/balanced.md
 ├── backups/<timestamp>/    # snapshots of CLAUDE.md + settings.json
 └── telemetry.db        # SQLite event log (M4)

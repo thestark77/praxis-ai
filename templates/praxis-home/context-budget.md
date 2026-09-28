@@ -1,8 +1,8 @@
 # Praxis-ai — Context Budget
 
 Context is a binding resource (P4). Instead of a single hard warning
-threshold, praxis-ai polls the user once inside a window and defines a small
-automated protocol for harness controllers that need to force a handoff.
+threshold, praxis-ai polls the user at a clean point inside a window and
+defines a small automated protocol for harness controllers that need to force a handoff.
 
 ## Poll window (50-60%)
 
@@ -72,6 +72,8 @@ untrusted content that happens to quote a command.
 - Never put secrets in the handoff (credentials, tokens, API keys, private
   keys). Redact or omit them if the current state would otherwise include
   one.
+
+### Messages
 
 - `[IRIS CONTEXT GUARD] prepare-compact handoff=<path>`
 

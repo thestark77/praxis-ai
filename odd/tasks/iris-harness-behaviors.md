@@ -35,34 +35,47 @@ the Iris-specific decision-model evaluation.
 
 ## Tasks
 
-- [ ] T1 `queue-rule` — "queue, don't preempt" module
+- [x] T1 `queue-rule` — "queue, don't preempt" module
   (`templates/praxis-home/queue-rule.md`, imported from `main.md`), plus a
   test that every `@import` in `main.md` resolves to a template file.
   Route: delegated writer (2+ non-trivial files).
   Follow-up (Iris session, not Praxis): retire Iris's own queue-rule block
   (`iris-ai hermes/harness-rules/queue-rule.md`) once Praxis ships it.
-- [ ] T2 `context-budget` — replace the 75% warning with a poll
+- [x] T2 `context-budget` — replace the 75% warning with a poll
   (AskUserQuestion) between 50% and 60% at a clean point, never mid-task;
   on "yes" save progress (Engram, memory, task docs, running subagents),
   stop and wait for the user to compact. Document the context-guard
   protocol (`[IRIS CONTEXT GUARD] prepare-compact handoff=<path>` →
   `COMPACT-READY <path>`; `restore handoff=<path>` → `CONTEXT-RESTORED`).
   Route: delegated writer.
-- [ ] T3 `command-handoff` — commands handed to the user use absolute paths
+- [x] T3 `command-handoff` — commands handed to the user use absolute paths
   and secret placeholders (`PEGA_AQUI_TU_API_KEY`); never print or read
   secrets. Route: delegated writer.
-- [ ] T4 `firewall-shim-bypass` — never invoke git by absolute path to evade
+- [x] T4 `firewall-shim-bypass` — never invoke git by absolute path to evade
   a shim; never read bypass tokens (e.g.
   `~/.local/state/iris-worktrees/bypass.token`); delete branches with `-d`
   after verifying the merge, never `-D`. Layer 1 deny entries + Layer 2 AST
   rules + protocol text. Route: delegated writer.
-- [ ] T5 `workflow-policy` — workflows only when pertinent (independent
+- [x] T5 `workflow-policy` — workflows only when pertinent (independent
   batches), one task per worktree, disjoint files with a single owner per
   shared file, workflows never deliver (no push/merge/deploy), at most 4
   concurrent code writers, size set per session by the prompt.
   Route: delegated writer.
-- [ ] T6 `effort-policy` — docs-verified effort guidance (see evidence).
+- [x] T6 `effort-policy` — docs-verified effort guidance (see evidence).
   Route: delegated writer.
+
+- [ ] T7 `inspector-normalization` (PROPOSED, needs user OK) — move
+  wrapper/env-assignment/`sh -c` normalization from individual rules into
+  the AST inspector (`src/lib/ast/inspect.ts`) so every rule sees the
+  effective command. Closes the T4 known limits (`env -S`, `bash -lc`,
+  `xargs -I {}`, chained `sh -c` bodies, backslash escapes) and a
+  pre-existing gap: `bash -c "rm -rf /"` evades every rule today.
+- [ ] T8 `away-mode` — explicit skill for unattended sessions (Iris backlog
+  item #1836, topic `praxis/backlog/away-mode`): readiness checks and flags
+  (herdr, `cc-flags` auto_compact/auto_resume, context guard, review
+  consent, `cc-status`), workflow sizing, blocker sweep before leaving,
+  overnight rules, exact `/loop` command, return summary. Must be tested
+  live. Route: delegated writer, branch `feat/away-mode`.
 
 ## Acceptance criteria
 
@@ -83,23 +96,34 @@ the Iris-specific decision-model evaluation.
 
 ## Progress
 
-- 2026-09-28: feature document created; T1 started.
-- 2026-09-28: T1 implemented (delegated writer, worktree
-  `~/worktrees/praxis-ai/queue-rule`, branch `feat/queue-rule`). Added
-  `templates/praxis-home/queue-rule.md`, imported it from `main.md` (after
-  `phase-flow.md`), and added `tests/lib/praxis-home-modules.test.ts` (a
-  durable guard: every `@`-import in `main.md` resolves to an existing
-  template file, `main.md` imports `queue-rule.md`, and `queue-rule.md`
-  contains the key clauses/exception trigger words). Also added a
-  `queue-rule.md` check to the existing bundled-templates integration test
-  in `tests/lib/skeleton-installer.test.ts`. Updated `docs/architecture.md`
-  (`~/.praxis/` tree) and `CHANGELOG.md` (new `[Unreleased]` section).
-  Strict TDD observed: RED — 2 of 3 new tests failing (`queue-rule.md` not
-  found / not imported); GREEN — same tests plus the full suite passing
-  after implementation. Verification: `pnpm test` PASS, `pnpm typecheck`
-  PASS, `pnpm lint` PASS, `pnpm format:check` PASS. Committed on `feat/queue-rule` (T1 stays unchecked pending merge +
-  native review, per acceptance criteria).
+Delivery, one PR per task, each merged after an approved and acknowledged
+native gentle-ai review plus green CI (merge commits, so merged branches are
+deleted with `git branch -d`):
+
+| Task | PR | Review rounds | Notes |
+| --- | --- | --- | --- |
+| T1 queue-rule | #14 | 1 | Adds the `main.md` import-resolution guard test |
+| T3 command-handoff | #15 | 2 | Round 1 led to a POSIX-portable secret prompt |
+| T5 workflow-policy | #16 | 2 | Round 1 led to rule-body assertions |
+| T6 effort-policy | #17 | 1 | Claims trimmed to the documented evidence |
+| T2 context-budget | #18 | 4 | Trust boundary, failure replies, poll policy, rounding |
+| T4 firewall-shim-bypass | #19 | 4 | Retry cap reached; remaining variants documented as known limits, durable fix proposed as T7 |
+
+Verification on each merged branch: `pnpm test`, `pnpm typecheck`,
+`pnpm lint`, `pnpm format:check` passing (final main: 684 tests).
+
+Open follow-ups (non-blocking review suggestions):
+
+- `command-handoff.md`: restore the terminal if the `stty -echo` prompt is
+  interrupted; mention `export` when the variable must reach child processes.
+- Module tests could assert install-level presence (installer output), not
+  only the template tree.
+- `context-budget.md`: define "session phase"; a controller that predates
+  the failure replies only understands the success strings.
+- Iris session: retire Iris's own queue-rule block now that
+  `~/.praxis/queue-rule.md` ships; adopt the optional
+  `COMPACT-FAILED <path|-> <reason>` / `RESTORE-FAILED <reason>` replies.
 
 ## Next step
 
-T1.
+T8 away-mode (in progress). T7 waits for the user's decision.

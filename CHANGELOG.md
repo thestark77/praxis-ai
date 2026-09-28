@@ -6,6 +6,23 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Changed - the AST inspector normalizes wrappers and inspects shell -c bodies
+
+The Layer 2 AST hook (`src/lib/ast/inspect.ts`) now strips `VAR=value`
+assignments and wrapper prefixes (`env`, `timeout`, `xargs`, ...) and
+unescapes/unquotes the program word once per command segment, then runs
+every rule against both the raw and the normalized form, instead of each
+rule re-deriving the effective program on its own. It also enqueues a
+shell's `-c` body, `eval`'s arguments, and `env -S`'s split-string value
+for full re-inspection. This closes a pre-existing gap where
+`bash -c "rm -rf /"` evaded every rule (the `-c` body was never
+re-inspected), plus the T4 known limits `env -S`, `bash -lc`,
+`xargs -I {}`, and a chained `sh -c "a && git ..."` tail. Nesting beyond
+the existing depth bound now fails closed (denies with "command nesting
+too deep to inspect") instead of silently allowing unexamined content.
+`git-branch-force-delete` also accepts git's own unambiguous long-option
+abbreviations (`--del`, `--forc`, ...).
+
 ### Added - away-mode skill
 
 A new explicit `away-mode` skill ("modo independiente") lets the user hand a

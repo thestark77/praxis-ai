@@ -110,20 +110,36 @@ blocks legitimate work when its own machinery is broken.
 
 ### Known limits
 
-- `env -S`, `bash -lc`, and `xargs -I {}` are wrapper/invocation shapes
-  the guard-evasion rules do not yet normalize through; a path-form or
-  chained git hidden behind one of these can still slip past
-  `git-path-invocation` and `git-branch-force-delete`.
-- A chained `sh -c "a && git ..."` body is only ever inspected for its
-  first command; the tail after `&&`/`;`/`|` inside the body is not
-  walked.
 - `read-bypass-token` is a literal-name check: a quote-concatenated or
   glob-obfuscated name that never appears as one literal word (e.g.
-  `"byp"'ass.to'"ken"`) evades it.
+  `"byp"'ass.to'"ken"`) evades it. A glob that avoids spelling a name at
+  all (`by*` expanding to the token file) is invisible to any syntactic
+  check for the same reason.
+- A variable expanded only at runtime (`$G push --force`, where `$G` is
+  set to `git` earlier in the session) is opaque to a static inspector —
+  the hook sees the literal text `$G`, not what the shell will substitute.
+- An alias or shell function defined earlier in the same session (e.g.
+  `alias g=git`) redefines what a bare word runs; the hook has no
+  visibility into session-local alias/function tables, only the command
+  string itself.
 
-These are known gaps pending inspector-level normalization (tokenising
-and canonicalising a command once, ahead of every rule, instead of each
-rule re-deriving the effective program on its own).
+The inspector (`src/lib/ast/inspect.ts`) normalizes every command segment
+before running rules against it — stripping `VAR=value` assignments and
+wrapper prefixes (`env`, `command`, `exec`, `nohup`, `nice`, `time`,
+`timeout`, `stdbuf`, `setsid`, `xargs`, matched by basename so a path-form
+wrapper counts too), and unquoting/unescaping the resolved program word
+(`\git`, `g\it`, `"git"`, `'git'` all normalize to `git`) — and enqueues a
+shell's `-c` body, `eval`'s arguments, and `env -S`'s split-string value
+for full re-inspection (tokenising, segment splitting, substitutions,
+normalization, every rule), bounded by the same nesting cap as command
+substitutions and heredocs. This closes the gaps `env -S`, `bash -lc`, and
+`xargs -I {}` used to leave open for `git-path-invocation` and
+`git-branch-force-delete`, the chained-`sh -c "a && git ..."` tail gap,
+and a pre-existing hole where `bash -c "rm -rf /"` evaded every rule
+because the `-c` body was never re-inspected at all. Nesting beyond the
+cap fails closed: the inspector denies with "command nesting too deep to
+inspect" rather than silently allowing content it never actually looked
+at.
 
 ## Customisation
 

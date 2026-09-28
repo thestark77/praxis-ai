@@ -506,34 +506,90 @@ const PROGRAM_WRAPPERS = new Set([
  * Wrapper flags that consume a separate following argument as their value
  * (`env -u NAME`, not `env -uNAME`), so that argument must not be
  * mistaken for the program name. Flags not listed here are assumed to take
- * no value and are skipped on their own (`stdbuf -oL`, `nice -5`).
+ * no value and are skipped on their own (`stdbuf -oL`, `nice -5`), and an
+ * *attached* value (`xargs -I{}`, no space) needs no entry either — it is
+ * one token and the generic flag-skip in `resolveEffectiveInvocation`
+ * consumes it whole.
+ *
+ * `env`'s `-S`/`--split-string` is deliberately NOT listed here even
+ * though it takes a value: that value is not an inert argument to skip
+ * past, it is itself a full command line (the shebang-line idiom
+ * `#!/usr/bin/env -S python3 -u`). `resolveEffectiveInvocation` special-
+ * cases it so the value is handed back as a nested command to inspect,
+ * not silently skipped.
  */
 const WRAPPER_VALUE_FLAGS: Record<string, Set<string>> = {
-  env: new Set(['-u', '--unset', '-C', '--chdir', '-S', '--split-string']),
+  env: new Set(['-u', '--unset', '-C', '--chdir']),
   timeout: new Set(['-k', '--kill-after', '--signal', '-s']),
+  xargs: new Set(['-I', '-a', '-d', '-E', '-L', '-n', '-P', '-s']),
 };
 
 /** Shells whose `-c <body>` argument is a nested command line, not a plain program name. */
-const SHELL_C_INTERPRETERS = new Set(['sh', 'bash', 'zsh', 'dash']);
-
-/** Bounds how many nested `sh -c "sh -c ..."` layers are followed. */
-const MAX_SHELL_C_DEPTH = 3;
+const SHELL_INTERPRETERS = new Set(['sh', 'bash', 'zsh', 'dash', 'ksh']);
 
 /**
- * Parse `command` into shell-like argv entries: unquoted runs split on
- * whitespace, while single- and double-quoted regions each become part of
- * the surrounding argument with their quotes removed (so a quoted value
- * containing whitespace, such as a `sh -c "..."` body, stays one entry
- * instead of being split apart).
+ * One parsed argv entry together with its `[start, end)` span in the
+ * original command string. Spans are what let `normalizeSegment` rewrite
+ * only the program word and leave everything after it — including a
+ * commit message's original quoting — byte-for-byte untouched.
  */
-function argv(command: string): string[] {
-  const args: string[] = [];
+interface ArgSpan {
+  value: string;
+  start: number;
+  end: number;
+}
+
+/**
+ * Parse `command` into shell-like argv entries with spans: unquoted runs
+ * split on whitespace, while single- and double-quoted regions each
+ * become part of the surrounding argument with their quotes removed (so a
+ * quoted value containing whitespace, such as a `sh -c "..."` body, stays
+ * one entry instead of being split apart).
+ *
+ * Outside quotes, a backslash escapes the next character — including a
+ * quote, which is what lets the standard `'\''` idiom (close a single-
+ * quoted run, emit one literal `'` via escape, reopen) round-trip
+ * correctly instead of being misread as an empty quoted segment. This
+ * matters for real evasions, not just cosmetics: a nested
+ * `bash -c '...'\''...'` chain built with this idiom is exactly the shape
+ * an attacker (or an agent probing for gaps) would reach for to smuggle a
+ * dangerous inner command past a naive quote scanner, and it is valid
+ * input a real shell accepts. The one exception is `\<newline>`, a line
+ * continuation: real shells elide the pair entirely rather than emitting
+ * a literal newline, which is what keeps `rm \<newline>  -rf x` one token
+ * instead of splitting into a bogus newline-only entry.
+ */
+function argvWithSpans(command: string): ArgSpan[] {
+  const args: ArgSpan[] = [];
   let buf = '';
   let hasContent = false;
+  let start = -1;
   let i = 0;
+  const flush = (end: number): void => {
+    if (hasContent) {
+      args.push({ value: buf, start, end });
+    }
+    buf = '';
+    hasContent = false;
+    start = -1;
+  };
   while (i < command.length) {
     const ch = command[i]!;
+    if (ch === '\\' && i + 1 < command.length) {
+      const next = command[i + 1]!;
+      if (next === '\n') {
+        // Line continuation: elided, not an escaped literal newline.
+        i += 2;
+        continue;
+      }
+      if (start === -1) start = i;
+      buf += next;
+      hasContent = true;
+      i += 2;
+      continue;
+    }
     if (ch === "'") {
+      if (start === -1) start = i;
       const end = command.indexOf("'", i + 1);
       buf += end === -1 ? command.slice(i + 1) : command.slice(i + 1, end);
       hasContent = true;
@@ -541,6 +597,7 @@ function argv(command: string): string[] {
       continue;
     }
     if (ch === '"') {
+      if (start === -1) start = i;
       let j = i + 1;
       while (j < command.length) {
         if (command[j] === '\\' && j + 1 < command.length) {
@@ -557,32 +614,76 @@ function argv(command: string): string[] {
       continue;
     }
     if (/\s/.test(ch)) {
-      if (hasContent) {
-        args.push(buf);
-        buf = '';
-        hasContent = false;
-      }
+      flush(i);
       i++;
       continue;
     }
+    if (start === -1) start = i;
     buf += ch;
     hasContent = true;
     i++;
   }
-  if (hasContent) args.push(buf);
+  flush(command.length);
   return args;
 }
 
+/** Argv values only, for callers that do not need original-text spans. */
+function argv(command: string): string[] {
+  return argvWithSpans(command).map((s) => s.value);
+}
+
 /**
- * Index in `argvList` of the actual program token: skips leading
- * `VAR=value` assignments and `PROGRAM_WRAPPERS` (with their flags and
- * value-taking arguments). Callers that need the position — to walk
- * further arguments, e.g. git's own global options after `env git ...` —
- * use this instead of `effectiveProgram`, which additionally follows
- * `sh -c` bodies and therefore cannot report a position in the original
- * argv array once it has recursed into a nested one.
+ * Search a shell's own argv (everything after the shell word itself) for
+ * a `-c`/`-lc`/`-o pipefail -c`-style flag cluster and return the command
+ * string that follows it. Returns `undefined` when no such flag is
+ * present (`bash script.sh`, `bash -n script.sh`) — a positional argument
+ * reached before any `-c` cluster means this is not a `-c` invocation.
  */
-function effectiveProgramIndex(argvList: string[]): number | undefined {
+function findShellCArgument(rest: string[]): string | undefined {
+  for (let i = 0; i < rest.length; i++) {
+    const t = rest[i]!;
+    if (t === '-o') {
+      i++;
+      continue;
+    }
+    if (/^-[A-Za-z]+$/.test(t) && t.includes('c')) {
+      return rest[i + 1];
+    }
+    if (!t.startsWith('-')) break;
+  }
+  return undefined;
+}
+
+interface EffectiveInvocation {
+  /** Index into the argv array of the actual program token, after skipping
+   *  `VAR=value` assignments and `PROGRAM_WRAPPERS` prefixes. */
+  programIndex?: number;
+  /**
+   * A command line this invocation hands off to another shell for
+   * execution: a shell's `-c`/`-lc`/`-o pipefail -c` body, `eval`'s
+   * concatenated arguments, or `env -S`'s split-string value. The caller
+   * enqueues it for full re-inspection instead of treating this segment's
+   * own tokens as the whole story.
+   */
+  nestedCommand?: string;
+}
+
+/**
+ * Resolve what a command segment actually runs: walk past `VAR=value`
+ * assignments and `PROGRAM_WRAPPERS` (matched by basename, so a path-form
+ * wrapper counts too) to find the effective program, and — when that
+ * program is a shell, `eval`, or `env -S` — surface the command line it
+ * hands off to as `nestedCommand` instead of silently treating this
+ * segment's own argv as the complete picture.
+ *
+ * This does not itself follow `nestedCommand` recursively: unlike the
+ * inspector's own worklist (bounded by `MAX_NESTING`, which also splits
+ * chains and substitutions inside the nested body), a second call here
+ * would only ever look at the nested body's first word, missing a tail
+ * after `&&`/`;`/`|`. The caller (`inspect.ts`) re-enters the inspector on
+ * the nested command instead — see `extractNestedCommand`.
+ */
+function resolveEffectiveInvocation(argvList: string[]): EffectiveInvocation {
   let i = 0;
   let currentWrapper: string | undefined;
   while (i < argvList.length) {
@@ -590,6 +691,9 @@ function effectiveProgramIndex(argvList: string[]): number | undefined {
     if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) {
       i++;
       continue;
+    }
+    if (currentWrapper === 'env' && (t === '-S' || t === '--split-string')) {
+      return argvList[i + 1] !== undefined ? { nestedCommand: argvList[i + 1] } : {};
     }
     if (currentWrapper) {
       const valueFlags = WRAPPER_VALUE_FLAGS[currentWrapper];
@@ -606,44 +710,63 @@ function effectiveProgramIndex(argvList: string[]): number | undefined {
         continue;
       }
     }
-    // Matched by basename, like `SHELL_C_INTERPRETERS` below, so a
-    // path-form wrapper (`/usr/bin/env`, `/usr/bin/timeout`, ...) is
-    // recognised as a wrapper instead of being mistaken for the effective
-    // program itself — which would stop the walk one token too early and
-    // let a path-form git hide behind a path-form wrapper undetected.
+    // Matched by basename, so a path-form wrapper (`/usr/bin/env`,
+    // `/usr/bin/timeout`, ...) is recognised as a wrapper instead of being
+    // mistaken for the effective program itself — which would stop the
+    // walk one token too early and let a path-form git hide behind a
+    // path-form wrapper undetected.
     if (PROGRAM_WRAPPERS.has(basename(t))) {
       currentWrapper = basename(t);
       i++;
       continue;
     }
-    return i;
+    const base = basename(t);
+    const rest = argvList.slice(i + 1);
+    if (base === 'eval') {
+      return { programIndex: i, nestedCommand: rest.length > 0 ? rest.join(' ') : undefined };
+    }
+    if (SHELL_INTERPRETERS.has(base)) {
+      return { programIndex: i, nestedCommand: findShellCArgument(rest) };
+    }
+    return { programIndex: i };
   }
-  return undefined;
+  return {};
 }
 
 /**
- * The program a command actually runs: resolves `effectiveProgramIndex`,
- * then — when that program is a shell and it is invoked as `-c <body>` —
- * recurses into the body's own argv so `sh -c "/usr/bin/git status"`
- * resolves to `/usr/bin/git`, not `sh`. Bounded by `MAX_SHELL_C_DEPTH`.
+ * The wrapper-stripped, unquoted/unescaped form of a command segment: the
+ * effective program word (`\git`, `g\it`, `"git"`, `'git'` all become
+ * `git` — already unescaped and unquoted by `argvWithSpans` itself)
+ * followed by everything after it in the ORIGINAL text, untouched.
+ * Preserving the original tail — rather than rebuilding it from parsed
+ * argv — is what keeps a commit message's quoting intact, so a rule like
+ * `no-verify` does not start firing on `--no-verify` mentioned in prose
+ * once it is no longer shielded by a wrapper prefix ahead of it.
  *
- * This does not split a chain inside the body (`sh -c "cd /x && rm -rf /"`
- * only ever inspects `cd`, the first word); the caller decides whether
- * that residual gap matters for its rule.
+ * Returns `command` unchanged when there is nothing to resolve (`env -S`,
+ * whose value replaces the rest of the invocation entirely rather than
+ * leaving a program word in this segment) or nothing to strip (no wrapper
+ * prefix, no escaping on the program word).
  */
-function effectiveProgram(argvList: string[], depth = 0): string | undefined {
-  const idx = effectiveProgramIndex(argvList);
-  if (idx === undefined) return undefined;
-  const prog = argvList[idx]!;
-  if (
-    depth < MAX_SHELL_C_DEPTH &&
-    SHELL_C_INTERPRETERS.has(basename(prog)) &&
-    argvList[idx + 1] === '-c' &&
-    argvList[idx + 2] !== undefined
-  ) {
-    return effectiveProgram(argv(argvList[idx + 2]!), depth + 1);
-  }
-  return prog;
+export function normalizeSegment(command: string): string {
+  const spans = argvWithSpans(command);
+  const { programIndex } = resolveEffectiveInvocation(spans.map((s) => s.value));
+  if (programIndex === undefined) return command;
+  const span = spans[programIndex]!;
+  return span.value + command.slice(span.end);
+}
+
+/**
+ * A nested command line this segment hands off to another shell for
+ * execution (`sh -c "..."`, `eval "..."`, `env -S "..."`), or `undefined`
+ * when this segment runs a plain program. The caller (`inspect.ts`)
+ * enqueues the result for full re-inspection — tokenising, segment
+ * splitting, substitutions, normalization, and every rule — closing the
+ * `bash -c "rm -rf /"` gap that a rule matching only `toks[0]` can never
+ * see through on its own.
+ */
+export function extractNestedCommand(command: string): string | undefined {
+  return resolveEffectiveInvocation(argv(command)).nestedCommand;
 }
 
 // git invoked by an absolute or relative path (e.g. `/usr/bin/git`,
@@ -656,20 +779,17 @@ function effectiveProgram(argvList: string[], depth = 0): string | undefined {
 // dangerous subcommands still lets an agent probe which subcommands are
 // covered.
 //
-// `effectiveProgram` resolves through `VAR=value` assignments, the
-// wrappers in `PROGRAM_WRAPPERS` (`env`, `timeout`, `xargs`, ..., matched
-// by basename so a path-form wrapper counts too), and up to
-// `MAX_SHELL_C_DEPTH` levels of nested `sh -c "..."` / `bash -c '...'`
-// bodies, so all of those hiding spots collapse to the same check. Only
-// the body's first command is ever inspected — `sh -c "cd /x && /usr/bin/git
-// ..."` resolves to `cd`, not the git call after `&&` — see `effectiveProgram`'s
-// own doc comment. A path that merely appears as an *argument* to a
-// non-executing command (`ls -l /usr/bin/git`, `which git`) is not the
-// effective program and stays allowed.
+// This rule only ever looks at `toks[0]` of whatever text it is given. It
+// catches a wrapped, escaped, or quoted path-form git only because the
+// inspector (`inspect.ts`) runs every rule against both the raw segment
+// and `normalizeSegment`'s wrapper-stripped, unescaped form — see that
+// module's worklist loop. A path that merely appears as an *argument* to
+// a non-executing command (`ls -l /usr/bin/git`, `which git`) is not
+// `toks[0]` and stays allowed.
 const gitPathInvocation: Rule = {
   id: 'git-path-invocation',
   inspect(command) {
-    const prog = effectiveProgram(argv(command));
+    const prog = tokens(command)[0];
     if (!prog || !prog.includes('/')) return null;
     if (basename(prog) !== 'git') return null;
     return {
@@ -849,26 +969,25 @@ function gitSubcommandIndex(argvList: string[], gitIndex: number): number {
 }
 
 // `git branch -D` (and every spelling of delete+force: `--delete --force`,
-// `-d --force`/`-f`, combined `-df`/`-Df`) skips the merge check that
-// plain `-d` enforces. `-d` alone stays allowed; so does `--merged`, which
-// only lists branches.
+// `-d --force`/`-f`, combined `-df`/`-Df`, and the unambiguous long-option
+// abbreviations git itself accepts, e.g. `--del`, `--forc`) skips the
+// merge check that plain `-d` enforces. `-d` alone stays allowed; so does
+// `--merged`, which only lists branches.
 //
-// Uses `effectiveProgramIndex` — the same env/wrapper/path-form detection
-// as `git-path-invocation` (`env`, `GIT_DIR=... git ...`, path-form `git`,
-// ...) — and walks past git's own global options before looking for
-// `branch`, so `git -C repo branch -D x` and `env git branch -D x` are
-// caught the same as the bare form. It does NOT go through
-// `effectiveProgram`, so unlike `git-path-invocation` it does not follow a
-// `sh -c`/`bash -c` body: `sh -c "git branch -D x"` resolves its
-// effective program to `sh`, not `git`, and this rule never sees the
-// branch-delete inside.
+// This rule only ever looks at `args[0]` of whatever text it is given —
+// same as `git-path-invocation` above, it relies on the inspector running
+// it against both the raw segment and `normalizeSegment`'s wrapper-
+// stripped form to catch `env git branch -D x`, `GIT_DIR=... git branch
+// -D x`, or a path-form wrapper. It still walks git's OWN global options
+// itself (`-C repo`, `-c k=v`, `--git-dir=...`) via `gitSubcommandIndex`,
+// since those are arguments git itself consumes before its subcommand,
+// not a wrapper prefix normalization strips.
 const gitBranchForceDelete: Rule = {
   id: 'git-branch-force-delete',
   inspect(command) {
     const args = argv(command);
-    const gitIndex = effectiveProgramIndex(args);
-    if (gitIndex === undefined || basename(args[gitIndex]!) !== 'git') return null;
-    const subIndex = gitSubcommandIndex(args, gitIndex);
+    if (args[0] !== 'git') return null;
+    const subIndex = gitSubcommandIndex(args, 0);
     if (args[subIndex] !== 'branch') return null;
     let deleting = false;
     let forced = false;
@@ -878,11 +997,11 @@ const gitBranchForceDelete: Rule = {
         forced = true;
         continue;
       }
-      if (t === '-d' || t === '--delete') {
+      if (t === '-d') {
         deleting = true;
         continue;
       }
-      if (t === '--force' || t === '-f') {
+      if (t === '-f') {
         forced = true;
         continue;
       }
@@ -891,6 +1010,16 @@ const gitBranchForceDelete: Rule = {
           if (ch === 'd' || ch === 'D') deleting = true;
           if (ch === 'D' || ch === 'f') forced = true;
         }
+        continue;
+      }
+      // An unambiguous prefix of `--delete` or `--force` — git itself
+      // accepts any long option abbreviated down to the shortest prefix
+      // that still identifies it uniquely. Length 4 keeps `--d`/`--f` (too
+      // short to be unambiguous against git's fuller option set) excluded
+      // while still catching `--del`, `--delet`, `--forc`, and the like.
+      if (t.startsWith('--') && t.length >= 4) {
+        if ('--delete'.startsWith(t)) deleting = true;
+        else if ('--force'.startsWith(t)) forced = true;
       }
     }
     if (deleting && forced) {
@@ -898,10 +1027,10 @@ const gitBranchForceDelete: Rule = {
         ruleId: 'git-branch-force-delete',
         reversibilityClass: 'delete',
         message:
-          '`git branch -D` (or `--delete`/`-d` combined with `--force`/`-f`) deletes a ' +
-          'branch even if it is not merged, discarding its commits with no reflog entry ' +
-          'pointing back at them from any other ref. Verify first with `git branch ' +
-          '--merged`, then delete with `-d`.',
+          '`git branch -D` (or `--delete`/`-d` combined with `--force`/`-f`, including their ' +
+          'unambiguous abbreviations) deletes a branch even if it is not merged, discarding ' +
+          'its commits with no reflog entry pointing back at them from any other ref. Verify ' +
+          'first with `git branch --merged`, then delete with `-d`.',
       };
     }
     return null;

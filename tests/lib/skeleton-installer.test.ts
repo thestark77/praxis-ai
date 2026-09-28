@@ -160,6 +160,14 @@ describe('installClaudeSkills (HOME sandbox)', () => {
     await mkdir(join(templatesRoot, 'beta'), { recursive: true });
     await writeFile(join(templatesRoot, 'beta', 'SKILL.md'), 'beta skill', 'utf8');
     await writeFile(join(templatesRoot, 'beta', 'NOTICE.md'), 'beta notice', 'utf8');
+    // A fake praxis-native skill template, marker-bearing like the real
+    // shipped away-mode/SKILL.md, for the --force + ownership tests below.
+    await mkdir(join(templatesRoot, 'away-mode'), { recursive: true });
+    await writeFile(
+      join(templatesRoot, 'away-mode', 'SKILL.md'),
+      '---\nname: away-mode\npraxis-native: true\n---\nfresh native skill body',
+      'utf8',
+    );
   });
 
   it('throws when templates directory does not exist', async () => {
@@ -172,7 +180,11 @@ describe('installClaudeSkills (HOME sandbox)', () => {
   });
 
   it('copies all skill dirs and preserves the per-skill directory structure', async () => {
-    const result = await installClaudeSkills({ templatesRoot, claudeSkillsDir });
+    const result = await installClaudeSkills({
+      templatesRoot,
+      claudeSkillsDir,
+      skills: ['alpha', 'beta'],
+    });
     expect(result.installed.sort()).toEqual(
       ['alpha/SKILL.md', 'alpha/NOTICE.md', 'beta/SKILL.md', 'beta/NOTICE.md'].sort(),
     );
@@ -206,6 +218,76 @@ describe('installClaudeSkills (HOME sandbox)', () => {
     await installClaudeSkills({ templatesRoot, claudeSkillsDir, overwrite: true });
     const overwritten = await readFile(join(claudeSkillsDir, 'alpha', 'SKILL.md'), 'utf8');
     expect(overwritten).toBe('alpha skill');
+  });
+
+  describe('installClaudeSkills — native skill ownership under --force', () => {
+    it('does not overwrite a user-authored native skill dir even with overwrite: true', async () => {
+      await mkdir(join(claudeSkillsDir, 'away-mode'), { recursive: true });
+      await writeFile(
+        join(claudeSkillsDir, 'away-mode', 'SKILL.md'),
+        '---\nname: away-mode\ndescription: my own thing\n---\nmy own body\n',
+        'utf8',
+      );
+      const result = await installClaudeSkills({
+        templatesRoot,
+        claudeSkillsDir,
+        skills: ['away-mode'],
+        overwrite: true,
+        nativeSkillNames: ['away-mode'],
+      });
+      expect(result.installed).toEqual([]);
+      expect(result.skippedNotOwned).toEqual(['away-mode']);
+      const preserved = await readFile(join(claudeSkillsDir, 'away-mode', 'SKILL.md'), 'utf8');
+      expect(preserved).toContain('my own body');
+    });
+
+    it('still overwrites a praxis-owned native skill dir with overwrite: true', async () => {
+      await mkdir(join(claudeSkillsDir, 'away-mode'), { recursive: true });
+      await writeFile(
+        join(claudeSkillsDir, 'away-mode', 'SKILL.md'),
+        '---\nname: away-mode\npraxis-native: true\n---\nold native body\n',
+        'utf8',
+      );
+      const result = await installClaudeSkills({
+        templatesRoot,
+        claudeSkillsDir,
+        skills: ['away-mode'],
+        overwrite: true,
+        nativeSkillNames: ['away-mode'],
+      });
+      expect(result.installed).toContain('away-mode/SKILL.md');
+      expect(result.skippedNotOwned).toEqual([]);
+      const overwritten = await readFile(join(claudeSkillsDir, 'away-mode', 'SKILL.md'), 'utf8');
+      expect(overwritten).toContain('fresh native skill body');
+    });
+
+    it('installs normally when nothing exists yet at the native skill destination', async () => {
+      const result = await installClaudeSkills({
+        templatesRoot,
+        claudeSkillsDir,
+        skills: ['away-mode'],
+        overwrite: true,
+        nativeSkillNames: ['away-mode'],
+      });
+      expect(result.installed).toContain('away-mode/SKILL.md');
+      expect(result.skippedNotOwned).toEqual([]);
+    });
+
+    it('does not apply ownership protection to a skill not listed in nativeSkillNames', async () => {
+      await mkdir(join(claudeSkillsDir, 'alpha'), { recursive: true });
+      await writeFile(join(claudeSkillsDir, 'alpha', 'SKILL.md'), 'user-customised', 'utf8');
+      const result = await installClaudeSkills({
+        templatesRoot,
+        claudeSkillsDir,
+        skills: ['alpha'],
+        overwrite: true,
+        nativeSkillNames: ['away-mode'],
+      });
+      expect(result.installed).toContain('alpha/SKILL.md');
+      expect(result.skippedNotOwned).toEqual([]);
+      const overwritten = await readFile(join(claudeSkillsDir, 'alpha', 'SKILL.md'), 'utf8');
+      expect(overwritten).toBe('alpha skill');
+    });
   });
 
   it('uninstallClaudeSkills removes only the named skill dirs', async () => {
@@ -279,7 +361,7 @@ describe('installClaudeSkills (HOME sandbox)', () => {
     });
 
     it('removes non-native skills unconditionally alongside a skipped native one', async () => {
-      await installClaudeSkills({ templatesRoot, claudeSkillsDir }); // alpha, beta
+      await installClaudeSkills({ templatesRoot, claudeSkillsDir, skills: ['alpha', 'beta'] });
       await mkdir(join(claudeSkillsDir, 'away-mode'), { recursive: true });
       await writeFile(
         join(claudeSkillsDir, 'away-mode', 'SKILL.md'),

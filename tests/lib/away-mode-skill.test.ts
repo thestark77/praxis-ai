@@ -57,6 +57,22 @@ async function content(): Promise<string> {
   return cachedContent;
 }
 
+/**
+ * The exact slice of content for one `## <heading>` markdown heading, up
+ * to the next `## ` heading. Anchored to the actual heading line (not a
+ * prose mention of the same words elsewhere, e.g. in the "Dry run"
+ * section) by requiring the `## ` markdown prefix.
+ */
+async function stepSection(heading: string): Promise<string> {
+  const c = await content();
+  const marker = `## ${heading}`;
+  const start = c.indexOf(marker);
+  expect(start, `heading not found: ${marker}`).toBeGreaterThanOrEqual(0);
+  const rest = c.slice(start + marker.length);
+  const nextHeadingOffset = rest.indexOf('\n## ');
+  return nextHeadingOffset === -1 ? rest : rest.slice(0, nextHeadingOffset);
+}
+
 describe('away-mode SKILL.md — frontmatter', () => {
   it('declares name, description, invocation: explicit, and disables model invocation', async () => {
     const fm = parseFrontmatter(await content());
@@ -92,22 +108,6 @@ describe('away-mode SKILL.md — step 1 is split into 1a (read-only) and 1b (act
     expect(containsClause(c, '1a — Readiness checks (read-only)')).toBe(true);
     expect(containsClause(c, '1b — Activation')).toBe(true);
   });
-
-  /**
-   * The exact slice of content for one `## <heading>` markdown heading, up
-   * to the next `## ` heading. Anchored to the actual heading line (not a
-   * prose mention of the same words elsewhere, e.g. in the "Dry run"
-   * section) by requiring the `## ` markdown prefix.
-   */
-  async function stepSection(heading: string): Promise<string> {
-    const c = await content();
-    const marker = `## ${heading}`;
-    const start = c.indexOf(marker);
-    expect(start, `heading not found: ${marker}`).toBeGreaterThanOrEqual(0);
-    const rest = c.slice(start + marker.length);
-    const nextHeadingOffset = rest.indexOf('\n## ');
-    return nextHeadingOffset === -1 ? rest : rest.slice(0, nextHeadingOffset);
-  }
 
   it('keeps 1a read-only: tool detection, current cc-flags state, HERDR_PANE_ID, cc-status', async () => {
     const section = await stepSection('Step 1a');
@@ -145,6 +145,32 @@ describe('away-mode SKILL.md — step 1 is split into 1a (read-only) and 1b (act
     expect(c).toContain('cc-status');
     expect(c).toContain('cc-switch');
     expect(containsClause(c, "never switch without the user's yes")).toBe(true);
+  });
+
+  it('records the prior value of each switch in Step 1b so Step 6 can restore it exactly', async () => {
+    const section = await stepSection('Step 1b');
+    expect(containsClause(section, 'record its prior value in the task document and Engram')).toBe(
+      true,
+    );
+    expect(containsClause(section, 'record the current')).toBe(true);
+    expect(containsClause(section, 'record whether it is currently enabled or disabled')).toBe(
+      true,
+    );
+    expect(containsClause(section, 'record its current mode')).toBe(true);
+  });
+});
+
+describe('away-mode SKILL.md — context-budget consistency between 1b and step 4', () => {
+  it('never tells the agent to rely on the context-budget poll while away', async () => {
+    const c = await content();
+    expect(containsClause(c, 'relies on the context-budget poll')).toBe(false);
+    expect(containsClause(c, 'automatic save-and-continue')).toBe(true);
+  });
+
+  it('routes the cc-flags-missing and context-guard-missing fallbacks to Step 4, not polling', async () => {
+    const section = await stepSection('Step 1b');
+    expect(containsClause(section, 'Step 4 automatic save-and-continue rule')).toBe(true);
+    expect(containsClause(section, 'does not run while away')).toBe(true);
   });
 });
 
@@ -219,6 +245,23 @@ describe('away-mode SKILL.md — on return (step 6)', () => {
   it('summarizes the away-mode close-out and restores interactive rules', async () => {
     const c = await content();
     expect(containsClause(c, 'restore interactive rules')).toBe(true);
+  });
+
+  it('restores review auto-consent and the context guard to their Step 1b-recorded values by default', async () => {
+    const section = await stepSection('Step 6');
+    expect(containsClause(section, 'restore every switch Step 1b turned on')).toBe(true);
+    expect(containsClause(section, 'restore the previous mode recorded in Step 1b')).toBe(true);
+    expect(section).toContain('iris-review-consent');
+    expect(section).toContain('iris-context-guard');
+    // Restoring is the default; Step 6 does not ask before reverting these.
+    expect(containsClause(section, 'this is the default, not something to ask about')).toBe(true);
+  });
+
+  it('asks the user only about auto_compact/auto_resume, restoring the other switches by default', async () => {
+    const section = await stepSection('Step 6');
+    expect(containsClause(section, 'ask only about')).toBe(true);
+    expect(section).toContain('auto_compact');
+    expect(section).toContain('auto_resume');
   });
 });
 

@@ -89,6 +89,11 @@ export interface InstallResult {
   skeletonSkipped: string[];
   claudeSkillsInstalled: string[];
   claudeSkillsSkipped: string[];
+  /**
+   * Native skill dirs left untouched (even under --force) because the
+   * on-disk SKILL.md was not praxis-owned. See src/lib/skeleton-installer.ts.
+   */
+  claudeSkillsSkippedNotOwned: string[];
   firewallEntriesAdded: number;
   claudeMdPatched: boolean;
   astHookRegistered: boolean;
@@ -216,6 +221,7 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
       skeletonSkipped: [],
       claudeSkillsInstalled: [],
       claudeSkillsSkipped: [],
+      claudeSkillsSkippedNotOwned: [],
       firewallEntriesAdded: 0,
       claudeMdPatched: false,
       astHookRegistered: false,
@@ -295,8 +301,9 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
         claudeSkillsDir: paths.claudeSkillsDir,
         skills: CLAUDE_SKILL_NAMES,
         overwrite: opts.force,
+        nativeSkillNames: PRAXIS_NATIVE_SKILL_NAMES,
       })
-    : { installed: [], skipped: [] };
+    : { installed: [], skipped: [], skippedNotOwned: [] };
 
   // An upgrade from a version that predates the ledger finds praxis
   // already installed and no record of what it installed. Every rule then
@@ -344,6 +351,7 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
     skeletonSkipped: skeleton.skipped,
     claudeSkillsInstalled: claudeSkills.installed,
     claudeSkillsSkipped: claudeSkills.skipped,
+    claudeSkillsSkippedNotOwned: claudeSkills.skippedNotOwned,
     firewallEntriesAdded: claudeEntriesAdded.length,
     claudeMdPatched: wantsClaudeCode,
     astHookRegistered: wantsClaudeCode,

@@ -232,6 +232,27 @@ describe('runOpenCodeUninstall', () => {
     expect(preserved).toContain('my own body');
   });
 
+  it('does not overwrite a user-authored away-mode skill dir even with force: true', async () => {
+    const paths = await sandbox();
+    await runOpenCodeInstall({ paths, skillsTemplatesRoot, firewallModulePath: engine });
+    await writeFile(
+      join(paths.skillsDir, 'away-mode', 'SKILL.md'),
+      '---\nname: away-mode\ndescription: my own thing\n---\nmy own body\n',
+      'utf8',
+    );
+
+    const result = await runOpenCodeInstall({
+      paths,
+      skillsTemplatesRoot,
+      firewallModulePath: engine,
+      force: true,
+    });
+
+    expect(result.skillsInstalled).not.toContain('away-mode/SKILL.md');
+    const preserved = await readFile(join(paths.skillsDir, 'away-mode', 'SKILL.md'), 'utf8');
+    expect(preserved).toContain('my own body');
+  });
+
   it('leaves a rule praxis had raised at deny, recoverable via rollback', async () => {
     // Documented consequence: uninstall removes praxis denies, and a rule it
     // raised from `ask` disappears rather than reverting. `praxis rollback`

@@ -168,4 +168,19 @@ describe('isPraxisOwnedNativeSkillFile', () => {
     const content = '---\nname: away-mode\npraxis-native: TRUE\n---\n';
     expect(isPraxisOwnedNativeSkillFile(content, 'away-mode')).toBe(true);
   });
+
+  it('tolerates CRLF line endings in the frontmatter block', () => {
+    const content = '---\r\nname: away-mode\r\npraxis-native: true\r\n---\r\nbody\r\n';
+    expect(isPraxisOwnedNativeSkillFile(content, 'away-mode')).toBe(true);
+  });
+
+  it('tolerates a leading UTF-8 BOM', () => {
+    const content = '﻿---\nname: away-mode\npraxis-native: true\n---\nbody\n';
+    expect(isPraxisOwnedNativeSkillFile(content, 'away-mode')).toBe(true);
+  });
+
+  it('tolerates a leading UTF-8 BOM combined with CRLF line endings', () => {
+    const content = '﻿---\r\nname: away-mode\r\npraxis-native: true\r\n---\r\nbody\r\n';
+    expect(isPraxisOwnedNativeSkillFile(content, 'away-mode')).toBe(true);
+  });
 });

@@ -62,27 +62,38 @@ and what that means for this session, and the current cc-flags state.
 
 Only reached on a plain (non-`check`) invocation, after step 1a's report.
 
-1. **cc-flags — turn on.** Turn both on:
+Before changing any switch below, record its prior value in the task
+document and Engram — the exact state it was in before this step touched
+it — so Step 6 can restore it exactly on return.
+
+1. **cc-flags — turn on.** Record the current `auto_compact` / `auto_resume`
+   state (read in step 1a), then turn both on:
    `cc-flags <target> auto_compact on` and `cc-flags <target> auto_resume
    on`. Read back to verify each one actually took. If `cc-flags` is not on
-   PATH, away mode relies on the context-budget poll instead of
-   auto-compaction.
+   PATH, there is nothing to turn on or record here: away mode does not
+   fall back on the context-budget poll while unattended — the Step 4
+   automatic save-and-continue rule governs instead, with or without
+   cc-flags.
 
-2. **Iris context guard.** If `iris-context-guard` is installed, run
-   `iris-context-guard enable --session <id>`. If it is not installed, rely
-   on `auto_compact` plus the ordinary praxis context-budget protocol
-   (`~/.praxis/context-budget.md`) instead — do not treat its absence as a
-   blocker.
+2. **Iris context guard.** If `iris-context-guard` is installed, record
+   whether it is currently enabled or disabled, then run
+   `iris-context-guard enable --session <id>`. If it is not installed,
+   `auto_compact` (if available) plus the Step 4 automatic save-and-continue
+   rule govern context management instead — the poll described in
+   `~/.praxis/context-budget.md` does not run while away either way; do not
+   treat the guard's absence as a blocker.
 
 3. **Review auto-consent and standing order.** If `iris-review-consent` is
-   installed, run `iris-review-consent set always-yes --session <id>` so
-   native-review consent prompts do not block progress while unattended. If
-   it is not installed, note explicitly that gentle-ai consent prompts will
-   be answered `granted` per the user's standing order, and only proceed on
-   that footing if the user confirms that standing order right now — this
-   is a real product decision, not a default to assume silently.
+   installed, record its current mode, then run `iris-review-consent set
+   always-yes --session <id>` so native-review consent prompts do not block
+   progress while unattended. If it is not installed, note explicitly that
+   gentle-ai consent prompts will be answered `granted` per the user's
+   standing order, and only proceed on that footing if the user confirms
+   that standing order right now — this is a real product decision, not a
+   default to assume silently.
 
-Report what got turned on and verified.
+Report what got turned on and verified, and confirm the prior value of each
+switch was recorded so Step 6 can restore it.
 
 ## Step 2 — Workflow sizing
 
@@ -156,5 +167,19 @@ language) to close out away mode:
    during the overnight run.
 3. Restore interactive rules: `AskUserQuestion` and the context-budget poll
    are allowed again from this point on.
-4. Offer to turn `auto_compact` / `auto_resume` back off via `cc-flags` if
-   the user wants; leave them on if the user prefers to keep them.
+4. **Restore every switch Step 1b turned on**, using the prior values
+   recorded there. This is the default, not something to ask about:
+   - **Review auto-consent.** Restore the previous mode recorded in
+     Step 1b (for example, `iris-review-consent set <prior-mode>
+     --session <id>`, if that is the syntax the tool documents — verify
+     with `iris-review-consent --help` before relying on an exact flag).
+   - **Context guard.** If Step 1b enabled `iris-context-guard`, restore
+     the previous mode recorded in Step 1b (for example,
+     `iris-context-guard disable --session <id>`, if Step 1b found it
+     disabled before enabling it — verify with `iris-context-guard --help`
+     before relying on an exact flag). If Step 1b found it already
+     enabled, leave it enabled.
+5. **Ask only about `auto_compact` / `auto_resume`.** Offer to turn them
+   back off via `cc-flags` if the user wants; leave them on if the user
+   prefers to keep them — this is the one switch Step 6 asks about instead
+   of silently restoring.

@@ -139,6 +139,11 @@ export interface OpenCodeInstallResult {
   firewallModulePath: string | null;
   skillsInstalled: string[];
   skillsSkipped: string[];
+  /**
+   * Native skill dirs left untouched (even under --force) because the
+   * on-disk SKILL.md was not praxis-owned. See src/lib/skeleton-installer.ts.
+   */
+  skillsSkippedNotOwned: string[];
   warnings: string[];
 }
 
@@ -223,6 +228,7 @@ export async function runOpenCodeInstall(
     claudeSkillsDir: paths.skillsDir,
     skills: CLAUDE_SKILL_NAMES,
     overwrite: opts.force,
+    nativeSkillNames: PRAXIS_NATIVE_SKILL_NAMES,
   });
 
   return {
@@ -236,6 +242,7 @@ export async function runOpenCodeInstall(
     firewallModulePath,
     skillsInstalled: skills.installed,
     skillsSkipped: skills.skipped,
+    skillsSkippedNotOwned: skills.skippedNotOwned,
     warnings,
   };
 }

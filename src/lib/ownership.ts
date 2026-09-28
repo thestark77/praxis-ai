@@ -171,6 +171,12 @@ interface SkillFrontmatter {
 }
 
 function parseSkillFrontmatter(content: string): SkillFrontmatter {
+  // Tolerate a leading UTF-8 BOM and CRLF line endings: some editors and
+  // Windows checkouts write both, and a shipped or user-authored SKILL.md
+  // with either must still be recognized rather than silently falling
+  // through to "no frontmatter".
+  if (content.charCodeAt(0) === 0xfeff) content = content.slice(1);
+  content = content.replace(/\r\n/g, '\n');
   if (!content.startsWith('---\n')) return {};
   const end = content.indexOf('\n---', 4);
   if (end === -1) return {};

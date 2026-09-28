@@ -295,6 +295,10 @@ async function refreshSkillFile(
       result.failedFiles.push(`${rel} (not found upstream)`);
       return;
     }
+    if (opts.checkOwnership && !isPraxisOwnedNativeSkillFile(content, skillName)) {
+      result.failedFiles.push(`${rel} (fetched content is not a praxis-native skill)`);
+      return;
+    }
     await mkdir(destDir, { recursive: true });
     await writeFile(destPath, content, 'utf8');
     result.updatedFiles.push(rel);

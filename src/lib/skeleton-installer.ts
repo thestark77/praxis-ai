@@ -40,11 +40,26 @@ export interface InstallClaudeSkillsOptions {
   /** Restrict to a subset of top-level skill directories. Default: install all. */
   skills?: string[];
   overwrite?: boolean;
+  /**
+   * Names in `skills` that are praxis-native. Even with `overwrite: true`
+   * (`--force`), a native skill's on-disk SKILL.md is ownership-checked
+   * (via the `praxis-native` frontmatter marker, see src/lib/ownership.ts)
+   * before its directory is overwritten, so a user-authored directory that
+   * merely shares the name survives `--force`. Names not listed here (the
+   * lifted Pocock skills) keep the existing unconditional-overwrite
+   * behaviour.
+   */
+  nativeSkillNames?: string[];
 }
 
 export interface SkeletonResult {
   installed: string[];
   skipped: string[];
+}
+
+export interface InstallClaudeSkillsResult extends SkeletonResult {
+  /** Native skill dirs left untouched under --force because SKILL.md was not praxis-owned. */
+  skippedNotOwned: string[];
 }
 
 async function pathExists(path: string): Promise<boolean> {
@@ -130,7 +145,7 @@ export async function uninstallSkeleton(praxisDir: string): Promise<void> {
 
 export async function installClaudeSkills(
   opts: InstallClaudeSkillsOptions,
-): Promise<SkeletonResult> {
+): Promise<InstallClaudeSkillsResult> {
   const templatesExists = await pathExists(opts.templatesRoot);
   if (!templatesExists) {
     throw new Error(`Claude skills templates directory not found: ${opts.templatesRoot}`);
@@ -138,9 +153,11 @@ export async function installClaudeSkills(
 
   await mkdir(opts.claudeSkillsDir, { recursive: true });
 
+  const nativeSkillNames = new Set(opts.nativeSkillNames ?? []);
   const topLevelEntries = await readdir(opts.templatesRoot, { withFileTypes: true });
   const installed: string[] = [];
   const skipped: string[] = [];
+  const skippedNotOwned: string[] = [];
 
   for (const entry of topLevelEntries) {
     if (!entry.isDirectory()) continue;
@@ -148,6 +165,24 @@ export async function installClaudeSkills(
 
     const sourceDir = join(opts.templatesRoot, entry.name);
     const destDir = join(opts.claudeSkillsDir, entry.name);
+
+    // --force still must not clobber a user-authored native skill dir: a
+    // pre-existing SKILL.md that doesn't carry the praxis-native marker
+    // means this directory isn't ours to overwrite, regardless of
+    // opts.overwrite.
+    if (opts.overwrite && nativeSkillNames.has(entry.name)) {
+      let existingSkillMd: string | null = null;
+      try {
+        existingSkillMd = await readFile(join(destDir, 'SKILL.md'), 'utf8');
+      } catch {
+        existingSkillMd = null;
+      }
+      if (existingSkillMd !== null && !isPraxisOwnedNativeSkillFile(existingSkillMd, entry.name)) {
+        skippedNotOwned.push(entry.name);
+        continue;
+      }
+    }
+
     await mkdir(destDir, { recursive: true });
 
     const sources = await walkDir(sourceDir);
@@ -164,7 +199,7 @@ export async function installClaudeSkills(
     }
   }
 
-  return { installed, skipped };
+  return { installed, skipped, skippedNotOwned };
 }
 
 export interface UninstallClaudeSkillsOptions {

@@ -251,6 +251,58 @@ describe('runUninstall', () => {
     expect(preserved).toContain('my own body');
   });
 
+  it('does not overwrite a user-authored away-mode skill dir even with force: true', async () => {
+    const paths = resolvePaths(home);
+    await mkdir(paths.claudeDir, { recursive: true });
+    await writeFile(paths.claudeMd, '', 'utf8');
+    await writeFile(paths.settingsJson, '{}\n', 'utf8');
+
+    await runInstall({ paths, templatesRoot, claudeSkillsTemplatesRoot });
+    // The user replaces the installed away-mode skill with their own,
+    // unmarked, version before reinstalling with --force.
+    await writeFile(
+      join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'),
+      '---\nname: away-mode\ndescription: my own thing\n---\nmy own body\n',
+      'utf8',
+    );
+
+    const result = await runInstall({
+      paths,
+      templatesRoot,
+      claudeSkillsTemplatesRoot,
+      force: true,
+    });
+
+    expect(result.claudeSkillsInstalled).not.toContain('away-mode/SKILL.md');
+    expect(result.claudeSkillsSkippedNotOwned).toContain('away-mode');
+    const preserved = await readFile(join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'), 'utf8');
+    expect(preserved).toContain('my own body');
+  });
+
+  it('still overwrites a praxis-owned away-mode skill dir with force: true', async () => {
+    const paths = resolvePaths(home);
+    await mkdir(paths.claudeDir, { recursive: true });
+    await writeFile(paths.claudeMd, '', 'utf8');
+    await writeFile(paths.settingsJson, '{}\n', 'utf8');
+
+    await runInstall({ paths, templatesRoot, claudeSkillsTemplatesRoot });
+    await writeFile(
+      join(paths.claudeSkillsDir, 'away-mode', 'SKILL.md'),
+      '---\nname: away-mode\npraxis-native: true\n---\nstale body\n',
+      'utf8',
+    );
+
+    const result = await runInstall({
+      paths,
+      templatesRoot,
+      claudeSkillsTemplatesRoot,
+      force: true,
+    });
+
+    expect(result.claudeSkillsInstalled).toContain('away-mode/SKILL.md');
+    expect(result.claudeSkillsSkippedNotOwned).toEqual([]);
+  });
+
   it('keeps skeleton when removeSkeleton is false', async () => {
     const paths = resolvePaths(home);
     await mkdir(paths.claudeDir, { recursive: true });

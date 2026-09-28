@@ -249,6 +249,48 @@ describe('inspector-normalization — env -S forms (DENY / ALLOW)', () => {
   });
 });
 
+describe('inspector-normalization — path-form git branch force-delete', () => {
+  it('denies `/usr/bin/git branch -D x` with BOTH git-path-invocation and git-branch-force-delete', () => {
+    const r = inspectBashCommand('/usr/bin/git branch -D x');
+    expect(r.decision).toBe('deny');
+    expect(r.hits.some((h) => h.ruleId === 'git-path-invocation')).toBe(true);
+    expect(r.hits.some((h) => h.ruleId === 'git-branch-force-delete')).toBe(true);
+  });
+});
+
+describe('inspector-normalization — env -S short-cluster and long-abbreviation spellings', () => {
+  it("denies `env -iS'<cmd>'` (short-option cluster ending in S, attached quoted value)", () => {
+    const r = inspectBashCommand("env -iS'git push --force origin main'");
+    expect(r.decision).toBe('deny');
+    expect(r.hits.some((h) => h.ruleId === 'git-force-push')).toBe(true);
+  });
+
+  it('denies `env --split=<cmd>` (unambiguous long-option abbreviation with attached =value)', () => {
+    const r = inspectBashCommand("env --split='git push --force origin main'");
+    expect(r.decision).toBe('deny');
+    expect(r.hits.some((h) => h.ruleId === 'git-force-push')).toBe(true);
+  });
+
+  it('denies `env --s <cmd>` (shortest unambiguous long-option abbreviation, next-word value)', () => {
+    const r = inspectBashCommand("env --s 'git push --force origin main'");
+    expect(r.decision).toBe('deny');
+    expect(r.hits.some((h) => h.ruleId === 'git-force-push')).toBe(true);
+  });
+});
+
+describe('inspector-normalization — env -S separate-word rebuild shell-quotes trailing argv', () => {
+  it('allows `env -S git commit -m "mention --no-verify"` (trailing word re-quoted, not split apart)', () => {
+    const r = inspectBashCommand('env -S git commit -m "mention --no-verify"');
+    expect(r.decision).toBe('allow');
+  });
+
+  it('still denies `env -S git push --force origin main` (separate-word rebuild, real force push)', () => {
+    const r = inspectBashCommand('env -S git push --force origin main');
+    expect(r.decision).toBe('deny');
+    expect(r.hits.some((h) => h.ruleId === 'git-force-push')).toBe(true);
+  });
+});
+
 describe('inspector-normalization — git-branch-force-delete abbreviation ambiguity', () => {
   it('denies `git branch --del --forc x` (both abbreviations at their unambiguous minimum length)', () => {
     const r = inspectBashCommand('git branch --del --forc x');

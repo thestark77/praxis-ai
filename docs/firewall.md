@@ -131,11 +131,13 @@ blocks legitimate work when its own machinery is broken.
   is never modeled; a dangerous body passed through one of those shells'
   `-c` equivalent is inspected only as an opaque argument to an unknown
   program, the same as any other unrecognized command.
-- `env -S`'s split-string value is reconstructed by tokenising and
-  rejoining argv words with a single space, not by re-deriving the
-  shell's own quoting/escaping rules for that value; unusual internal
-  quoting inside the split string beyond ordinary whitespace-separated
-  words is not specially modeled.
+- `env -S`'s split-string value itself is inserted verbatim into the
+  reconstructed command, not re-derived from the shell's own
+  quoting/escaping rules for that value; only the trailing argv words
+  appended after it (the separate-word form's `<rest...>`) are
+  individually shell-quoted when rebuilt. Unusual internal quoting inside
+  the split-string value beyond ordinary whitespace-separated words is
+  not specially modeled.
 
 The inspector (`src/lib/ast/inspect.ts`) normalizes every command segment
 before running rules against it — stripping `VAR=value` assignments and
@@ -167,12 +169,23 @@ first non-option word. If any cluster scanned contained the letter `c`,
 the first non-option word reached is treated as the `-c` body — covering
 `bash -c -- "..."`, `bash -c -e "..."`, `bash -O extglob -c "..."`,
 `bash --rcfile x -c "..."`, and `sh -ec "..."` alike, not just a bare
-`-c` in isolation. `env -S`'s value is recognized in every spelling —
-attached (`-S<cmd>`, `-S'<cmd>'`), `--split-string=<cmd>`, and the
-separate-word form — and in the unquoted separate-word form the nested
-command is the `-S` value joined with whatever argv words follow it,
-matching how `env` itself appends trailing arguments to the split
-command.
+`-c` in isolation. `env -S`'s value is recognized in exactly these
+spellings: the short flag with a separate-word value (`-S <cmd>`),
+attached (`-S<cmd>`, `-S'<cmd>'`), inside a combined short-option cluster
+(`-iS<cmd>`, `-iS'<cmd>'`, `-iS <cmd>` — GNU `env` has no other short
+option spelled with a capital `S`, so any cluster carrying one is
+unambiguous), the exact long option (`--split-string <cmd>`,
+`--split-string=<cmd>`), and any unambiguous abbreviation of the long
+option down to `--s` (GNU `env` has no other long option starting with
+`s`), both as `--sp=<cmd>` and as `--sp <cmd>`. In every separate-word
+form the nested command is the `-S` value joined with whatever argv words
+follow it, matching how `env` itself appends trailing arguments to the
+split command — each of those trailing words is individually
+shell-quoted before being rejoined, so a quoted argv word (e.g. a commit
+message containing `--no-verify` as prose) is not flattened into bare
+text and re-split into a standalone, dangerous-looking token. The `-S`
+value itself is still inserted verbatim, not re-derived from the shell's
+own quoting rules — see Known limits below.
 
 `git-branch-force-delete` also accepts git's own unambiguous long-option
 abbreviations, but the two flags need different minimum lengths to reach
@@ -180,7 +193,9 @@ that point: `--delete` has no other `git branch` long option sharing a
 prefix with it, so `--del` (5 characters) onward is accepted, while
 `--force` shares its first four characters with `--format` (`--for` is
 genuinely ambiguous between the two) — only `--forc` (6 characters) and
-the full `--force` are accepted.
+the full `--force` are accepted. It also matches its program word by
+basename, the same as `git-path-invocation`, so a path-form force-delete
+(`/usr/bin/git branch -D x`) is caught by both rules at once.
 
 ## Customisation
 

@@ -18,39 +18,31 @@ for full re-inspection. This closes a pre-existing gap where
 `bash -c "rm -rf /"` evaded every rule (the `-c` body was never
 re-inspected), plus the T4 known limits `env -S`, `bash -lc`,
 `xargs -I {}`, and a chained `sh -c "a && git ..."` tail. Nesting beyond
-the existing depth bound now fails closed (denies with "command nesting
-too deep to inspect") instead of silently allowing unexamined content —
-including for plain command-substitution nesting (`$(...)`) with no shell
-`-c` hand-off involved at all, not only chained `-c` hand-offs.
-`git-branch-force-delete` also accepts git's own unambiguous long-option
-abbreviations, at the length each one actually needs to be unambiguous:
-`--delete` from `--del` (5 characters) onward, and `--force` only from
-`--forc` (6 characters) onward, since `--for` is genuinely ambiguous with
-`--format`.
+the existing depth bound fails closed (denies with "command nesting too
+deep to inspect") instead of silently allowing unexamined content —
+including plain command-substitution nesting (`$(...)`) with no shell
+`-c` hand-off involved, not only chained `-c` hand-offs — and is pinned at
+its exact boundary (the last allowed depth and the first denied depth).
 
-### Fixed - shell option grammar and `env -S` forms in the AST inspector
-
-A post-review correction on the change above. `findShellCArgument` (the
-`-c`-body detector) previously only recognized a single `-c`-shaped flag
-token; it now walks the shell's own leading-option grammar — `-`/`+`
-clusters, long `--opt` options, the value-taking flags those shells
-define (`-o`/`+o <name>`, `-O`/`+O <shopt>`, `--rcfile`/`--init-file
-<file>`, with `--rcfile=x` needing no extra word) — and stops at a bare
-`--` or the first non-option word, so `bash -c -- "..."`,
-`bash -c -e "..."`, `bash -O extglob -c "..."`, `bash --rcfile x
--c "..."`, and `sh -ec "..."` are all recognized as `-c` hand-offs, not
-just an isolated `-c`. `env -S` is now recognized in every spelling —
-attached (`-S<cmd>`, `-S'<cmd>'`), `--split-string=<cmd>`, and the
-unquoted separate-word form, where the nested command is now the `-S`
-value joined with the remaining argv words instead of just the first one
-(`env` itself appends trailing arguments to the split command the same
-way). `git-branch-force-delete`'s abbreviation matching had a bug: it
-used one shared minimum length for both `--delete` and `--force`,
-which let `--for` alone (ambiguous with `--format`) count as `--force`;
-each flag now has its own correctly-derived minimum length. The nesting
-bound's fail-closed behavior is now pinned at its exact boundary (the
-last allowed depth and the first denied depth) and confirmed to apply to
-substitution-only nesting, not only chained shell `-c` hand-offs.
+The shell `-c`-body detector (`findShellCArgument`) walks the shell's own
+leading-option grammar (`-`/`+` clusters, long `--opt` options, and the
+value-taking flags those shells define, e.g. `-o`/`+o <name>`, `-O`/`+O
+<shopt>`, `--rcfile`/`--init-file <file>`) instead of matching an isolated
+`-c`, so `bash -c -- "..."`, `bash -c -e "..."`, `bash -O extglob -c
+"..."`, `bash --rcfile x -c "..."`, and `sh -ec "..."` are all recognized
+as `-c` hand-offs. `env -S` is recognized across its GNU-documented
+spellings — see `docs/firewall.md` for the exact list — and its
+separate-word form's trailing argv words are individually shell-quoted
+when rebuilt, so a quoted word (e.g. a commit message) is not flattened
+into bare text and re-split into a dangerous-looking token. `git-branch-
+force-delete` accepts git's own unambiguous long-option abbreviations
+(`--delete` from `--del` onward, `--force` only from `--forc` onward,
+since `--for` is genuinely ambiguous with `--format`) and matches its
+program word by basename, the same as `git-path-invocation`, so a
+path-form force-delete (`/usr/bin/git branch -D x`) is caught by both
+rules at once. The argv parser (`argvWithSpans`) now correctly handles
+the shell quote-escape idiom (`'\''`) outside of quotes, which previously
+let a correctly quoted nested `bash -c` chain be inspected wrongly.
 
 ### Added - away-mode skill
 

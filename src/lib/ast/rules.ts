@@ -86,6 +86,23 @@ function basename(word: string): string {
   return cut === -1 ? word : word.slice(cut + 1);
 }
 
+/**
+ * Shell-quote `word` for safe reinsertion into a reconstructed command
+ * line. A word with no whitespace or shell metacharacters is emitted
+ * as-is; otherwise it is wrapped in single quotes, escaping any embedded
+ * single quote with the standard `'\''` idiom (close the quoted run, emit
+ * one literal `'` via backslash-escape, reopen). Used when rebuilding
+ * `env -S`'s separate-word form (`env -S <cmd> <rest...>`) so a quoted
+ * trailing argv word — e.g. a commit message containing `--no-verify` as
+ * prose — is not silently flattened into bare unquoted text and then
+ * re-split into a standalone, dangerous-looking token once the rebuilt
+ * line is re-tokenised for re-inspection.
+ */
+function shellQuoteWord(word: string): string {
+  if (word.length > 0 && !/[\s'"\\$`!*?[\]{}()<>|;&~#]/.test(word)) return word;
+  return `'${word.replace(/'/g, `'\\''`)}'`;
+}
+
 // rm -rf in any form: -rf, -r -f, -fr, -Rf, --recursive --force, etc.
 const rmDangerous: Rule = {
   id: 'rm-recursive-force',
@@ -727,15 +744,26 @@ function resolveEffectiveInvocation(argvList: string[]): EffectiveInvocation {
       // `-S`/`--split-string`'s value is a full command line, not an inert
       // argument — in every spelling: attached (`-S<cmd>`, `-S'<cmd>'` —
       // the latter already merged into one token by `argvWithSpans`'s
-      // quote handling), `--split-string=<cmd>`, or the separate-word form
-      // (`-S <cmd>` / `--split-string <cmd>`). Real `env` also appends any
+      // quote handling), inside a combined short-option cluster (`-iS<cmd>`,
+      // `-iS'<cmd>'`, `-iS <cmd>` — GNU env has no other short option
+      // spelled with a capital `S`, so any cluster containing one is
+      // unambiguous), the exact long option with the separate-word or
+      // `=value` form (`--split-string <cmd>` / `--split-string=<cmd>`), an
+      // unambiguous abbreviation of the long option down to `--s` (GNU env
+      // has no other long option starting with `s`), or the plain
+      // separate-word form (`-S <cmd>`). Real `env` also appends any
       // further argv words after the split-string value as additional
       // arguments to the program it names, so those words belong in the
       // nested command line too — `env -S git push --force origin main`
       // (all unquoted, no quotes at all around the argument) hands
       // `git push --force origin main` to the shell exactly the same way
       // the shebang idiom `#!/usr/bin/env -S python3 -u` hands `python3 -u`
-      // plus the script path.
+      // plus the script path. Each trailing word is individually
+      // shell-quoted (`shellQuoteWord`) before being rejoined, so a quoted
+      // argv word — e.g. a commit message containing `--no-verify` as
+      // prose — is not silently flattened into bare unquoted text and then
+      // re-split into a standalone, dangerous-looking token when the
+      // rebuilt command line is re-tokenised for re-inspection.
       let sValue: string | undefined;
       let restStart = i + 1;
       if (t === '-S' || t === '--split-string') {
@@ -743,13 +771,35 @@ function resolveEffectiveInvocation(argvList: string[]): EffectiveInvocation {
         restStart = i + 2;
       } else if (t.startsWith('-S') && t.length > 2) {
         sValue = t.slice(2);
-      } else if (t.startsWith('--split-string=')) {
-        sValue = t.slice('--split-string='.length);
+      } else if (t[0] === '-' && t[1] !== '-' && t.length > 1 && t.includes('S')) {
+        // A short-option cluster carrying `S` somewhere other than
+        // immediately after the leading dash (that shape is handled by the
+        // two branches above already): everything in the token from `S`
+        // onward is `-S`'s value, attached or empty — an empty value means
+        // the next argv word carries it, just like the plain `-S` form.
+        const sIdx = t.indexOf('S');
+        const attached = t.slice(sIdx + 1);
+        if (attached.length > 0) {
+          sValue = attached;
+        } else {
+          sValue = argvList[i + 1];
+          restStart = i + 2;
+        }
+      } else if (t.startsWith('--') && t.includes('=')) {
+        const eq = t.indexOf('=');
+        const name = t.slice(0, eq);
+        if (name.length > 2 && '--split-string'.startsWith(name)) {
+          sValue = t.slice(eq + 1);
+        }
+      } else if (t.startsWith('--') && t.length > 2 && '--split-string'.startsWith(t)) {
+        sValue = argvList[i + 1];
+        restStart = i + 2;
       }
       if (sValue !== undefined) {
         const remainder = argvList.slice(restStart);
         return {
-          nestedCommand: remainder.length > 0 ? `${sValue} ${remainder.join(' ')}` : sValue,
+          nestedCommand:
+            remainder.length > 0 ? `${sValue} ${remainder.map(shellQuoteWord).join(' ')}` : sValue,
         };
       }
     }
@@ -1032,11 +1082,16 @@ function gitSubcommandIndex(argvList: string[], gitIndex: number): number {
 // merge check that plain `-d` enforces. `-d` alone stays allowed; so does
 // `--merged`, which only lists branches.
 //
-// This rule only ever looks at `args[0]` of whatever text it is given —
-// same as `git-path-invocation` above, it relies on the inspector running
-// it against both the raw segment and `normalizeSegment`'s wrapper-
-// stripped form to catch `env git branch -D x`, `GIT_DIR=... git branch
-// -D x`, or a path-form wrapper. It still walks git's OWN global options
+// This rule matches `args[0]` by basename, same as `git-path-invocation`
+// above — so a path-form invocation (`/usr/bin/git branch -D x`) is caught
+// by BOTH rules at once, not just `git-path-invocation`: the shim-bypass
+// intent (routing around a `git` shim on PATH) and the destructive-
+// subcommand intent (an unmerged branch deleted with no reflog trail) are
+// independent hazards, and denying only one of them under-reports why the
+// command was actually blocked. It also relies on the inspector running it
+// against both the raw segment and `normalizeSegment`'s wrapper-stripped
+// form to catch `env git branch -D x`, `GIT_DIR=... git branch -D x`, or a
+// backslash/quote-escaped `git`. It still walks git's OWN global options
 // itself (`-C repo`, `-c k=v`, `--git-dir=...`) via `gitSubcommandIndex`,
 // since those are arguments git itself consumes before its subcommand,
 // not a wrapper prefix normalization strips.
@@ -1044,7 +1099,7 @@ const gitBranchForceDelete: Rule = {
   id: 'git-branch-force-delete',
   inspect(command) {
     const args = argv(command);
-    if (args[0] !== 'git') return null;
+    if (!args[0] || basename(args[0]) !== 'git') return null;
     const subIndex = gitSubcommandIndex(args, 0);
     if (args[subIndex] !== 'branch') return null;
     let deleting = false;

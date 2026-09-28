@@ -71,8 +71,8 @@ the Iris-specific decision-model evaluation.
   Closes the T4 known limits (`env -S`, `bash -lc`, `xargs -I {}`,
   chained `sh -c` bodies, backslash escapes) and a pre-existing gap:
   `bash -c "rm -rf /"` evades every rule today.
-  Route: delegated writer, branch `feat/inspector-normalization`,
-  worktree `/home/sebas/worktrees/praxis-ai/inspector-normalization`.
+  Route: delegated writer, branch `feat/inspector-normalization`, in a
+  dedicated worktree.
   Progress: implemented — `normalizeSegment`/`extractNestedCommand`
   added to `src/lib/ast/rules.ts` (wrapper/VAR=/backslash/quote
   normalization once, ahead of every rule; shell `-c`, `eval`, and
@@ -89,9 +89,16 @@ the Iris-specific decision-model evaluation.
   Found and fixed, in the same change, a real evasion-class bug in the
   pre-existing `argv()` parser: it mishandled the standard shell `'\''`
   quote-escape idiom outside of quotes, which could turn a `deny` into an
-  `allow` for a sufficiently obfuscated nested `bash -c` chain. Committed
-  as `4548406` on `feat/inspector-normalization`; not pushed, no PR
-  opened. Awaiting orchestrator review before checking this off.
+  `allow` for a sufficiently obfuscated nested `bash -c` chain. A
+  follow-up scoped correction then matched `git-branch-force-delete`'s
+  program word by basename (path-form force-delete now hits both
+  `git-path-invocation` and `git-branch-force-delete`), recognized the
+  remaining `env -S` spellings (a short-option cluster carrying `S`, and
+  unambiguous long-option abbreviations of `--split-string`), and
+  shell-quoted the separate-word form's trailing argv words so a quoted
+  word is not flattened and re-split into a false-positive token. Not
+  pushed, no PR opened. Status: implemented on
+  `feat/inspector-normalization`, in review.
 - [x] T8 `away-mode` — explicit skill for unattended sessions (Iris backlog
   item #1836, topic `praxis/backlog/away-mode`): readiness checks and flags
   (herdr, `cc-flags` auto_compact/auto_resume, context guard, review

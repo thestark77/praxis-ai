@@ -25,6 +25,7 @@ TypeScript-built CLI distributed via npm.
 ├── main.md             # the @-imported entry point
 ├── philosophy.md       # 8 operating principles
 ├── phase-flow.md       # F0/F1/F2/F3 model
+├── queue-rule.md       # queue, don't preempt: harness-wide home of the rule
 ├── skill-invocation-policy.md  # explicit/reflex/contextual
 ├── precedence-rules.md # praxis vs gentle-ai
 ├── irreversibility-firewall.md

@@ -11,6 +11,7 @@ precedence on conflict via recency.
 
 @philosophy.md
 @phase-flow.md
+@queue-rule.md
 @skill-invocation-policy.md
 @precedence-rules.md
 @irreversibility-firewall.md

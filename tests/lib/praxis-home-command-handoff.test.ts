@@ -25,6 +25,12 @@ describe('praxis-home command-handoff module', () => {
     const content = await readFile(join(templatesRoot, 'command-handoff.md'), 'utf8');
     expect(content).toContain('absolute paths');
     expect(content).toContain('PEGA_AQUI_TU_API_KEY');
-    expect(content).toContain('never print');
+    expect(content).toMatch(/^## Never print, echo, log, or read secrets$/m);
+  });
+
+  it('recommends a shell-portable way to prompt for a secret', async () => {
+    const content = await readFile(join(templatesRoot, 'command-handoff.md'), 'utf8');
+    expect(content).toContain('stty -echo');
+    expect(content).not.toContain('read -s -p');
   });
 });

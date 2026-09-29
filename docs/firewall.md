@@ -110,20 +110,92 @@ blocks legitimate work when its own machinery is broken.
 
 ### Known limits
 
-- `env -S`, `bash -lc`, and `xargs -I {}` are wrapper/invocation shapes
-  the guard-evasion rules do not yet normalize through; a path-form or
-  chained git hidden behind one of these can still slip past
-  `git-path-invocation` and `git-branch-force-delete`.
-- A chained `sh -c "a && git ..."` body is only ever inspected for its
-  first command; the tail after `&&`/`;`/`|` inside the body is not
-  walked.
 - `read-bypass-token` is a literal-name check: a quote-concatenated or
   glob-obfuscated name that never appears as one literal word (e.g.
-  `"byp"'ass.to'"ken"`) evades it.
+  `"byp"'ass.to'"ken"`) evades it. A glob that avoids spelling a name at
+  all (`by*` expanding to the token file) is invisible to any syntactic
+  check for the same reason.
+- A variable expanded only at runtime (`$G push --force`, where `$G` is
+  set to `git` earlier in the session) is opaque to a static inspector —
+  the hook sees the literal text `$G`, not what the shell will substitute.
+- An alias or shell function defined earlier in the same session (e.g.
+  `alias g=git`) redefines what a bare word runs; the hook has no
+  visibility into session-local alias/function tables, only the command
+  string itself.
+- The shell `-c` option-grammar parser (`findShellCArgument`) models
+  `sh`/`bash`/`zsh`/`dash`/`ksh` conventions: leading `-`/`+` clusters,
+  long `--opt` options, and the value-taking flags those shells define
+  (`-o`/`+o`, `-O`/`+O`, `--rcfile`/`--init-file`). A shell outside that
+  fixed set (fish, csh, tcsh, PowerShell, ...) is not recognized as a
+  `-c` hand-off at all, so its own — possibly different — option grammar
+  is never modeled; a dangerous body passed through one of those shells'
+  `-c` equivalent is inspected only as an opaque argument to an unknown
+  program, the same as any other unrecognized command.
+- `env -S`'s split-string value itself is inserted verbatim into the
+  reconstructed command, not re-derived from the shell's own
+  quoting/escaping rules for that value; only the trailing argv words
+  appended after it (the separate-word form's `<rest...>`) are
+  individually shell-quoted when rebuilt. Unusual internal quoting inside
+  the split-string value beyond ordinary whitespace-separated words is
+  not specially modeled.
 
-These are known gaps pending inspector-level normalization (tokenising
-and canonicalising a command once, ahead of every rule, instead of each
-rule re-deriving the effective program on its own).
+The inspector (`src/lib/ast/inspect.ts`) normalizes every command segment
+before running rules against it — stripping `VAR=value` assignments and
+wrapper prefixes (`env`, `command`, `exec`, `nohup`, `nice`, `time`,
+`timeout`, `stdbuf`, `setsid`, `xargs`, matched by basename so a path-form
+wrapper counts too), and unquoting/unescaping the resolved program word
+(`\git`, `g\it`, `"git"`, `'git'` all normalize to `git`) — and enqueues a
+shell's `-c` body, `eval`'s arguments, and `env -S`'s split-string value
+for full re-inspection (tokenising, segment splitting, substitutions,
+normalization, every rule), bounded by the same nesting cap as command
+substitutions and heredocs. This closes the gaps `env -S`, `bash -lc`, and
+`xargs -I {}` used to leave open for `git-path-invocation` and
+`git-branch-force-delete`, the chained-`sh -c "a && git ..."` tail gap,
+and a pre-existing hole where `bash -c "rm -rf /"` evaded every rule
+because the `-c` body was never re-inspected at all. Nesting beyond the
+cap fails closed: the inspector denies with "command nesting too deep to
+inspect" rather than silently allowing content it never actually looked
+at — this applies equally to a chain of shell `-c` hand-offs and to plain
+command-substitution nesting (`$(...)`) with no shell hand-off involved at
+all; either shape denies once the bound is crossed, regardless of how
+harmless the unreached innermost command actually is.
+
+The `-c`-body detector (`findShellCArgument`) walks the shell's own
+leading-option grammar instead of a single-flag heuristic: it scans
+`-`/`+` clusters and long `--opt` options, consumes the value word of
+`-o`/`+o`, `-O`/`+O`, and `--rcfile`/`--init-file` (the attached
+`--rcfile=x` form needs no extra word), and stops at a bare `--` or the
+first non-option word. If any cluster scanned contained the letter `c`,
+the first non-option word reached is treated as the `-c` body — covering
+`bash -c -- "..."`, `bash -c -e "..."`, `bash -O extglob -c "..."`,
+`bash --rcfile x -c "..."`, and `sh -ec "..."` alike, not just a bare
+`-c` in isolation. `env -S`'s value is recognized in exactly these
+spellings: the short flag with a separate-word value (`-S <cmd>`),
+attached (`-S<cmd>`, `-S'<cmd>'`), inside a combined short-option cluster
+(`-iS<cmd>`, `-iS'<cmd>'`, `-iS <cmd>` — GNU `env` has no other short
+option spelled with a capital `S`, so any cluster carrying one is
+unambiguous), the exact long option (`--split-string <cmd>`,
+`--split-string=<cmd>`), and any unambiguous abbreviation of the long
+option down to `--s` (GNU `env` has no other long option starting with
+`s`), both as `--sp=<cmd>` and as `--sp <cmd>`. In every separate-word
+form the nested command is the `-S` value joined with whatever argv words
+follow it, matching how `env` itself appends trailing arguments to the
+split command — each of those trailing words is individually
+shell-quoted before being rejoined, so a quoted argv word (e.g. a commit
+message containing `--no-verify` as prose) is not flattened into bare
+text and re-split into a standalone, dangerous-looking token. The `-S`
+value itself is still inserted verbatim, not re-derived from the shell's
+own quoting rules — see Known limits below.
+
+`git-branch-force-delete` also accepts git's own unambiguous long-option
+abbreviations, but the two flags need different minimum lengths to reach
+that point: `--delete` has no other `git branch` long option sharing a
+prefix with it, so `--del` (5 characters) onward is accepted, while
+`--force` shares its first four characters with `--format` (`--for` is
+genuinely ambiguous between the two) — only `--forc` (6 characters) and
+the full `--force` are accepted. It also matches its program word by
+basename, the same as `git-path-invocation`, so a path-form force-delete
+(`/usr/bin/git branch -D x`) is caught by both rules at once.
 
 ## Customisation
 

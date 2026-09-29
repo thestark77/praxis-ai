@@ -64,12 +64,41 @@ the Iris-specific decision-model evaluation.
 - [x] T6 `effort-policy` — docs-verified effort guidance (see evidence).
   Route: delegated writer.
 
-- [ ] T7 `inspector-normalization` (PROPOSED, needs user OK) — move
-  wrapper/env-assignment/`sh -c` normalization from individual rules into
-  the AST inspector (`src/lib/ast/inspect.ts`) so every rule sees the
-  effective command. Closes the T4 known limits (`env -S`, `bash -lc`,
-  `xargs -I {}`, chained `sh -c` bodies, backslash escapes) and a
-  pre-existing gap: `bash -c "rm -rf /"` evades every rule today.
+- [ ] T7 `inspector-normalization` (approved by the user 2026-09-28
+  (relayed by the Iris session)) — move wrapper/env-assignment/`sh -c`
+  normalization from individual rules into the AST inspector
+  (`src/lib/ast/inspect.ts`) so every rule sees the effective command.
+  Closes the T4 known limits (`env -S`, `bash -lc`, `xargs -I {}`,
+  chained `sh -c` bodies, backslash escapes) and a pre-existing gap:
+  `bash -c "rm -rf /"` evades every rule today.
+  Route: delegated writer, branch `feat/inspector-normalization`, in a
+  dedicated worktree.
+  Progress: implemented — `normalizeSegment`/`extractNestedCommand`
+  added to `src/lib/ast/rules.ts` (wrapper/VAR=/backslash/quote
+  normalization once, ahead of every rule; shell `-c`, `eval`, and
+  `env -S` bodies enqueued into the inspector's worklist for full
+  re-inspection); `inspect.ts` runs every rule against both the raw and
+  normalized segment and fails closed ("command nesting too deep to
+  inspect") past the existing nesting bound; `git-path-invocation` and
+  `git-branch-force-delete` simplified to rely on the normalized segment
+  instead of their own wrapper-walking; `git-branch-force-delete` also
+  accepts unambiguous long-option abbreviations. New test file
+  `tests/lib/ast/inspector-normalization.test.ts` (TDD: RED observed
+  before implementation, GREEN after). Full suite green
+  (`pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`).
+  Found and fixed, in the same change, a real evasion-class bug in the
+  pre-existing `argv()` parser: it mishandled the standard shell `'\''`
+  quote-escape idiom outside of quotes, which could turn a `deny` into an
+  `allow` for a sufficiently obfuscated nested `bash -c` chain. A
+  follow-up scoped correction then matched `git-branch-force-delete`'s
+  program word by basename (path-form force-delete now hits both
+  `git-path-invocation` and `git-branch-force-delete`), recognized the
+  remaining `env -S` spellings (a short-option cluster carrying `S`, and
+  unambiguous long-option abbreviations of `--split-string`), and
+  shell-quoted the separate-word form's trailing argv words so a quoted
+  word is not flattened and re-split into a false-positive token. Not
+  pushed, no PR opened. Status: implemented on
+  `feat/inspector-normalization`, in review.
 - [x] T8 `away-mode` — explicit skill for unattended sessions (Iris backlog
   item #1836, topic `praxis/backlog/away-mode`): readiness checks and flags
   (herdr, `cc-flags` auto_compact/auto_resume, context guard, review

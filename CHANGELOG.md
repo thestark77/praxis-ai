@@ -6,6 +6,44 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Changed - the AST inspector normalizes wrappers and inspects shell -c bodies
+
+The Layer 2 AST hook (`src/lib/ast/inspect.ts`) now strips `VAR=value`
+assignments and wrapper prefixes (`env`, `timeout`, `xargs`, ...) and
+unescapes/unquotes the program word once per command segment, then runs
+every rule against both the raw and the normalized form, instead of each
+rule re-deriving the effective program on its own. It also enqueues a
+shell's `-c` body, `eval`'s arguments, and `env -S`'s split-string value
+for full re-inspection. This closes a pre-existing gap where
+`bash -c "rm -rf /"` evaded every rule (the `-c` body was never
+re-inspected), plus the T4 known limits `env -S`, `bash -lc`,
+`xargs -I {}`, and a chained `sh -c "a && git ..."` tail. Nesting beyond
+the existing depth bound fails closed (denies with "command nesting too
+deep to inspect") instead of silently allowing unexamined content —
+including plain command-substitution nesting (`$(...)`) with no shell
+`-c` hand-off involved, not only chained `-c` hand-offs — and is pinned at
+its exact boundary (the last allowed depth and the first denied depth).
+
+The shell `-c`-body detector (`findShellCArgument`) walks the shell's own
+leading-option grammar (`-`/`+` clusters, long `--opt` options, and the
+value-taking flags those shells define, e.g. `-o`/`+o <name>`, `-O`/`+O
+<shopt>`, `--rcfile`/`--init-file <file>`) instead of matching an isolated
+`-c`, so `bash -c -- "..."`, `bash -c -e "..."`, `bash -O extglob -c
+"..."`, `bash --rcfile x -c "..."`, and `sh -ec "..."` are all recognized
+as `-c` hand-offs. `env -S` is recognized across its GNU-documented
+spellings — see `docs/firewall.md` for the exact list — and its
+separate-word form's trailing argv words are individually shell-quoted
+when rebuilt, so a quoted word (e.g. a commit message) is not flattened
+into bare text and re-split into a dangerous-looking token. `git-branch-
+force-delete` accepts git's own unambiguous long-option abbreviations
+(`--delete` from `--del` onward, `--force` only from `--forc` onward,
+since `--for` is genuinely ambiguous with `--format`) and matches its
+program word by basename, the same as `git-path-invocation`, so a
+path-form force-delete (`/usr/bin/git branch -D x`) is caught by both
+rules at once. The argv parser (`argvWithSpans`) now correctly handles
+the shell quote-escape idiom (`'\''`) outside of quotes, which previously
+let a correctly quoted nested `bash -c` chain be inspected wrongly.
+
 ### Added - away-mode skill
 
 A new explicit `away-mode` skill ("modo independiente") lets the user hand a

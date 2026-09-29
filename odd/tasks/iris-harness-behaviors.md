@@ -64,7 +64,7 @@ the Iris-specific decision-model evaluation.
 - [x] T6 `effort-policy` — docs-verified effort guidance (see evidence).
   Route: delegated writer.
 
-- [ ] T7 `inspector-normalization` (approved by the user 2026-09-28
+- [x] T7 `inspector-normalization` (approved by the user 2026-09-28
   (relayed by the Iris session)) — move wrapper/env-assignment/`sh -c`
   normalization from individual rules into the AST inspector
   (`src/lib/ast/inspect.ts`) so every rule sees the effective command.
@@ -115,6 +115,11 @@ the Iris-specific decision-model evaluation.
   user's explicit OK first. Source: Iris session relay of a user request,
   2026-09-28. Route: delegated writer.
 
+- [x] T10 `browser-testing-policy` — agent-driven browser verification
+  uses the `browser-use` MCP first; Playwright only as an explicitly
+  reported fallback; never installed by default. Source: Iris session relay
+  of a user request, 2026-09-28.
+
 ## Acceptance criteria
 
 - Each behavior is an installed `~/.praxis/` module (or an edit of an
@@ -148,6 +153,8 @@ deleted with `git branch -d`):
 | T4 firewall-shim-bypass | #19 | 4 | Retry cap reached; remaining variants documented as known limits, durable fix proposed as T7 |
 | T8 away-mode | #21 | 3 | Live-tested `/away-mode check`; remaining follow-ups: native-skill ownership fail-open when SKILL.md missing, orphaned partial dir |
 | T9 upstream-first-debugging | #22 | 3 | Rounds 1-2 fixed an invalid `gh search issues --state all` and unscoped `gh ... list` commands, pinned by tests |
+| T10 browser-testing-policy | #24 | 1 | Only test-strength suggestions |
+| T7 inspector-normalization | #25 | 3 | Closed the `bash -c` gap; round 3 blocker (env `-u`/`-C` attached value misread as `-S`) fixed via the native bounded correction and targeted validation |
 
 Verification on each merged branch: `pnpm test`, `pnpm typecheck`,
 `pnpm lint`, `pnpm format:check` passing (main after #22: 749 tests).
@@ -167,7 +174,7 @@ Open follow-ups (non-blocking review suggestions):
 
 ## Next step
 
-T7 waits for the user's decision (relayed by the Iris session). If approved,
-implement T7, then prepare the v0.1.0-alpha.28 release PR (version bump in
-`package.json`, `src/cli/index.ts` and tests, CHANGELOG) so one release
-carries #14-#22 plus T7; the user triggers `gh release create`.
+Release v0.1.0-alpha.28 carries #14-#25: the release PR bumps
+`package.json` and graduates the CHANGELOG (no other file pins the version;
+the CLI reads it from `package.json` at build time). The user publishes it
+with `gh release create`, which triggers the npm publish workflow.

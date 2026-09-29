@@ -271,6 +271,21 @@ describe('inspector-normalization — env -S short-cluster and long-abbreviation
     expect(r.hits.some((h) => h.ruleId === 'git-force-push')).toBe(true);
   });
 
+  it.each(['env -uSSH_AUTH_SOCK git branch -D feature', 'env -CSomeDir git branch -D feature'])(
+    'an S inside the attached value of -u/-C is not -S: %s still reaches git',
+    (cmd) => {
+      const r = inspectBashCommand(cmd);
+      expect(r.decision).toBe('deny');
+      expect(r.hits.some((h) => h.ruleId === 'git-branch-force-delete')).toBe(true);
+    },
+  );
+
+  it('denies `env -iS <cmd>` (S cluster with a separate-word value)', () => {
+    const r = inspectBashCommand("env -iS 'git push --force origin main'");
+    expect(r.decision).toBe('deny');
+    expect(r.hits.some((h) => h.ruleId === 'git-force-push')).toBe(true);
+  });
+
   it('denies `env --s <cmd>` (shortest unambiguous long-option abbreviation, next-word value)', () => {
     const r = inspectBashCommand("env --s 'git push --force origin main'");
     expect(r.decision).toBe('deny');

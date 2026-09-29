@@ -745,9 +745,8 @@ function resolveEffectiveInvocation(argvList: string[]): EffectiveInvocation {
       // argument — in every spelling: attached (`-S<cmd>`, `-S'<cmd>'` —
       // the latter already merged into one token by `argvWithSpans`'s
       // quote handling), inside a combined short-option cluster (`-iS<cmd>`,
-      // `-iS'<cmd>'`, `-iS <cmd>` — GNU env has no other short option
-      // spelled with a capital `S`, so any cluster containing one is
-      // unambiguous), the exact long option with the separate-word or
+      // `-iS'<cmd>'`, `-iS <cmd>`, walked like getopt so an `S` inside the
+      // attached value of `-u`/`-C` does not count), the exact long option with the separate-word or
       // `=value` form (`--split-string <cmd>` / `--split-string=<cmd>`), an
       // unambiguous abbreviation of the long option down to `--s` (GNU env
       // has no other long option starting with `s`), or the plain
@@ -771,19 +770,27 @@ function resolveEffectiveInvocation(argvList: string[]): EffectiveInvocation {
         restStart = i + 2;
       } else if (t.startsWith('-S') && t.length > 2) {
         sValue = t.slice(2);
-      } else if (t[0] === '-' && t[1] !== '-' && t.length > 1 && t.includes('S')) {
-        // A short-option cluster carrying `S` somewhere other than
-        // immediately after the leading dash (that shape is handled by the
-        // two branches above already): everything in the token from `S`
-        // onward is `-S`'s value, attached or empty — an empty value means
-        // the next argv word carries it, just like the plain `-S` form.
-        const sIdx = t.indexOf('S');
-        const attached = t.slice(sIdx + 1);
-        if (attached.length > 0) {
-          sValue = attached;
-        } else {
-          sValue = argvList[i + 1];
-          restStart = i + 2;
+      } else if (t[0] === '-' && t[1] !== '-' && t.length > 1) {
+        // A short-option cluster, walked the way getopt does: flags without
+        // a value (`-i`, `-0`, `-v`) can be followed by more flags, but a
+        // value-taking flag (`-u NAME`, `-C DIR`) consumes the rest of the
+        // token as its value, so an `S` after it is part of that value
+        // (`-uSSH_AUTH_SOCK`), not the split-string option. Only an `S`
+        // reached before any value-taking flag starts `-S`'s value, attached
+        // or, when empty, in the next argv word.
+        for (let k = 1; k < t.length; k++) {
+          const ch = t[k]!;
+          if (ch === 'u' || ch === 'C') break;
+          if (ch === 'S') {
+            const attached = t.slice(k + 1);
+            if (attached.length > 0) {
+              sValue = attached;
+            } else {
+              sValue = argvList[i + 1];
+              restStart = i + 2;
+            }
+            break;
+          }
         }
       } else if (t.startsWith('--') && t.includes('=')) {
         const eq = t.indexOf('=');

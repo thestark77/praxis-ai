@@ -4,6 +4,18 @@ All notable changes to praxis-ai are documented here.
 This project follows [Semantic Versioning](https://semver.org/) and
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added - engineering-discipline module
+
+A new `templates/praxis-home/engineering-discipline.md` module, imported from
+`main.md`, adds four rules: never silence an error (no swallowed exceptions,
+`|| true`, disabled checks, or loosened assertions), verify the key claim of a
+subagent or tool report before building on it, try to break UI changes before
+calling them done, and close substantive work with a short report of what was
+picked, given up, and why. Adapted from a community AGENTS.md template; only
+rules not already covered elsewhere were kept.
+
 ## [0.1.0-alpha.28] - 2026-09-29
 
 ### Changed - the AST inspector normalizes wrappers and inspects shell -c bodies

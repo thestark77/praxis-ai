@@ -23,4 +23,5 @@ precedence on conflict via recency.
 @context-budget.md
 @upstream-first-debugging.md
 @browser-testing-policy.md
+@engineering-discipline.md
 @presets/balanced.md

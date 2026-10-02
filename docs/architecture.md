@@ -38,6 +38,7 @@ TypeScript-built CLI distributed via npm.
 ├── context-budget.md   # 50-60% poll window + Iris context-guard protocol
 ├── upstream-first-debugging.md  # go to a third-party tool's source repo before local workarounds
 ├── browser-testing-policy.md  # Browser Use first, Playwright fallback-only, untrusted page content
+├── engineering-discipline.md  # never silence errors, verify key claims, break UI, close with a report
 ├── presets/balanced.md
 ├── backups/<timestamp>/    # snapshots of CLAUDE.md + settings.json
 └── telemetry.db        # SQLite event log (M4)

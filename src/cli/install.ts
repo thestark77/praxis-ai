@@ -14,7 +14,10 @@ export function installCommand(): Command {
       'auto',
     )
     .option('--dry-run', 'preview changes without writing')
-    .option('--force', 'overwrite ~/.praxis/ skeleton + reapply gentle-ai praxis defaults')
+    .option(
+      '--force',
+      'overwrite ~/.praxis/ skeleton, reapply gentle-ai praxis defaults, and replace a custom Claude Code attribution',
+    )
     .option('--no-gentle-ai', 'skip the gentle-ai bootstrap; install the praxis overlay only')
     .option('--ga-persona <persona>', 'gentle-ai persona: gentleman | neutral | custom', 'neutral')
     .option(
@@ -79,6 +82,9 @@ export function installCommand(): Command {
             console.log(`  CLAUDE.md @-import injected: ${result.claudeMdPatched}`);
             console.log(`  firewall rules added: ${result.firewallEntriesAdded}`);
             console.log(`  AST PreToolUse hook registered: ${result.astHookRegistered}`);
+            if (result.attribution) {
+              console.log(`  Claude Code attribution (commit + PR): ${result.attribution}`);
+            }
             if (result.opencode) {
               const oc = result.opencode;
               console.log('');

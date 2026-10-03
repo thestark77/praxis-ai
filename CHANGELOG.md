@@ -6,6 +6,27 @@ This project follows [Semantic Versioning](https://semver.org/) and
 
 ## [Unreleased]
 
+### Added - empty Claude Code attribution, enforced by `praxis install`
+
+"No AI attribution" was only a sentence in CLAUDE.md, and the model still
+added `Co-Authored-By: Claude` to commits and the "Generated with Claude
+Code" footer to pull requests. `praxis install` now writes
+`"attribution": { "commit": "", "pr": "" }` into the Claude Code
+`settings.json`, so Claude Code stops adding either one. The write goes
+through the existing key-level patcher: every other key is preserved and a
+second run changes nothing. The deprecated `includeCoAuthoredBy` flag is not
+written.
+
+A custom `attribution` the user already has is kept, with a warning, unless
+`praxis install --force` is used (the same rule the skeleton and skills
+follow). The ownership ledger records what the setting held before, so
+`praxis uninstall` restores that value, or removes the key if there was none;
+a value praxis did not write, or that was edited after the install, is left
+alone. `praxis rollback` restores it from the backup like the rest of
+`settings.json`. `praxis doctor` reports the setting as empty, not set, or
+custom. `praxis update` does not touch `settings.json`, so run
+`praxis install` to apply it to an existing installation.
+
 ### Added - engineering-discipline module
 
 A new `templates/praxis-home/engineering-discipline.md` module, imported from

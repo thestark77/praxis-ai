@@ -73,6 +73,58 @@ describe('the ownership ledger', () => {
   });
 });
 
+describe('the attribution record in the ledger', () => {
+  it('round-trips an absent previous value', async () => {
+    const dir = await praxisDir();
+    await recordOwnership(dir, { attribution: { present: false } });
+    expect((await readOwnership(dir))?.attribution).toEqual({ present: false });
+  });
+
+  it('round-trips a previous custom value', async () => {
+    const dir = await praxisDir();
+    const previous = { present: true, value: { commit: 'old', pr: 'older' } };
+    await recordOwnership(dir, { attribution: previous });
+    expect((await readOwnership(dir))?.attribution).toEqual(previous);
+  });
+
+  it('keeps the first record when a later install records nothing', async () => {
+    const dir = await praxisDir();
+    await recordOwnership(dir, { attribution: { present: false } });
+    await recordOwnership(dir, { claudeCode: ['Read(.env)'] });
+    expect((await readOwnership(dir))?.attribution).toEqual({ present: false });
+  });
+
+  it('replaces the record when a later install overwrites a newer custom value', async () => {
+    const dir = await praxisDir();
+    await recordOwnership(dir, { attribution: { present: false } });
+    await recordOwnership(dir, { attribution: { present: true, value: { commit: 'mine' } } });
+    expect((await readOwnership(dir))?.attribution).toEqual({
+      present: true,
+      value: { commit: 'mine' },
+    });
+  });
+
+  it('has no attribution record on a ledger that predates it', async () => {
+    const dir = await praxisDir();
+    await writeFile(
+      ownershipPath(dir),
+      JSON.stringify({ version: 1, claudeCode: ['Read(.env)'], opencode: [] }),
+      'utf8',
+    );
+    expect((await readOwnership(dir))?.attribution).toBeUndefined();
+  });
+
+  it('ignores a malformed attribution record', async () => {
+    const dir = await praxisDir();
+    await writeFile(
+      ownershipPath(dir),
+      JSON.stringify({ version: 1, claudeCode: [], opencode: [], attribution: 'bad' }),
+      'utf8',
+    );
+    expect((await readOwnership(dir))?.attribution).toBeUndefined();
+  });
+});
+
 describe('deciding what uninstall may remove', () => {
   const firewall = ['Read(.env)', 'Bash(rm -rf *)', 'Bash(git filter-branch*)'];
 

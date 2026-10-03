@@ -354,3 +354,187 @@ describe('runRollback', () => {
     expect(restored).toBeNull();
   });
 });
+
+describe('the Claude Code attribution setting', () => {
+  const firewall = ['Bash(rm -rf *)'];
+
+  async function sandbox(settings: Record<string, unknown>) {
+    const paths = resolvePaths(home);
+    await mkdir(paths.claudeDir, { recursive: true });
+    await writeFile(paths.claudeMd, '', 'utf8');
+    await writeFile(paths.settingsJson, JSON.stringify(settings, null, 2) + '\n', 'utf8');
+    return paths;
+  }
+
+  const install = (paths: ReturnType<typeof resolvePaths>, force = false) =>
+    runInstall({
+      paths,
+      templatesRoot,
+      claudeSkillsTemplatesRoot,
+      firewallEntries: firewall,
+      force,
+    });
+
+  it('writes empty commit and pr into a fresh settings file', async () => {
+    const paths = await sandbox({});
+    const result = await install(paths);
+
+    expect(result.attribution).toBe('written');
+    const settings = await readSettings(paths.settingsJson);
+    expect(settings.attribution).toEqual({ commit: '', pr: '' });
+    expect('includeCoAuthoredBy' in settings).toBe(false);
+  });
+
+  it('preserves every unrelated settings key', async () => {
+    const original = {
+      model: 'opus',
+      enabledPlugins: { 'engram@engram': true },
+      permissions: { defaultMode: 'bypassPermissions', deny: ['Read(.env)'] },
+    };
+    const paths = await sandbox(original);
+    await install(paths);
+
+    const settings = await readSettings(paths.settingsJson);
+    expect(settings.model).toBe('opus');
+    expect(settings.enabledPlugins).toEqual({ 'engram@engram': true });
+    expect(settings.permissions?.defaultMode).toBe('bypassPermissions');
+    expect(settings.permissions?.deny).toEqual(['Read(.env)', 'Bash(rm -rf *)']);
+  });
+
+  it('is idempotent: a second install leaves settings.json byte-identical', async () => {
+    const paths = await sandbox({ model: 'opus' });
+    await install(paths);
+    const first = await readFile(paths.settingsJson, 'utf8');
+
+    const second = await install(paths);
+    expect(second.attribution).toBe('unchanged');
+    expect(await readFile(paths.settingsJson, 'utf8')).toBe(first);
+  });
+
+  it('does not touch settings.json attribution on --dry-run', async () => {
+    const paths = await sandbox({ model: 'opus' });
+    const before = await readFile(paths.settingsJson, 'utf8');
+    const result = await runInstall({
+      paths,
+      templatesRoot,
+      claudeSkillsTemplatesRoot,
+      dryRun: true,
+    });
+    expect(result.attribution).toBeNull();
+    expect(await readFile(paths.settingsJson, 'utf8')).toBe(before);
+  });
+
+  it('keeps a custom attribution without --force and says so', async () => {
+    const custom = { commit: 'Co-Authored-By: me', pr: 'my footer' };
+    const paths = await sandbox({ attribution: custom });
+    const result = await install(paths);
+
+    expect(result.attribution).toBe('kept-custom');
+    expect(result.warnings.some((w) => /attribution/.test(w) && /--force/.test(w))).toBe(true);
+    expect((await readSettings(paths.settingsJson)).attribution).toEqual(custom);
+  });
+
+  it('replaces a custom attribution with --force', async () => {
+    const paths = await sandbox({ attribution: { commit: 'Co-Authored-By: me', pr: 'x' } });
+    const result = await install(paths, true);
+
+    expect(result.attribution).toBe('written');
+    expect((await readSettings(paths.settingsJson)).attribution).toEqual({ commit: '', pr: '' });
+  });
+
+  it('does not write attribution when only OpenCode is targeted', async () => {
+    const paths = await sandbox({ model: 'opus' });
+    const before = await readFile(paths.settingsJson, 'utf8');
+    const result = await runInstall({
+      paths,
+      agents: 'opencode',
+      templatesRoot,
+      claudeSkillsTemplatesRoot,
+    });
+    expect(result.attribution).toBeNull();
+    expect(await readFile(paths.settingsJson, 'utf8')).toBe(before);
+  });
+
+  it('uninstall removes the key it added and leaves the other settings alone', async () => {
+    const paths = await sandbox({ model: 'opus' });
+    await install(paths);
+
+    const result = await runUninstall({ paths, firewallEntries: firewall });
+
+    expect(result.attributionReverted).toBe(true);
+    const settings = await readSettings(paths.settingsJson);
+    expect('attribution' in settings).toBe(false);
+    expect(settings.model).toBe('opus');
+    expect(settings.permissions?.deny).toEqual([]);
+  });
+
+  it('uninstall restores the previous custom value that --force replaced', async () => {
+    const custom = { commit: 'Co-Authored-By: me', pr: 'my footer' };
+    const paths = await sandbox({ attribution: custom });
+    await install(paths, true);
+
+    await runUninstall({ paths, firewallEntries: firewall });
+
+    expect((await readSettings(paths.settingsJson)).attribution).toEqual(custom);
+  });
+
+  it('a repeated install keeps the original previous value for uninstall', async () => {
+    const custom = { commit: 'Co-Authored-By: me', pr: 'my footer' };
+    const paths = await sandbox({ attribution: custom });
+    await install(paths, true);
+    await install(paths, true);
+
+    await runUninstall({ paths, firewallEntries: firewall });
+
+    expect((await readSettings(paths.settingsJson)).attribution).toEqual(custom);
+  });
+
+  it('uninstall leaves an empty attribution the user had set before praxis', async () => {
+    const paths = await sandbox({ attribution: { commit: '', pr: '' } });
+    const installed = await install(paths);
+    expect(installed.attribution).toBe('unchanged');
+
+    const result = await runUninstall({ paths, firewallEntries: firewall });
+
+    expect(result.attributionReverted).toBe(false);
+    expect((await readSettings(paths.settingsJson)).attribution).toEqual({ commit: '', pr: '' });
+  });
+
+  it('uninstall leaves a value the user changed after install', async () => {
+    const paths = await sandbox({});
+    await install(paths);
+    const edited = { commit: 'edited later', pr: '' };
+    const current = await readSettings(paths.settingsJson);
+    await writeFile(
+      paths.settingsJson,
+      JSON.stringify({ ...current, attribution: edited }),
+      'utf8',
+    );
+
+    const result = await runUninstall({ paths, firewallEntries: firewall });
+
+    expect(result.attributionReverted).toBe(false);
+    expect((await readSettings(paths.settingsJson)).attribution).toEqual(edited);
+  });
+
+  it('rollback restores a settings.json that had no attribution key', async () => {
+    const original = JSON.stringify({ model: 'opus' }, null, 2) + '\n';
+    const paths = await sandbox({ model: 'opus' });
+    await install(paths);
+    expect((await readSettings(paths.settingsJson)).attribution).toEqual({ commit: '', pr: '' });
+
+    await runRollback({ paths });
+
+    expect(await readFile(paths.settingsJson, 'utf8')).toBe(original);
+  });
+
+  it('rollback restores the previous custom attribution after --force', async () => {
+    const custom = { commit: 'Co-Authored-By: me', pr: 'my footer' };
+    const paths = await sandbox({ attribution: custom });
+    await install(paths, true);
+
+    await runRollback({ paths });
+
+    expect((await readSettings(paths.settingsJson)).attribution).toEqual(custom);
+  });
+});

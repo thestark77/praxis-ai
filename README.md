@@ -239,7 +239,9 @@ re-running it updates each piece from its source.
    strict TDD), unless `--no-gentle-ai`.
 4. Patch `CLAUDE.md` with the praxis `@-import` block.
 5. Append the firewall deny list + register the AST hook in
-   `settings.json`.
+   `settings.json`, and set `"attribution": { "commit": "", "pr": "" }` so
+   Claude Code never adds `Co-Authored-By` to commits or its footer to
+   PRs (see [Attribution](#attribution)).
 6. Install `~/.praxis/` skeleton + the six lifted skills into
    `~/.claude/skills/`.
 
@@ -249,6 +251,7 @@ re-running it updates each piece from its source.
 --agent <a>             auto | both | claude-code | opencode              (default auto)
 --no-gentle-ai          install the praxis overlay only (skip the bootstrap)
 --force                 overwrite ~/.praxis/ + reapply gentle-ai praxis defaults
+                        + replace a custom Claude Code attribution
 --ga-persona <p>        gentle-ai persona: gentleman | neutral | custom   (default neutral)
 --ga-preset <p>         gentle-ai preset: full-gentleman | ecosystem-only | minimal | custom
                         (default full-gentleman)
@@ -256,6 +259,23 @@ re-running it updates each piece from its source.
 --no-strict-tdd         do not enable gentle-ai Strict TDD
 --dry-run               preview without writing (skips the bootstrap)
 ```
+
+### Attribution
+
+`praxis install` sets Claude Code's `attribution` setting to empty strings
+for commits and pull requests in `~/.claude/settings.json`. It is a setting
+rather than a CLAUDE.md instruction because the setting is applied by Claude
+Code itself and does not depend on the model remembering a rule. Only that
+key is touched, and re-running the install changes nothing.
+
+- A custom `attribution` you already have is **kept** (with a warning) unless
+  you pass `--force`.
+- `praxis uninstall` restores the value that was there before, or removes the
+  key if there was none. A value praxis did not write, or one you edited
+  afterwards, is left alone. `praxis rollback` restores it from the backup.
+- `praxis doctor` shows whether it is `empty`, `not set` or `custom`.
+- `praxis update` does not touch `settings.json`; run `praxis install` to
+  apply the setting to an existing installation.
 
 ## Updating
 

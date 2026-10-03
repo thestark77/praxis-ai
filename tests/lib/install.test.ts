@@ -445,12 +445,23 @@ describe('the Claude Code attribution setting', () => {
   it('does not write attribution when only OpenCode is targeted', async () => {
     const paths = await sandbox({ model: 'opus' });
     const before = await readFile(paths.settingsJson, 'utf8');
-    const result = await runInstall({
-      paths,
-      agents: 'opencode',
-      templatesRoot,
-      claudeSkillsTemplatesRoot,
-    });
+    // Pin the sandbox: without PRAXIS_HOME, an ambient XDG_CONFIG_HOME (set on
+    // GitHub's Ubuntu runners) sends the OpenCode install to the runner's real
+    // config dir, which then leaks into later tests.
+    const savedPraxisHome = process.env.PRAXIS_HOME;
+    process.env.PRAXIS_HOME = home;
+    let result: Awaited<ReturnType<typeof runInstall>>;
+    try {
+      result = await runInstall({
+        paths,
+        agents: 'opencode',
+        templatesRoot,
+        claudeSkillsTemplatesRoot,
+      });
+    } finally {
+      if (savedPraxisHome === undefined) delete process.env.PRAXIS_HOME;
+      else process.env.PRAXIS_HOME = savedPraxisHome;
+    }
     expect(result.attribution).toBeNull();
     expect(await readFile(paths.settingsJson, 'utf8')).toBe(before);
   });

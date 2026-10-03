@@ -59,7 +59,7 @@ overwrite, since `main.md` changed). The branch was never pushed (`git ls-remote
 shows only `main`), there is no PR for it, and `origin/main` does not contain it.
 Risk: any install from `main` rewrites `main.md` without the import and the
 module silently drops out. This branch cherry-picks dcea724 as its first
-commit so the module survives; a later PR of the old branch would conflict and
+commit (7c630f0 here) so the module survives; a later PR of the old branch would conflict and
 should be closed in favour of this one.
 
 ## Inventory and classification
@@ -95,12 +95,12 @@ guard-evasion rules exist precisely for spellings a pattern cannot catch.
 
 - [x] T0 Cherry-pick engineering-discipline (dcea724) so the live module is not lost
 - [x] T1 Inventory, classification and baseline measurement (this document)
-- [ ] T2 RED then GREEN: ship the on-demand skills
+- [x] T2 RED then GREEN: ship the on-demand skills
   (manifest, SKILL.md files, tests carrying every clause assertion)
-- [ ] T3 RED then GREEN: slim the always-loaded layer
+- [x] T3 RED then GREEN: slim the always-loaded layer
   (byte-budget test, main.md index, trimmed firewall/precedence/preset, remove moved modules)
-- [ ] T4 Docs: architecture, README, CHANGELOG, measurements in this document
-- [ ] T5 Verification and Engram mirror
+- [x] T4 Docs: architecture, README, CHANGELOG, measurements in this document
+- [x] T5 Verification and Engram mirror
 
 ## Acceptance criteria
 
@@ -118,11 +118,83 @@ guard-evasion rules exist precisely for spellings a pattern cannot catch.
 
 ## Measurements
 
-(filled in at T4)
+Bytes are UTF-8 file sizes; tokens are bytes / 4 (the same approximation the
+parent used). "Listing" is the `- name: description` line each auto-loadable
+skill adds to the always-visible skill list (approximation of the listing
+format; `away-mode` is `disable-model-invocation`, so it adds none).
+
+| | Before | After | Delta |
+| --- | ---: | ---: | ---: |
+| Files imported by `main.md` | 17 | 9 | -8 |
+| Lines in those files | 897 | 410 | -487 |
+| `@`-import bytes | 36,341 | 16,881 | -19,460 (-53.5%) |
+| `@`-import tokens (bytes/4) | 9,085 | 4,220 | -4,865 |
+| New skill-listing bytes | 0 | 1,471 | +1,471 |
+| Always-loaded bytes (imports + listing) | 36,341 | 18,352 | -17,989 (-49.5%) |
+| Always-loaded tokens (bytes/4) | 9,085 | 4,588 | -4,497 |
+| Largest single always-loaded file | 6,026 (`context-budget.md`) | 3,404 (`phase-flow.md`) | |
+
+Per file (always-loaded, bytes before to after): `main.md` 731 to 2,582 (now
+carries the index), `philosophy.md` 1,895 (same), `phase-flow.md` 3,404
+(same), `queue-rule.md` 1,061 (same), `skill-invocation-policy.md` 1,674
+(same), `precedence-rules.md` 2,168 to 1,196, `irreversibility-firewall.md`
+3,533 to 2,696, `engineering-discipline.md` 1,359 to 1,366 (skill name),
+`presets/balanced.md` 1,795 to 1,007. Removed from the always-loaded layer:
+`grilling.md` 2,196, `context-conventions.md` 1,533, `command-handoff.md`
+2,154, `workflow-policy.md` 1,618, `effort-policy.md` 1,364,
+`context-budget.md` 6,026, `upstream-first-debugging.md` 2,399,
+`browser-testing-policy.md` 1,431.
+
+Skill bodies (loaded only when the situation matches): `praxis-context-guard`
+6,300, `praxis-grilling` 4,133, `praxis-overlay-reference` 3,565,
+`praxis-delegation-policy` 3,417, `praxis-upstream-debugging` 2,698,
+`praxis-command-handoff` 2,428, `praxis-firewall-protocol` 1,739,
+`praxis-browser-testing` 1,641 (25,921 bytes in total, 0 paid per turn).
+
+Budgets asserted by tests: imports <= 17,500 bytes, imports + listing <=
+19,000 bytes, each always-loaded file <= 200 lines, listing <= 2,000 bytes.
+
+Out of scope here and still large: gentle-ai about 16.6k tokens (third
+party) and the iris blocks about 0.9k tokens (SEB-17). Remaining praxis
+candidates if the owner wants to go further: `phase-flow.md` (3.4 KB, the
+classifier plus rails, kept whole because it runs before every prompt) and
+`philosophy.md` (1.9 KB of values, kept whole).
 
 ## Progress
 
-(filled in as tasks close)
+- T0 done: cherry-picked as 7c630f0.
+- T1 done: inventory above; baseline `pnpm exec vitest run` = 42 failed
+  (6 files, all `dist/` dependent) / 770 passed (812).
+- T2 done: RED observed (57 failed of 57 in `tests/lib/praxis-overlay-skills.test.ts`),
+  GREEN after the skills and manifest (57 passed). Commit b241193.
+  Route: direct inline by the single writer (a one-shot script relocated the text verbatim).
+- T3 done: RED observed (11 failed of 12 in `tests/lib/always-loaded-budget.test.ts`),
+  GREEN after trimming and removing the moved modules. An end-to-end install
+  test (`tests/integration/slim-context-install.test.ts`) was added as a
+  characterisation test (it passed on first run because the behavior is the
+  existing installer plus the new templates). Commit 3920b74.
+- Losslessness check (manual, one-shot, against `8873d37`): all 649 non-empty
+  lines of the 16 original modules still exist in the new always-loaded files
+  or the `praxis-*` skills (headings compared without their `#` level). The
+  only 9 absent are the 8 removed `@`-import lines in `main.md` and one
+  deliberate rewrite (`See context-budget.md` became `See the praxis-context-guard skill`).
+- T4 done: `docs/architecture.md` (layout, new "Always-loaded budget"
+  section), README, CHANGELOG (with upgrade notes), this document.
+- T5 done: full suite 42 failed (same 6 files, same dist-dependent set) /
+  812 passed (854); `pnpm typecheck`, `pnpm lint`, `pnpm format:check` clean.
+
+Route per task: all delegated-writer work done by a single writer; no SDD
+artifacts. Review tier: not assessed here (the parent owns review and the
+PR; no native review was started).
+
+Known risks (rules that could be missed when their skill is not loaded):
+the model must recognise the trigger from a one-line description. The rules
+whose miss would hurt are therefore duplicated as one-line invariants in the
+index: secret handling, the `[IRIS CONTEXT GUARD]` trust boundary, delegation
+limits, upstream-debugging OK, browser-use first. The detailed formats (exact
+`COMPACT-READY` replies, handoff path rules, grilling stop conditions, block
+report layout) rely on the skill loading. Existing installs need
+`praxis install --force` to apply the new `main.md`.
 
 ## Engram mirror
 

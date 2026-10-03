@@ -86,6 +86,12 @@ the whole stack and then layers its own overlay:
      checks, sizes any parallel workflow, sweeps for blockers before the
      user leaves, states the overnight rules, and proposes the exact
      `/loop` command to keep the session going.
+   - Eight more native skills (`praxis-*`, `contextual`) that hold the
+     overlay's procedures (command handoff, context guard, delegation,
+     upstream debugging, browser testing, grilling, the firewall block
+     protocol, an overlay reference). Only their one-line descriptions and a
+     short index in `~/.praxis/main.md` are loaded every turn; the bodies load
+     when the situation matches. See [docs/architecture.md](docs/architecture.md#always-loaded-budget).
 4. **praxis overlay** into `~/.config/opencode/` — the same three layers
    expressed in OpenCode's own vocabulary (see below).
 
@@ -261,7 +267,7 @@ hook, telemetry, and `~/.praxis/` skeleton are left alone):
 ```bash
 praxis update              # update both gentle-ai and the Claude Code skills
 praxis update --gentle-ai  # only gentle-ai (binary + components)
-praxis update --skills     # only the skills (six lifted mattpocock + away-mode)
+praxis update --skills     # only the skills (six lifted mattpocock + away-mode + praxis-*)
 ```
 
 - **gentle-ai** is updated through its own config-preserving primitives

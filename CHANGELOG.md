@@ -16,6 +16,41 @@ calling them done, and close substantive work with a short report of what was
 picked, given up, and why. Adapted from a community AGENTS.md template; only
 rules not already covered elsewhere were kept.
 
+### Changed - the always-loaded overlay is slimmed; procedures are on-demand skills
+
+`@~/.praxis/main.md` pulled 17 files (36,341 bytes, 897 lines, about 9.1k
+tokens) into every turn, and Claude Code expands `@`-imports at launch, so
+the split into files saved nothing. The always-loaded layer now keeps only
+invariants (philosophy, phase flow and classifier, queue rule, skill
+invocation policy, the firewall's guard-evasion bans and anticipatory
+pauses, precedence ownership, engineering discipline, a condensed balanced
+preset) plus an on-demand skills index in `main.md`: 16,881 bytes (410
+lines), about 4.2k tokens.
+
+Eight modules moved, text unchanged, into contextual praxis-native skills:
+`praxis-command-handoff`, `praxis-context-guard`, `praxis-delegation-policy`
+(workflow + effort), `praxis-upstream-debugging`, `praxis-browser-testing`,
+`praxis-grilling` (grilling + context conventions),
+`praxis-firewall-protocol` (the block report format and framing) and
+`praxis-overlay-reference` (precedence rationale, boundaries, standalone
+mode, the full balanced preset). Each keeps a one-line invariant in the index
+so a rule that must hold (secret handling, the `[IRIS CONTEXT GUARD]` trust
+boundary, delegation limits) still holds if the skill never loads. The skill
+descriptions add about 1.5 KB of listing text, so the total is 18,352 bytes
+(about 4.6k tokens), half of before.
+
+A byte-budget test renders the `@`-import payload and fails if it grows back,
+and an end-to-end install test measures what a fresh machine loads.
+
+Upgrading: run `praxis install --force` to rewrite `main.md` and the trimmed
+modules. `praxis install` without `--force` and `praxis update --skills`
+leave the old `main.md` in place, which still imports the old module files,
+so until then the moved text is loaded twice (modules and skills). The eight
+retired files stay on disk unused after `--force` and can be deleted:
+`grilling.md`, `context-conventions.md`, `command-handoff.md`,
+`workflow-policy.md`, `effort-policy.md`, `context-budget.md`,
+`upstream-first-debugging.md`, `browser-testing-policy.md`.
+
 ## [0.1.0-alpha.28] - 2026-09-29
 
 ### Changed - the AST inspector normalizes wrappers and inspects shell -c bodies

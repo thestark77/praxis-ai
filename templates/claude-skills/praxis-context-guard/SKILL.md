@@ -1,3 +1,10 @@
+---
+name: praxis-context-guard
+description: Use when context usage is at 50-60%, when asked to save progress before /compact, or when a user turn starts with `[IRIS CONTEXT GUARD]` (prepare-compact or restore handoff=<path>).
+invocation: contextual
+praxis-native: true
+---
+
 # Praxis-ai — Context Budget
 
 Context is a binding resource (P4). Instead of a single hard warning

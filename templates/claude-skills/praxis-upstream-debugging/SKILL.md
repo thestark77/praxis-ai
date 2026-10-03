@@ -1,3 +1,10 @@
+---
+name: praxis-upstream-debugging
+description: Use when a third-party open-source tool fails or behaves unexpectedly and the cause is not obvious: check its upstream issues and PRs before debugging locally, and before filing or commenting upstream.
+invocation: contextual
+praxis-native: true
+---
+
 # Praxis-ai — Upstream-First Debugging
 
 When a third-party open-source tool fails or behaves unexpectedly and the

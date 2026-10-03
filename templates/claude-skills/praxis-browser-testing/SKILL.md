@@ -1,3 +1,10 @@
+---
+name: praxis-browser-testing
+description: Use when verifying UI in a browser, running E2E checks, taking screenshots of a running app or driving a form flow.
+invocation: contextual
+praxis-native: true
+---
+
 # Praxis-ai — Browser Testing Policy
 
 This module governs agent-driven browser verification in F2 Execute and F3

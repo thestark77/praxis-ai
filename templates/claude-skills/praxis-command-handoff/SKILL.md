@@ -1,3 +1,10 @@
+---
+name: praxis-command-handoff
+description: Use when handing the user a command to run (including `! <command>` suggestions) or when a secret (API key, token, password, .env content) could end up in a command, log or reply.
+invocation: contextual
+praxis-native: true
+---
+
 # Praxis-ai — Commands Handed to the User
 
 When you hand the user a command to run themselves — including a `!

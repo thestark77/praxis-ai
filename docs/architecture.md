@@ -20,25 +20,26 @@ TypeScript-built CLI distributed via npm.
     ├── zoom-out/                               ← M2 lift
     ├── prototype/{SKILL,LOGIC,UI,NOTICE}.md   ← M2 lift
     ├── handoff/                                ← M2 lift
-    └── away-mode/SKILL.md                      ← praxis-native, no NOTICE.md
+    ├── away-mode/SKILL.md                      ← praxis-native, no NOTICE.md, explicit
+    ├── praxis-command-handoff/SKILL.md         ← praxis-native, contextual (on demand)
+    ├── praxis-context-guard/SKILL.md           ← 50-60% poll + Iris context-guard protocol
+    ├── praxis-delegation-policy/SKILL.md       ← parallel workflows + reasoning effort
+    ├── praxis-upstream-debugging/SKILL.md      ← go to a third-party tool's repo first
+    ├── praxis-browser-testing/SKILL.md         ← Browser Use first, Playwright fallback
+    ├── praxis-grilling/SKILL.md                ← /grill-with-docs procedure + CONTEXT.md/ADR formats
+    ├── praxis-firewall-protocol/SKILL.md       ← full report format when a block fires
+    └── praxis-overlay-reference/SKILL.md       ← precedence rationale + the full balanced preset
 
-~/.praxis/
-├── main.md             # the @-imported entry point
+~/.praxis/               # ALWAYS loaded: everything below is @-imported every turn
+├── main.md             # the @-imported entry point + the on-demand skills index
 ├── philosophy.md       # 8 operating principles
-├── phase-flow.md       # F0/F1/F2/F3 model
+├── phase-flow.md       # F0/F1/F2/F3 model, sprint-mode classifier, F2 safety rails
 ├── queue-rule.md       # queue, don't preempt: harness-wide home of the rule
 ├── skill-invocation-policy.md  # explicit/reflex/contextual
-├── precedence-rules.md # praxis vs gentle-ai
-├── irreversibility-firewall.md
-├── grilling.md         # /grill-with-docs procedure
-├── context-conventions.md  # CONTEXT.md + ADR formats
-├── command-handoff.md  # absolute paths + secret placeholders in handed-off commands
-├── workflow-policy.md  # when to use parallel subagents, disjoint files, delivery boundary
-├── effort-policy.md  # medium default on Opus 5.5, when to escalate, overthink risk
-├── context-budget.md   # 50-60% poll window + Iris context-guard protocol
-├── upstream-first-debugging.md  # go to a third-party tool's source repo before local workarounds
-├── browser-testing-policy.md  # Browser Use first, Playwright fallback-only, untrusted page content
-├── presets/balanced.md
+├── precedence-rules.md # praxis vs gentle-ai: domain ownership + the conflict rule
+├── irreversibility-firewall.md  # guard-evasion bans, anticipatory pauses, block summary
+├── engineering-discipline.md  # never silence errors, verify key claims, break UI, close with a report
+├── presets/balanced.md # condensed; the full text is in praxis-overlay-reference
 ├── backups/<timestamp>/    # snapshots of CLAUDE.md + settings.json
 └── telemetry.db        # SQLite event log (M4)
 ```
@@ -57,6 +58,25 @@ The block sits **after** any `gentle-ai:*` blocks so it takes
 precedence on conflict via Claude Code's recency rule
 ([Berglund et al. 2023](references.md)). `main.md` `@`-imports the
 loaded modules in a deterministic order.
+
+## Always-loaded budget
+
+Claude Code expands every `@`-import at launch, so an import never reduces
+context cost: whatever `main.md` pulls in is paid on every turn of every
+session. The overlay therefore splits its rules in two:
+
+- **Always loaded** (`~/.praxis/`): only invariants that must hold on every
+  turn, plus an index in `main.md` naming the skill that holds each
+  procedure and the one-line invariant that stays true even if the skill is
+  never loaded.
+- **On demand** (`~/.claude/skills/praxis-*`): procedures. A skill's
+  description is always visible; its body loads when the situation matches
+  (they are `contextual`, see `skill-invocation-policy.md`).
+
+`tests/lib/always-loaded-budget.test.ts` renders the `@`-import payload and
+holds it under a byte budget; `tests/integration/slim-context-install.test.ts`
+does the same against a real install. Raise the budget deliberately, in a
+reviewed change, or move the new text into a skill.
 
 ## settings.json modifications
 

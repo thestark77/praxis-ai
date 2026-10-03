@@ -89,3 +89,9 @@ test-first off, which is documented.
 - `XDG_CONFIG_HOME=<tmp> pnpm test`: 52 files, 918 tests passed; the temp dir was empty
   afterwards. `pnpm typecheck` clean, `pnpm lint` clean, prettier clean on `src`/`tests` TS.
 - REFACTOR: none beyond prettier formatting.
+
+- 2026-10-03 09:20 — Native review of `be9fbef..834a94c` (assessed `high`): approved,
+  acknowledged, authority burned (lineage `review-8be5647f62a907a6`). Advisories (not
+  fixed): the update path's retry-without-flag warning wording; the "flag absent from a
+  recognizable listing means retired" heuristic; readability suggestions.
+

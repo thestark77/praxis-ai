@@ -114,7 +114,7 @@ src/
 │   ├── skeleton-installer.ts # praxis-home + claude-skills templates
 │   ├── install.ts          # orchestrator for runInstall / runUninstall / runRollback
 │   ├── dependency-check.ts # preflight: required/optional deps + install hints
-│   ├── gentle-ai-bootstrap.ts # drives gentle-ai install.sh + install + sync --strict-tdd
+│   ├── gentle-ai-bootstrap.ts # drives gentle-ai install.sh + install + sync (--strict-tdd only if still supported)
 │   ├── pocock-sync.ts      # drift detector core
 │   ├── telemetry/
 │   │   ├── schema.ts

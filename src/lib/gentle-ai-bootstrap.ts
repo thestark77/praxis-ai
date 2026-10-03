@@ -12,14 +12,16 @@
 //                                opencode-logo, permissions, sdd, skills)
 //   - models:  balanced         (gentle-ai's default when no model flags;
 //                                opus arch / sonnet most / haiku archive)
-//   - TDD:     strict (enabled)
+//   - TDD:     strict (enabled; gentle-ai >= 4.0 retired the flag and made
+//                                test-first development its default)
 //
 // Everything is fetched/driven from the source of truth:
 //   - binary:    scripts/install.sh from the gentle-ai repo at the pinned
 //                release tag (downloaded at runtime, executed, then
 //                discarded — never committed here)
 //   - ecosystem: `gentle-ai install` (gentle-ai downloads its own components)
-//   - TDD:       `gentle-ai sync --strict-tdd`
+//   - TDD:       `gentle-ai sync --strict-tdd` while gentle-ai still accepts
+//                the flag, plain `gentle-ai sync` once it is retired
 //
 // Re-running is an update: gentle-ai's install/sync are idempotent. When
 // gentle-ai is already configured, the bootstrap respects the user's
@@ -52,7 +54,12 @@ export interface GentleAiBootstrapOptions {
   persona?: string;
   /** Preset: full-gentleman | ecosystem-only | minimal | custom. Default: 'full-gentleman'. */
   preset?: string;
-  /** Enable Strict TDD via `gentle-ai sync --strict-tdd`. Default: true. */
+  /**
+   * Run the Strict TDD sync step (`gentle-ai sync --strict-tdd`). Default:
+   * true. On a gentle-ai that retired the flag (>= 4.0) the sync runs without
+   * it and `false` (`--no-strict-tdd`) only skips that sync: gentle-ai's
+   * test-first default cannot be switched off from here.
+   */
   strictTdd?: boolean;
   /** Reapply praxis defaults even if gentle-ai is already configured. */
   force?: boolean;
@@ -69,12 +76,24 @@ export interface GentleAiBootstrapOptions {
   fetchInstallScript?: () => Promise<string>;
 }
 
+/**
+ * What became of the Strict TDD step:
+ *  - `enabled`: synced with `--strict-tdd` (gentle-ai still accepts the flag);
+ *  - `retired-by-gentle-ai`: gentle-ai retired the flag, so the sync ran
+ *    without it (test-first is gentle-ai's default there);
+ *  - `skipped`: not requested (`--no-strict-tdd`) or never reached;
+ *  - `failed`: the sync step exited non-zero (see `warnings`).
+ */
+export type StrictTddOutcome = 'enabled' | 'retired-by-gentle-ai' | 'skipped' | 'failed';
+
 export interface GentleAiBootstrapResult {
   skipped: boolean;
   skipReason?: string;
   ranBinaryInstall: boolean;
   ranEcosystemInstall: boolean;
+  /** True when the sync step ran and succeeded (with or without the flag). */
   ranStrictTddSync: boolean;
+  strictTdd: StrictTddOutcome;
   commands: string[];
   warnings: string[];
 }
@@ -85,6 +104,92 @@ const DEFAULTS = {
   preset: 'full-gentleman',
   strictTdd: true,
 };
+
+/** Whether the installed gentle-ai still accepts `sync --strict-tdd`. */
+export type StrictTddSupport = 'supported' | 'retired' | 'unknown';
+
+// Words gentle-ai uses on the `--strict-tdd` help line once the flag is gone
+// (4.0.0: "Retired (rejected); applicable test-first ODD is default").
+const RETIRED_MARKER = /retired|rejected|deprecated|removed|no longer/i;
+
+/**
+ * Classify the `--strict-tdd` flag from `gentle-ai sync --help` output.
+ *
+ * - listed without a retired marker -> `supported`
+ * - listed with one (gentle-ai 4.0 still lists it, annotated) -> `retired`
+ * - absent from what is recognizably a sync flag listing -> `retired`
+ * - anything else (empty output, not a flag listing) -> `unknown`
+ *
+ * Capability detection rather than version pinning: it follows gentle-ai's
+ * own help, so a future release needs no praxis change.
+ */
+export function parseStrictTddSupport(helpOutput: string): StrictTddSupport {
+  const flagLine = helpOutput.split('\n').find((line) => /^\s*--strict-tdd(?![\w-])/.test(line));
+  if (flagLine !== undefined) return RETIRED_MARKER.test(flagLine) ? 'retired' : 'supported';
+  return /^\s*--agents?\b/m.test(helpOutput) ? 'retired' : 'unknown';
+}
+
+/** Probe `gentle-ai sync --help` (read-only). A failing probe is `unknown`. */
+export async function probeStrictTddSupport(run: CommandRunner): Promise<StrictTddSupport> {
+  const r = await run('gentle-ai', ['sync', '--help']);
+  if (r.code !== 0) return 'unknown';
+  return parseStrictTddSupport(`${r.stdout}\n${r.stderr}`);
+}
+
+/** True when a sync failed specifically because gentle-ai retired `--strict-tdd`. */
+export function isStrictTddRetiredError(r: CommandResult): boolean {
+  return r.code !== 0 && /--strict-tdd is retired/i.test(`${r.stderr}\n${r.stdout}`);
+}
+
+export interface GentleAiSyncRun {
+  /** Result of the last `gentle-ai sync` attempt. */
+  result: CommandResult;
+  /** Every sync argv attempted, in order (a retry adds a second entry). */
+  attempts: string[][];
+  /** What happened to the Strict TDD flag on this run. */
+  strictTdd: 'passed' | 'retired' | 'not-requested';
+}
+
+/**
+ * Run `gentle-ai sync <baseArgs>`, adding `--strict-tdd` only while gentle-ai
+ * accepts it.
+ *
+ * When the capability probe is inconclusive the flag is passed (the
+ * pre-retirement behaviour) and, if gentle-ai answers with its specific
+ * "--strict-tdd is retired" error, the sync is retried once without it. Any
+ * other failure is returned untouched for the caller to surface.
+ */
+export async function runGentleAiSync(
+  run: CommandRunner,
+  baseArgs: string[],
+  requestStrictTdd: boolean,
+): Promise<GentleAiSyncRun> {
+  const plainArgs = ['sync', ...baseArgs];
+  if (!requestStrictTdd) {
+    return {
+      result: await run('gentle-ai', plainArgs),
+      attempts: [plainArgs],
+      strictTdd: 'not-requested',
+    };
+  }
+  if ((await probeStrictTddSupport(run)) === 'retired') {
+    return {
+      result: await run('gentle-ai', plainArgs),
+      attempts: [plainArgs],
+      strictTdd: 'retired',
+    };
+  }
+  const flagArgs = [...plainArgs, '--strict-tdd'];
+  const first = await run('gentle-ai', flagArgs);
+  if (!isStrictTddRetiredError(first)) {
+    return { result: first, attempts: [flagArgs], strictTdd: 'passed' };
+  }
+  return {
+    result: await run('gentle-ai', plainArgs),
+    attempts: [flagArgs, plainArgs],
+    strictTdd: 'retired',
+  };
+}
 
 async function defaultFetchInstallScript(): Promise<string> {
   const res = await fetch(GENTLE_AI_INSTALL_SCRIPT_URL);
@@ -131,6 +236,7 @@ export async function bootstrapGentleAi(
     ranBinaryInstall: false,
     ranEcosystemInstall: false,
     ranStrictTddSync: false,
+    strictTdd: 'skipped',
     commands: [],
     warnings: [],
   };
@@ -188,17 +294,21 @@ export async function bootstrapGentleAi(
   }
 
   // Step 3 — enable Strict TDD (not exposed by `install`; sync owns it).
+  // gentle-ai >= 4.0 retired the flag (test-first is its default), so the
+  // flag is passed only while gentle-ai still accepts it.
   if (strictTdd) {
-    const args = ['sync', '--agents', agents, '--strict-tdd'];
-    result.commands.push(`gentle-ai ${args.join(' ')}`);
-    const r = await run('gentle-ai', args);
-    if (r.code !== 0) {
+    const sync = await runGentleAiSync(run, ['--agents', agents], true);
+    for (const attempt of sync.attempts) result.commands.push(`gentle-ai ${attempt.join(' ')}`);
+    if (sync.result.code !== 0) {
+      const last = sync.attempts[sync.attempts.length - 1];
+      result.strictTdd = 'failed';
       result.warnings.push(
-        `gentle-ai sync --strict-tdd exited ${r.code}. ${r.stderr.slice(0, 300)}`,
+        `gentle-ai ${last.join(' ')} exited ${sync.result.code}. ${sync.result.stderr.slice(0, 300)}`,
       );
       return result;
     }
     result.ranStrictTddSync = true;
+    result.strictTdd = sync.strictTdd === 'retired' ? 'retired-by-gentle-ai' : 'enabled';
   }
 
   return result;

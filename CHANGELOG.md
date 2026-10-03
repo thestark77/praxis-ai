@@ -4,6 +4,28 @@ All notable changes to praxis-ai are documented here.
 This project follows [Semantic Versioning](https://semver.org/) and
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed - `praxis install` / `update` no longer pass the retired `--strict-tdd` flag
+
+gentle-ai 4.0 retired `gentle-ai sync --strict-tdd` (test-first development is
+now its built-in default) and rejects the flag with exit 1, so
+`praxis install --force` ended with `warning: gentle-ai: gentle-ai sync
+--strict-tdd exited 1 ... --strict-tdd is retired`, and `praxis update` hit the
+same error because the managed strict-tdd block is still present right after
+the binary upgrade. praxis now probes `gentle-ai sync --help` (capability
+detection, no version pinning) and passes the flag only while gentle-ai still
+accepts it; otherwise it runs the sync with its other flags (`--agents`) and no
+warning. If the probe is inconclusive, praxis tries the flag and retries once
+without it on gentle-ai's specific "--strict-tdd is retired" error. Any other
+sync failure still surfaces as a warning.
+
+The install summary now reports the real state (`strict-tdd=enabled |
+retired-by-gentle-ai | skipped | failed`) and the update summary prints
+`strict-tdd=retired-by-gentle-ai`. `--no-strict-tdd` keeps working: it skips the
+bootstrap's Strict TDD sync, and on gentle-ai >= 4.0 it cannot switch test-first
+off, which is gentle-ai's default there.
+
 ## [0.1.0-alpha.29] - 2026-10-03
 
 ### Added - empty Claude Code attribution, enforced by `praxis install`

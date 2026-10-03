@@ -26,7 +26,10 @@ export function installCommand(): Command {
       'full-gentleman',
     )
     .option('--ga-agents <agents>', 'gentle-ai agents (CSV)', 'claude-code')
-    .option('--no-strict-tdd', 'do not enable gentle-ai Strict TDD during the bootstrap')
+    .option(
+      '--no-strict-tdd',
+      'skip the gentle-ai Strict TDD sync during the bootstrap (no effect on gentle-ai >= 4.0, where test-first is the built-in default)',
+    )
     .action(
       async (opts: {
         agent?: string;
@@ -67,7 +70,7 @@ export function installCommand(): Command {
                 console.log('  gentle-ai: skipped (already configured; use --force to reapply)');
               } else {
                 console.log(
-                  `  gentle-ai: binary=${gb.ranBinaryInstall} ecosystem=${gb.ranEcosystemInstall} strict-tdd=${gb.ranStrictTddSync}`,
+                  `  gentle-ai: binary=${gb.ranBinaryInstall} ecosystem=${gb.ranEcosystemInstall} strict-tdd=${gb.strictTdd}`,
                 );
               }
             } else if (opts.gentleAi === false) {

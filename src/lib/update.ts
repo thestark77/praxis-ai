@@ -15,7 +15,8 @@
 //        the installed agents from persisted state — preserves persona,
 //        preset, and model assignments). Strict TDD is preserved by
 //        reading the current state and passing --strict-tdd only when it
-//        is already enabled.
+//        is already enabled AND gentle-ai still accepts the flag (>= 4.0
+//        retired it: probed from `sync --help`, never pinned by version).
 //     3. `gentle-ai version` + `engram version` — compared against the
 //        versions praxis is validated with; drift is a warning, not an
 //        error, so a newer upstream never blocks the update.
@@ -43,6 +44,7 @@ import { findPraxisBlock, patchClaudeMd } from './claudemd-patcher.js';
 import { isPraxisOwnedNativeSkillFile } from './ownership.js';
 import {
   defaultCommandRunner,
+  runGentleAiSync,
   GENTLE_AI_VERSION,
   type CommandRunner,
   type CommandResult,
@@ -79,6 +81,11 @@ export interface GentleAiUpdateResult {
   upgrade?: CommandResult;
   sync?: CommandResult;
   strictTddPreserved: boolean;
+  /**
+   * True when gentle-ai retired `sync --strict-tdd` (>= 4.0): the sync ran
+   * without it, and test-first development is gentle-ai's built-in default.
+   */
+  strictTddRetired: boolean;
   /** Installed vs expected versions, probed after upgrade + sync. */
   versions?: ToolVersionCheck[];
   /** True when the CLAUDE.md patcher re-ran to keep the praxis block last. */
@@ -175,6 +182,7 @@ async function updateGentleAi(
   const result: GentleAiUpdateResult = {
     attempted: false,
     strictTddPreserved: false,
+    strictTddRetired: false,
     warnings: [],
   };
 
@@ -199,9 +207,9 @@ async function updateGentleAi(
   // 2. Component + engram refresh, preserving persona/preset/models.
   const tdd = await strictTddEnabled(paths.claudeMd);
   result.strictTddPreserved = tdd;
-  const syncArgs = ['sync'];
-  if (tdd) syncArgs.push('--strict-tdd');
-  const sync = await run('gentle-ai', syncArgs);
+  const syncRun = await runGentleAiSync(run, [], tdd);
+  const sync = syncRun.result;
+  result.strictTddRetired = syncRun.strictTdd === 'retired';
   result.sync = sync;
   if (sync.code !== 0) {
     result.warnings.push(`gentle-ai sync exited ${sync.code}. ${sync.stderr.slice(0, 200)}`);

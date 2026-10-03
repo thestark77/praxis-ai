@@ -103,9 +103,11 @@ export interface InstallResult {
   astHookRegistered: boolean;
   /**
    * What happened to the Claude Code `attribution` setting: `written`
-   * (praxis emptied it), `unchanged` (already empty) or `kept-custom` (the
-   * user's own value, left alone without `--force`). `null` when Claude
-   * Code was not written to (dry run, or OpenCode only).
+   * (praxis emptied it and switched the session link off, or added the
+   * missing `sessionUrl: false` to an empty one), `unchanged` (already fully
+   * enforced) or `kept-custom` (the user's own value, left alone without
+   * `--force`). `null` when Claude Code was not written to (dry run, or
+   * OpenCode only).
    */
   attribution: AttributionOutcome | null;
   /** Present only when OpenCode was one of the targets. */
@@ -322,8 +324,8 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
   // reads as "already present", the new ledger claims nothing, and
   // uninstall would strand the whole firewall. Mark it so uninstall keeps
   // the old full sweep instead of trusting an unclaimable ledger.
-  const inheritedPreLedgerInstall =
-    report.praxis.overlayInstalled && (await readOwnership(paths.praxisDir)) === null;
+  const ledgerBefore = await readOwnership(paths.praxisDir);
+  const inheritedPreLedgerInstall = report.praxis.overlayInstalled && ledgerBefore === null;
 
   let claudeEntriesAdded: string[] = [];
   let attribution: AttributionOutcome | null = null;
@@ -336,17 +338,24 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
     const settingsBeforeHook = await readSettings(paths.settingsJson);
     const settingsWithHook = addPraxisAstHook(settingsBeforeHook, astHookCommand);
 
-    // Make "no AI attribution" a setting instead of a sentence in CLAUDE.md.
-    // A custom value is the user's own and survives unless --force, the
-    // same rule the skeleton and the skills follow above.
-    const applied = applyEmptyAttribution(settingsWithHook, { force: opts.force });
+    // Make "no AI attribution" a setting instead of a sentence in CLAUDE.md:
+    // empty commit and pr text, and no claude.ai session link. A custom value
+    // is the user's own and survives unless --force, the same rule the
+    // skeleton and the skills follow above. A value with empty text but no
+    // `sessionUrl: false` (what releases up to alpha.30 wrote) is completed
+    // without --force, and the ledger's earlier record of the pre-praxis value
+    // is carried forward so uninstall still restores that, not the old shape.
+    const applied = applyEmptyAttribution(settingsWithHook, {
+      force: opts.force,
+      recorded: ledgerBefore?.attribution,
+    });
     attribution = applied.outcome;
     if (applied.outcome === 'written') attributionBefore = applied.previous;
     if (applied.outcome === 'kept-custom') {
       warnings.push(
         'settings.json already sets a custom `attribution`; left as is, so Claude Code may still ' +
           'add attribution to commits and PRs. Re-run `praxis install --force` to replace it ' +
-          'with empty commit and pr.',
+          'with empty commit and pr and no session link.',
       );
     }
     await writeSettings(paths.settingsJson, applied.settings);

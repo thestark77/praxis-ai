@@ -53,9 +53,12 @@ export interface OwnershipLedger {
   /**
    * What the Claude Code `attribution` setting held before praxis emptied
    * it. Present only when praxis wrote the setting; a value that was
-   * already empty on arrival is the user's own and is not recorded, so
-   * uninstall leaves it alone. Ledgers from before this field existed
-   * simply lack it, which uninstall reads as "praxis wrote nothing here".
+   * already fully enforced on arrival is the user's own and is not
+   * recorded, so uninstall leaves it alone. Ledgers from before this field
+   * existed simply lack it, which uninstall reads as "praxis wrote nothing
+   * here". When a later release completes the two-key value an earlier one
+   * wrote (adding `sessionUrl: false`), the record keeps the pre-praxis
+   * value, never the intermediate two-key one.
    */
   attribution?: PreviousAttribution;
 }

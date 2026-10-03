@@ -160,24 +160,38 @@ export function removePraxisAstHook(settings: ClaudeSettings): ClaudeSettings {
  *
  * `commit` and `pr` are the text Claude Code appends to commit messages
  * (`Co-Authored-By: ...`) and to pull request descriptions. An empty string
- * hides the attribution. Other fields are kept as found. The older boolean
- * `includeCoAuthoredBy` is deprecated and is never written.
+ * hides the attribution. `sessionUrl` is a Boolean: unless it is `false`,
+ * cloud and Remote Control sessions also add a `Claude-Session:` trailer with
+ * a claude.ai link to commits and the same link to PR bodies. Other fields
+ * are kept as found. The older boolean `includeCoAuthoredBy` is deprecated
+ * and is never written.
+ *
+ * The setting may also be the plain boolean `false`, which hides everything
+ * but is rejected (and the whole settings file skipped) by Claude Code
+ * releases before 2.1.281, so praxis reads it but never writes it.
  */
 export interface ClaudeAttribution {
   commit?: string;
   pr?: string;
+  sessionUrl?: boolean;
   [key: string]: unknown;
 }
 
 /**
- * Where a settings file stands against praxis's wish for empty attribution.
+ * Where a settings file stands against praxis's wish for no attribution.
  *
- * - `enforced`: `commit` and `pr` are both empty strings.
+ * - `enforced`: nothing is added anywhere. Either `commit` and `pr` are empty
+ *   strings and `sessionUrl` is `false`, or the value is the boolean `false`.
  * - `absent`: no `attribution` key, so Claude Code adds its defaults.
+ * - `partial`: `commit` and `pr` are empty strings but `sessionUrl` is missing
+ *   (what praxis wrote up to 0.1.0-alpha.30) or not `false`, so the claude.ai
+ *   session link is still added. Every text field already says "none", so
+ *   install completes it without `--force`; it is a distinct state because
+ *   `custom` means "the user's own text, kept unless forced".
  * - `custom`: anything else, including a half-set value such as an empty
  *   `commit` with no `pr` (Claude Code then falls back to its PR footer).
  */
-export type AttributionState = 'enforced' | 'absent' | 'custom';
+export type AttributionState = 'enforced' | 'absent' | 'partial' | 'custom';
 
 /** Result of trying to enforce empty attribution on a settings object. */
 export type AttributionOutcome = 'written' | 'unchanged' | 'kept-custom';
@@ -196,61 +210,95 @@ function isAttributionObject(value: unknown): value is ClaudeAttribution {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function hasEmptyText(value: ClaudeAttribution): boolean {
+  return value.commit === '' && value.pr === '';
+}
+
 export function attributionState(settings: ClaudeSettings): AttributionState {
   if (!('attribution' in settings)) return 'absent';
   const value = settings.attribution;
-  if (isAttributionObject(value) && value.commit === '' && value.pr === '') return 'enforced';
+  if (value === false) return 'enforced';
+  if (isAttributionObject(value) && hasEmptyText(value)) {
+    return value.sessionUrl === false ? 'enforced' : 'partial';
+  }
   return 'custom';
 }
 
 /**
- * Enforce `attribution: { commit: "", pr: "" }` without disturbing any other
- * key. Pure: the input is never mutated.
+ * True when `value` is a shape praxis itself has written: empty `commit` and
+ * `pr`, and `sessionUrl` either `false` (this release) or not there at all
+ * (0.1.0-alpha.30 and earlier). Anything else, such as a session link the
+ * user switched back on or the boolean `false`, is the user's own edit.
+ */
+function isPraxisWritten(value: unknown): boolean {
+  if (!isAttributionObject(value) || !hasEmptyText(value)) return false;
+  return !('sessionUrl' in value) || value.sessionUrl === false;
+}
+
+/**
+ * Enforce `attribution: { commit: "", pr: "", sessionUrl: false }` without
+ * disturbing any other key. Pure: the input is never mutated. The object form
+ * is written, never the boolean `false`, so the file stays readable by Claude
+ * Code releases that reject the boolean.
  *
  * A custom value is the user's own choice, so it is kept unless `force` is
  * set, the same rule `praxis install` applies to a skeleton file or a skill
- * the user already has. Under `force` the sibling fields of the old object
- * survive and only `commit` and `pr` are emptied; the whole old value is
- * returned in `previous` so uninstall can restore it.
+ * the user already has. A `partial` value (empty text, session link not
+ * switched off) is completed without `force`. Under either, the sibling fields
+ * of the old object survive and only `commit`, `pr` and `sessionUrl` are set.
+ *
+ * `previous` is what the ledger should hold after this write, i.e. what
+ * uninstall must restore. It describes the value being replaced, except for a
+ * `partial` value without a `sessionUrl` key when `recorded` (the ledger's
+ * existing record) is given: that shape is what an earlier praxis release
+ * wrote, so the earlier record of the pre-praxis value stays. A `sessionUrl`
+ * key means someone set it after that release, and the record is replaced.
  */
 export function applyEmptyAttribution(
   settings: ClaudeSettings,
-  opts: { force?: boolean },
+  opts: { force?: boolean; recorded?: PreviousAttribution },
 ): { settings: ClaudeSettings; outcome: AttributionOutcome; previous: PreviousAttribution } {
   const state = attributionState(settings);
+  const existing = settings.attribution;
   if (state === 'enforced') {
     return {
       settings: { ...settings },
       outcome: 'unchanged',
-      previous: { present: true, value: settings.attribution },
+      previous: { present: true, value: existing },
     };
   }
   if (state === 'custom' && !opts.force) {
     return {
       settings: { ...settings },
       outcome: 'kept-custom',
-      previous: { present: true, value: settings.attribution },
+      previous: { present: true, value: existing },
     };
   }
-  const existing = settings.attribution;
-  const base = state === 'custom' && isAttributionObject(existing) ? existing : {};
+  const base = isAttributionObject(existing) ? existing : {};
+  let previous: PreviousAttribution;
+  if (state === 'absent') previous = { present: false };
+  else if (state === 'partial' && opts.recorded && !('sessionUrl' in base)) {
+    previous = opts.recorded;
+  } else previous = { present: true, value: existing };
   return {
-    settings: { ...settings, attribution: { ...base, commit: '', pr: '' } },
+    settings: { ...settings, attribution: { ...base, commit: '', pr: '', sessionUrl: false } },
     outcome: 'written',
-    previous: state === 'custom' ? { present: true, value: existing } : { present: false },
+    previous,
   };
 }
 
 /**
  * Undo `applyEmptyAttribution`: put back the value that was there before, or
- * remove the key if there was none. Only acts while the setting still reads
- * as enforced, so a value the user edited after install is never clobbered.
+ * remove the key if there was none. Only acts while the setting still has a
+ * shape praxis wrote (see `isPraxisWritten`), so a value the user edited after
+ * install is never clobbered. That includes a host still on the two-key form
+ * from an earlier release.
  */
 export function revertEmptyAttribution(
   settings: ClaudeSettings,
   previous: PreviousAttribution,
 ): { settings: ClaudeSettings; reverted: boolean } {
-  if (attributionState(settings) !== 'enforced') {
+  if (!isPraxisWritten(settings.attribution)) {
     return { settings: { ...settings }, reverted: false };
   }
   const result: ClaudeSettings = { ...settings };

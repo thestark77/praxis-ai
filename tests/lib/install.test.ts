@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { runInstall, runUninstall, runRollback } from '../../src/lib/install.js';
 import { resolvePaths } from '../../src/lib/paths.js';
 import { readSettings } from '../../src/lib/settings-patcher.js';
+import { readOwnership, recordOwnership } from '../../src/lib/ownership.js';
 import { hasPraxisBlock } from '../../src/lib/claudemd-patcher.js';
 
 let home: string;
@@ -357,6 +358,9 @@ describe('runRollback', () => {
 
 describe('the Claude Code attribution setting', () => {
   const firewall = ['Bash(rm -rf *)'];
+  const ENFORCED = { commit: '', pr: '', sessionUrl: false };
+  // What release 0.1.0-alpha.30 and earlier wrote: no sessionUrl key.
+  const TWO_KEY = { commit: '', pr: '' };
 
   async function sandbox(settings: Record<string, unknown>) {
     const paths = resolvePaths(home);
@@ -375,13 +379,13 @@ describe('the Claude Code attribution setting', () => {
       force,
     });
 
-  it('writes empty commit and pr into a fresh settings file', async () => {
+  it('writes empty commit and pr and hides the session link in a fresh settings file', async () => {
     const paths = await sandbox({});
     const result = await install(paths);
 
     expect(result.attribution).toBe('written');
     const settings = await readSettings(paths.settingsJson);
-    expect(settings.attribution).toEqual({ commit: '', pr: '' });
+    expect(settings.attribution).toEqual(ENFORCED);
     expect('includeCoAuthoredBy' in settings).toBe(false);
   });
 
@@ -439,7 +443,7 @@ describe('the Claude Code attribution setting', () => {
     const result = await install(paths, true);
 
     expect(result.attribution).toBe('written');
-    expect((await readSettings(paths.settingsJson)).attribution).toEqual({ commit: '', pr: '' });
+    expect((await readSettings(paths.settingsJson)).attribution).toEqual(ENFORCED);
   });
 
   it('does not write attribution when only OpenCode is targeted', async () => {
@@ -500,15 +504,152 @@ describe('the Claude Code attribution setting', () => {
     expect((await readSettings(paths.settingsJson)).attribution).toEqual(custom);
   });
 
-  it('uninstall leaves an empty attribution the user had set before praxis', async () => {
-    const paths = await sandbox({ attribution: { commit: '', pr: '' } });
+  it('uninstall leaves a fully enforced attribution the user had set before praxis', async () => {
+    const paths = await sandbox({ attribution: { ...ENFORCED } });
     const installed = await install(paths);
     expect(installed.attribution).toBe('unchanged');
+    expect((await readOwnership(paths.praxisDir))?.attribution).toBeUndefined();
 
     const result = await runUninstall({ paths, firewallEntries: firewall });
 
     expect(result.attributionReverted).toBe(false);
-    expect((await readSettings(paths.settingsJson)).attribution).toEqual({ commit: '', pr: '' });
+    expect((await readSettings(paths.settingsJson)).attribution).toEqual(ENFORCED);
+  });
+
+  it('leaves the boolean false the user set alone and counts it as enforced', async () => {
+    const paths = await sandbox({ attribution: false });
+    const installed = await install(paths);
+    expect(installed.attribution).toBe('unchanged');
+    expect((await readSettings(paths.settingsJson)).attribution).toBe(false);
+    expect((await readOwnership(paths.praxisDir))?.attribution).toBeUndefined();
+
+    const result = await runUninstall({ paths, firewallEntries: firewall });
+
+    expect(result.attributionReverted).toBe(false);
+    expect((await readSettings(paths.settingsJson)).attribution).toBe(false);
+  });
+
+  describe('a host whose attribution has commit and pr empty but no sessionUrl: false', () => {
+    it('adds sessionUrl: false to a two-key value the user wrote before praxis, without --force', async () => {
+      const paths = await sandbox({ attribution: { ...TWO_KEY } });
+      const result = await install(paths);
+
+      expect(result.attribution).toBe('written');
+      expect((await readSettings(paths.settingsJson)).attribution).toEqual(ENFORCED);
+      expect((await readOwnership(paths.praxisDir))?.attribution).toEqual({
+        present: true,
+        value: TWO_KEY,
+      });
+    });
+
+    it('uninstall gives that user-owned two-key value back exactly', async () => {
+      const paths = await sandbox({ attribution: { ...TWO_KEY } });
+      await install(paths);
+
+      const result = await runUninstall({ paths, firewallEntries: firewall });
+
+      expect(result.attributionReverted).toBe(true);
+      expect((await readSettings(paths.settingsJson)).attribution).toEqual(TWO_KEY);
+    });
+
+    it('overrides an explicit sessionUrl: true and uninstall restores it', async () => {
+      const before = { commit: '', pr: '', sessionUrl: true };
+      const paths = await sandbox({ attribution: before });
+      const result = await install(paths);
+
+      expect(result.attribution).toBe('written');
+      expect((await readSettings(paths.settingsJson)).attribution).toEqual(ENFORCED);
+
+      const removed = await runUninstall({ paths, firewallEntries: firewall });
+      expect(removed.attributionReverted).toBe(true);
+      expect((await readSettings(paths.settingsJson)).attribution).toEqual(before);
+    });
+
+    it('keeps unknown sibling fields while it completes the value', async () => {
+      const paths = await sandbox({ attribution: { ...TWO_KEY, future: 'keep' } });
+      await install(paths);
+      expect((await readSettings(paths.settingsJson)).attribution).toEqual({
+        ...ENFORCED,
+        future: 'keep',
+      });
+    });
+
+    describe('written by release alpha.30, which recorded what was there before praxis', () => {
+      // alpha.30 wrote the two-key form and recorded the pre-praxis value in the
+      // ledger; the upgrade must keep that record, not the intermediate value.
+      async function tramoOneHost(previous: { present: boolean; value?: unknown }) {
+        const paths = await sandbox({ model: 'opus', attribution: { ...TWO_KEY } });
+        await recordOwnership(paths.praxisDir, { attribution: previous });
+        return paths;
+      }
+
+      it('upgrades to the three-key form and keeps the record that the key was absent', async () => {
+        const paths = await tramoOneHost({ present: false });
+        const result = await install(paths);
+
+        expect(result.attribution).toBe('written');
+        expect((await readSettings(paths.settingsJson)).attribution).toEqual(ENFORCED);
+        expect((await readOwnership(paths.praxisDir))?.attribution).toEqual({ present: false });
+      });
+
+      it('uninstall after the upgrade removes the key praxis added', async () => {
+        const paths = await tramoOneHost({ present: false });
+        await install(paths);
+
+        const result = await runUninstall({ paths, firewallEntries: firewall });
+
+        expect(result.attributionReverted).toBe(true);
+        const settings = await readSettings(paths.settingsJson);
+        expect('attribution' in settings).toBe(false);
+        expect(settings.model).toBe('opus');
+      });
+
+      it('uninstall after the upgrade restores a custom value --force replaced in alpha.30', async () => {
+        const custom = { commit: 'Co-Authored-By: me', pr: 'my footer' };
+        const paths = await tramoOneHost({ present: true, value: custom });
+        await install(paths);
+        expect((await readOwnership(paths.praxisDir))?.attribution).toEqual({
+          present: true,
+          value: custom,
+        });
+
+        await runUninstall({ paths, firewallEntries: firewall });
+
+        expect((await readSettings(paths.settingsJson)).attribution).toEqual(custom);
+      });
+
+      it('uninstall without re-installing still reverts the two-key form alpha.30 wrote', async () => {
+        const paths = await tramoOneHost({ present: false });
+
+        const result = await runUninstall({ paths, firewallEntries: firewall });
+
+        expect(result.attributionReverted).toBe(true);
+        expect('attribution' in (await readSettings(paths.settingsJson))).toBe(false);
+      });
+
+      it('replaces the record when the user set sessionUrl: true after alpha.30 wrote the value', async () => {
+        const edited = { commit: '', pr: '', sessionUrl: true };
+        const paths = await sandbox({ attribution: edited });
+        await recordOwnership(paths.praxisDir, { attribution: { present: false } });
+
+        await install(paths);
+        await runUninstall({ paths, firewallEntries: firewall });
+
+        expect((await readSettings(paths.settingsJson)).attribution).toEqual(edited);
+      });
+
+      it('a second install after the upgrade changes nothing and keeps the record', async () => {
+        const paths = await tramoOneHost({ present: false });
+        await install(paths);
+        const first = await readFile(paths.settingsJson, 'utf8');
+
+        const second = await install(paths);
+
+        expect(second.attribution).toBe('unchanged');
+        expect(await readFile(paths.settingsJson, 'utf8')).toBe(first);
+        expect((await readOwnership(paths.praxisDir))?.attribution).toEqual({ present: false });
+      });
+    });
   });
 
   it('uninstall leaves a value the user changed after install', async () => {
@@ -532,7 +673,7 @@ describe('the Claude Code attribution setting', () => {
     const original = JSON.stringify({ model: 'opus' }, null, 2) + '\n';
     const paths = await sandbox({ model: 'opus' });
     await install(paths);
-    expect((await readSettings(paths.settingsJson)).attribution).toEqual({ commit: '', pr: '' });
+    expect((await readSettings(paths.settingsJson)).attribution).toEqual(ENFORCED);
 
     await runRollback({ paths });
 

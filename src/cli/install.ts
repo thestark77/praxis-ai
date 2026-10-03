@@ -86,7 +86,9 @@ export function installCommand(): Command {
             console.log(`  firewall rules added: ${result.firewallEntriesAdded}`);
             console.log(`  AST PreToolUse hook registered: ${result.astHookRegistered}`);
             if (result.attribution) {
-              console.log(`  Claude Code attribution (commit + PR): ${result.attribution}`);
+              console.log(
+                `  Claude Code attribution (commit, PR, session link): ${result.attribution}`,
+              );
             }
             if (result.opencode) {
               const oc = result.opencode;

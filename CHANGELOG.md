@@ -4,6 +4,30 @@ All notable changes to praxis-ai are documented here.
 This project follows [Semantic Versioning](https://semver.org/) and
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Fixed - the claude.ai session link is hidden too (`attribution.sessionUrl`)
+
+`praxis install` wrote `attribution: { commit: "", pr: "" }`, which removes the
+`Co-Authored-By` trailer and the PR footer, but Claude Code's cloud and Remote
+Control sessions are still told to add a `Claude-Session:` trailer with a
+claude.ai link to commits and the same link to PR bodies. Those come from a
+separate `sessionUrl` Boolean. The enforced value is now
+`attribution: { commit: "", pr: "", sessionUrl: false }`. praxis keeps the
+object form instead of `attribution: false`, which Claude Code releases before
+2.1.281 reject (skipping the whole settings file); a `false` the user set is
+left alone and counted as enforced.
+
+Upgrading needs `praxis install` (`praxis update` does not touch
+`settings.json`). A value with empty `commit` and `pr` but no `sessionUrl:
+false`, which is what `0.1.0-alpha.30` and earlier wrote, is completed without
+`--force`; an explicit `sessionUrl: true` is overridden. The ownership ledger
+keeps the value recorded before praxis was installed, so `praxis uninstall`
+still restores that and never the intermediate two-key one; a user-owned
+two-key value with no record is recorded and restored as it was.
+`praxis doctor` reports an empty-text value without `sessionUrl: false` as
+`not enforced`, with the fix.
+
 ## [0.1.0-alpha.30] - 2026-10-03
 
 ### Fixed - `praxis install` / `update` no longer pass the retired `--strict-tdd` flag

@@ -75,9 +75,11 @@ async function verifyOpenCodePlugin(engineUrl: string | null): Promise<VerifyRes
 export function describeAttribution(state: AttributionState | 'unreadable'): string {
   switch (state) {
     case 'enforced':
-      return 'empty (no commit or PR attribution)';
+      return 'empty (no commit, PR or session-link attribution)';
     case 'absent':
       return 'not set (Claude Code adds its attribution). Run `praxis install`.';
+    case 'partial':
+      return 'not enforced (commit and PR are empty but the claude.ai session link is still added). Run `praxis install`.';
     case 'custom':
       return 'custom (left as is; `praxis install --force` replaces it with empty)';
     case 'unreadable':

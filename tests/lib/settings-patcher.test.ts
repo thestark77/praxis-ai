@@ -169,29 +169,55 @@ describe('attributionState', () => {
     expect(attributionState({ model: 'opus' })).toBe('absent');
   });
 
-  it('is enforced when commit and pr are both empty strings', () => {
-    expect(attributionState({ attribution: { commit: '', pr: '' } })).toBe('enforced');
+  it('is enforced when commit and pr are empty and the session link is switched off', () => {
+    expect(attributionState({ attribution: { commit: '', pr: '', sessionUrl: false } })).toBe(
+      'enforced',
+    );
   });
 
-  it('is custom when commit carries text', () => {
+  it('is enforced for the boolean form, which hides every kind of attribution', () => {
+    expect(attributionState({ attribution: false })).toBe('enforced');
+  });
+
+  it('is partial when commit and pr are empty but sessionUrl is missing', () => {
+    expect(attributionState({ attribution: { commit: '', pr: '' } })).toBe('partial');
+  });
+
+  it('is partial when commit and pr are empty and sessionUrl is true or not a boolean', () => {
+    expect(attributionState({ attribution: { commit: '', pr: '', sessionUrl: true } })).toBe(
+      'partial',
+    );
+    expect(attributionState({ attribution: { commit: '', pr: '', sessionUrl: 'no' } })).toBe(
+      'partial',
+    );
+  });
+
+  it('is custom when commit carries text, even with the session link switched off', () => {
     expect(attributionState({ attribution: { commit: 'Made with tools', pr: '' } })).toBe('custom');
+    expect(
+      attributionState({ attribution: { commit: 'Made with tools', pr: '', sessionUrl: false } }),
+    ).toBe('custom');
   });
 
   it('is custom when pr is missing, because Claude Code then falls back to its default footer', () => {
     expect(attributionState({ attribution: { commit: '' } })).toBe('custom');
+    expect(attributionState({ attribution: { commit: '', sessionUrl: false } })).toBe('custom');
   });
 
-  it('is custom when the value is not an object', () => {
+  it('is custom when the value is not an object or the boolean false', () => {
     expect(attributionState({ attribution: 'nope' })).toBe('custom');
     expect(attributionState({ attribution: null })).toBe('custom');
+    expect(attributionState({ attribution: true })).toBe('custom');
   });
 });
 
 describe('applyEmptyAttribution', () => {
-  it('writes empty commit and pr when the key is absent', () => {
+  const ENFORCED = { commit: '', pr: '', sessionUrl: false };
+
+  it('writes empty commit and pr and hides the session link when the key is absent', () => {
     const result = applyEmptyAttribution({ model: 'opus' }, {});
     expect(result.outcome).toBe('written');
-    expect(result.settings.attribution).toEqual({ commit: '', pr: '' });
+    expect(result.settings.attribution).toEqual(ENFORCED);
     expect(result.previous).toEqual({ present: false });
   });
 
@@ -207,18 +233,65 @@ describe('applyEmptyAttribution', () => {
     expect(result.settings.permissions).toEqual(input.permissions);
   });
 
-  it('is a no-op when the setting is already empty', () => {
-    const input: ClaudeSettings = { attribution: { commit: '', pr: '' } };
+  it('is a no-op when the setting is already fully enforced', () => {
+    const input: ClaudeSettings = { attribution: { ...ENFORCED } };
     const result = applyEmptyAttribution(input, {});
     expect(result.outcome).toBe('unchanged');
     expect(result.settings).toEqual(input);
   });
 
-  it('keeps unknown sibling fields of an already-empty attribution', () => {
-    const input: ClaudeSettings = { attribution: { commit: '', pr: '', future: 'x' } };
+  it('never rewrites the boolean form: it already hides every attribution', () => {
+    const input: ClaudeSettings = { attribution: false };
     const result = applyEmptyAttribution(input, {});
     expect(result.outcome).toBe('unchanged');
-    expect(result.settings.attribution).toEqual({ commit: '', pr: '', future: 'x' });
+    expect(result.settings.attribution).toBe(false);
+  });
+
+  it('keeps unknown sibling fields of an already-enforced attribution', () => {
+    const input: ClaudeSettings = { attribution: { ...ENFORCED, future: 'x' } };
+    const result = applyEmptyAttribution(input, {});
+    expect(result.outcome).toBe('unchanged');
+    expect(result.settings.attribution).toEqual({ ...ENFORCED, future: 'x' });
+  });
+
+  it('completes the two-key form with sessionUrl false, without --force', () => {
+    const input: ClaudeSettings = { attribution: { commit: '', pr: '' } };
+    const result = applyEmptyAttribution(input, {});
+    expect(result.outcome).toBe('written');
+    expect(result.settings.attribution).toEqual(ENFORCED);
+  });
+
+  it('completes the two-key form and keeps unknown sibling fields', () => {
+    const input: ClaudeSettings = { attribution: { commit: '', pr: '', future: 'keep' } };
+    const result = applyEmptyAttribution(input, {});
+    expect(result.settings.attribution).toEqual({ ...ENFORCED, future: 'keep' });
+  });
+
+  it('remembers a user-owned two-key value as the previous one when nothing was recorded', () => {
+    const result = applyEmptyAttribution({ attribution: { commit: '', pr: '' } }, {});
+    expect(result.previous).toEqual({ present: true, value: { commit: '', pr: '' } });
+  });
+
+  it('carries the recorded pre-praxis value forward over a two-key form praxis wrote earlier', () => {
+    const recorded = { present: true, value: { commit: 'old', pr: 'older' } };
+    const absent = applyEmptyAttribution(
+      { attribution: { commit: '', pr: '' } },
+      { recorded: { present: false } },
+    );
+    expect(absent.previous).toEqual({ present: false });
+    const custom = applyEmptyAttribution({ attribution: { commit: '', pr: '' } }, { recorded });
+    expect(custom.previous).toEqual(recorded);
+  });
+
+  it('overrides an explicit sessionUrl true and remembers it, even over an older record', () => {
+    const input: ClaudeSettings = { attribution: { commit: '', pr: '', sessionUrl: true } };
+    const result = applyEmptyAttribution(input, { recorded: { present: false } });
+    expect(result.outcome).toBe('written');
+    expect(result.settings.attribution).toEqual(ENFORCED);
+    expect(result.previous).toEqual({
+      present: true,
+      value: { commit: '', pr: '', sessionUrl: true },
+    });
   });
 
   it('keeps a custom value untouched without force and reports it', () => {
@@ -232,7 +305,7 @@ describe('applyEmptyAttribution', () => {
     const input: ClaudeSettings = { attribution: { commit: 'Co-Authored-By: me', pr: 'hi' } };
     const result = applyEmptyAttribution(input, { force: true });
     expect(result.outcome).toBe('written');
-    expect(result.settings.attribution).toEqual({ commit: '', pr: '' });
+    expect(result.settings.attribution).toEqual(ENFORCED);
     expect(result.previous).toEqual({
       present: true,
       value: { commit: 'Co-Authored-By: me', pr: 'hi' },
@@ -242,24 +315,33 @@ describe('applyEmptyAttribution', () => {
   it('with force keeps unknown sibling fields while emptying commit and pr', () => {
     const input: ClaudeSettings = { attribution: { commit: 'x', pr: 'y', future: 'keep' } };
     const result = applyEmptyAttribution(input, { force: true });
-    expect(result.settings.attribution).toEqual({ commit: '', pr: '', future: 'keep' });
+    expect(result.settings.attribution).toEqual({ ...ENFORCED, future: 'keep' });
   });
 
   it('does not mutate the input', () => {
-    const input: ClaudeSettings = { attribution: { commit: 'x', pr: 'y' } };
-    applyEmptyAttribution(input, { force: true });
-    expect(input.attribution).toEqual({ commit: 'x', pr: 'y' });
+    const input: ClaudeSettings = { attribution: { commit: '', pr: '' } };
+    applyEmptyAttribution(input, {});
+    expect(input.attribution).toEqual({ commit: '', pr: '' });
+    const custom: ClaudeSettings = { attribution: { commit: 'x', pr: 'y' } };
+    applyEmptyAttribution(custom, { force: true });
+    expect(custom.attribution).toEqual({ commit: 'x', pr: 'y' });
   });
 
   it('never writes the deprecated includeCoAuthoredBy flag', () => {
     const result = applyEmptyAttribution({}, {});
     expect('includeCoAuthoredBy' in result.settings).toBe(false);
   });
+
+  it('never writes the boolean form, which earlier Claude Code versions reject', () => {
+    expect(applyEmptyAttribution({}, {}).settings.attribution).not.toBe(false);
+  });
 });
 
 describe('revertEmptyAttribution', () => {
+  const ENFORCED = { commit: '', pr: '', sessionUrl: false };
+
   it('removes the key when it was absent before', () => {
-    const input: ClaudeSettings = { model: 'opus', attribution: { commit: '', pr: '' } };
+    const input: ClaudeSettings = { model: 'opus', attribution: { ...ENFORCED } };
     const result = revertEmptyAttribution(input, { present: false });
     expect(result.reverted).toBe(true);
     expect('attribution' in result.settings).toBe(false);
@@ -267,7 +349,7 @@ describe('revertEmptyAttribution', () => {
   });
 
   it('restores the previous value when there was one', () => {
-    const input: ClaudeSettings = { attribution: { commit: '', pr: '' } };
+    const input: ClaudeSettings = { attribution: { ...ENFORCED } };
     const result = revertEmptyAttribution(input, {
       present: true,
       value: { commit: 'old', pr: 'older' },
@@ -276,11 +358,31 @@ describe('revertEmptyAttribution', () => {
     expect(result.settings.attribution).toEqual({ commit: 'old', pr: 'older' });
   });
 
+  it('also reverts the two-key form an earlier praxis release wrote', () => {
+    const input: ClaudeSettings = { model: 'opus', attribution: { commit: '', pr: '' } };
+    const result = revertEmptyAttribution(input, { present: false });
+    expect(result.reverted).toBe(true);
+    expect('attribution' in result.settings).toBe(false);
+  });
+
   it('leaves a value the user changed after install alone', () => {
     const input: ClaudeSettings = { attribution: { commit: 'edited later', pr: '' } };
     const result = revertEmptyAttribution(input, { present: false });
     expect(result.reverted).toBe(false);
     expect(result.settings.attribution).toEqual({ commit: 'edited later', pr: '' });
+  });
+
+  it('leaves a session link the user switched back on after install alone', () => {
+    const input: ClaudeSettings = { attribution: { commit: '', pr: '', sessionUrl: true } };
+    const result = revertEmptyAttribution(input, { present: false });
+    expect(result.reverted).toBe(false);
+    expect(result.settings.attribution).toEqual({ commit: '', pr: '', sessionUrl: true });
+  });
+
+  it('leaves the boolean form the user switched to after install alone', () => {
+    const result = revertEmptyAttribution({ attribution: false }, { present: false });
+    expect(result.reverted).toBe(false);
+    expect(result.settings.attribution).toBe(false);
   });
 
   it('does nothing when the key is already gone', () => {

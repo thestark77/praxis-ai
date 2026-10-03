@@ -244,9 +244,10 @@ re-running it updates each piece from its source.
    strict TDD), unless `--no-gentle-ai`.
 4. Patch `CLAUDE.md` with the praxis `@-import` block.
 5. Append the firewall deny list + register the AST hook in
-   `settings.json`, and set `"attribution": { "commit": "", "pr": "" }` so
-   Claude Code never adds `Co-Authored-By` to commits or its footer to
-   PRs (see [Attribution](#attribution)).
+   `settings.json`, and set
+   `"attribution": { "commit": "", "pr": "", "sessionUrl": false }` so Claude
+   Code never adds `Co-Authored-By` to commits, its footer to PRs, or the
+   claude.ai session link (see [Attribution](#attribution)).
 6. Install `~/.praxis/` skeleton + the six lifted skills into
    `~/.claude/skills/`.
 
@@ -268,18 +269,42 @@ re-running it updates each piece from its source.
 
 ### Attribution
 
-`praxis install` sets Claude Code's `attribution` setting to empty strings
-for commits and pull requests in `~/.claude/settings.json`. It is a setting
-rather than a CLAUDE.md instruction because the setting is applied by Claude
-Code itself and does not depend on the model remembering a rule. Only that
-key is touched, and re-running the install changes nothing.
+`praxis install` sets Claude Code's `attribution` setting in
+`~/.claude/settings.json` to
+
+```json
+"attribution": { "commit": "", "pr": "", "sessionUrl": false }
+```
+
+so Claude Code adds no `Co-Authored-By` trailer to commits, no footer to pull
+request descriptions, and no claude.ai session link. That last part matters in
+cloud and Remote Control sessions: with only `commit` and `pr` emptied, those
+sessions still add a `Claude-Session:` trailer with a claude.ai link to
+commits and the same link to PR bodies, and `sessionUrl: false` is what omits
+them. It is a setting rather than a CLAUDE.md instruction because
+the setting is applied by Claude Code itself and does not depend on the model
+remembering a rule. Only that key is touched, and re-running the install
+changes nothing.
+
+praxis writes the object form on purpose. The boolean `"attribution": false`
+also hides everything, but Claude Code releases before 2.1.281 reject it and
+skip the whole settings file that holds it. If you set `false` yourself praxis
+leaves it alone and counts it as enforced.
 
 - A custom `attribution` you already have is **kept** (with a warning) unless
   you pass `--force`.
-- `praxis uninstall` restores the value that was there before, or removes the
-  key if there was none. A value praxis did not write, or one you edited
-  afterwards, is left alone. `praxis rollback` restores it from the backup.
-- `praxis doctor` shows whether it is `empty`, `not set` or `custom`.
+- A value whose `commit` and `pr` are already empty but that has no
+  `sessionUrl: false` (this is what releases up to `0.1.0-alpha.30` wrote) is
+  completed by `praxis install` without `--force`: it only adds
+  `sessionUrl: false`. An explicit `sessionUrl: true` there is overridden too.
+- `praxis uninstall` restores the value that was there before praxis, or
+  removes the key if there was none. For a host upgraded from
+  `0.1.0-alpha.30` that is still the value from before praxis was installed,
+  not the intermediate two-key one. A value praxis did not write, or one you
+  edited afterwards (a different `commit` or `pr`, `sessionUrl: true`, or
+  `false`), is left alone. `praxis rollback` restores it from the backup.
+- `praxis doctor` shows whether it is `empty`, `not set`, `not enforced`
+  (empty text but the session link is still added) or `custom`.
 - `praxis update` does not touch `settings.json`; run `praxis install` to
   apply the setting to an existing installation.
 

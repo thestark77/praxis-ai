@@ -278,7 +278,29 @@ describe('praxis CLI command wiring (sandboxed HOME)', () => {
     expect(out).toMatch(/attribution:\s+not set/);
   });
 
-  it('doctor reports an empty attribution setting', async () => {
+  it('doctor reports an enforced attribution setting as empty', async () => {
+    const sandboxHome = await makeSandboxHome();
+    await writeFile(
+      join(sandboxHome, '.claude', 'settings.json'),
+      JSON.stringify({ attribution: { commit: '', pr: '', sessionUrl: false } }),
+      'utf8',
+    );
+    const out = runCli('doctor', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
+    expect(out).toMatch(/attribution:\s+empty/);
+  });
+
+  it('doctor reports the boolean false attribution as empty', async () => {
+    const sandboxHome = await makeSandboxHome();
+    await writeFile(
+      join(sandboxHome, '.claude', 'settings.json'),
+      JSON.stringify({ attribution: false }),
+      'utf8',
+    );
+    const out = runCli('doctor', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
+    expect(out).toMatch(/attribution:\s+empty/);
+  });
+
+  it('doctor flags an attribution without sessionUrl: false as not enforced, with the fix', async () => {
     const sandboxHome = await makeSandboxHome();
     await writeFile(
       join(sandboxHome, '.claude', 'settings.json'),
@@ -286,7 +308,9 @@ describe('praxis CLI command wiring (sandboxed HOME)', () => {
       'utf8',
     );
     const out = runCli('doctor', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
-    expect(out).toMatch(/attribution:\s+empty/);
+    expect(out).toMatch(/attribution:\s+not enforced/);
+    expect(out).toMatch(/session link/);
+    expect(out).toMatch(/Run `praxis install`/);
   });
 
   it('doctor reports a custom attribution setting', async () => {

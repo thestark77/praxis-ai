@@ -4,7 +4,7 @@ All notable changes to praxis-ai are documented here.
 This project follows [Semantic Versioning](https://semver.org/) and
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.1.0-alpha.31] - 2026-10-03
 
 ### Fixed - the claude.ai session link is hidden too (`attribution.sessionUrl`)
 

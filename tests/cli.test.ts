@@ -272,6 +272,41 @@ describe('praxis CLI command wiring (sandboxed HOME)', () => {
     expect(out).toContain('overlay installed:  false');
   });
 
+  it('doctor reports a missing attribution setting', async () => {
+    const sandboxHome = await makeSandboxHome();
+    const out = runCli('doctor', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
+    expect(out).toMatch(/attribution:\s+not set/);
+  });
+
+  it('doctor reports an empty attribution setting', async () => {
+    const sandboxHome = await makeSandboxHome();
+    await writeFile(
+      join(sandboxHome, '.claude', 'settings.json'),
+      JSON.stringify({ attribution: { commit: '', pr: '' } }),
+      'utf8',
+    );
+    const out = runCli('doctor', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
+    expect(out).toMatch(/attribution:\s+empty/);
+  });
+
+  it('doctor reports a custom attribution setting', async () => {
+    const sandboxHome = await makeSandboxHome();
+    await writeFile(
+      join(sandboxHome, '.claude', 'settings.json'),
+      JSON.stringify({ attribution: { commit: 'Co-Authored-By: me', pr: '' } }),
+      'utf8',
+    );
+    const out = runCli('doctor', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
+    expect(out).toMatch(/attribution:\s+custom/);
+  });
+
+  it('doctor still runs when settings.json is not valid JSON', async () => {
+    const sandboxHome = await makeSandboxHome();
+    await writeFile(join(sandboxHome, '.claude', 'settings.json'), 'not json', 'utf8');
+    const out = runCli('doctor', { ...process.env, HOME: sandboxHome, PRAXIS_HOME: sandboxHome });
+    expect(out).toMatch(/attribution:\s+unknown/);
+  });
+
   it('rollback --list reports no backups on a fresh sandbox', async () => {
     const sandboxHome = await makeSandboxHome();
     const out = runCli('rollback --list', {

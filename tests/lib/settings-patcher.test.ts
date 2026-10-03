@@ -9,6 +9,9 @@ import {
   writeSettings,
   patchSettings,
   unpatchSettings,
+  attributionState,
+  applyEmptyAttribution,
+  revertEmptyAttribution,
   type ClaudeSettings,
 } from '../../src/lib/settings-patcher.js';
 
@@ -158,5 +161,131 @@ describe('patchSettings / unpatchSettings', () => {
     await unpatchSettings(settingsJson, ['praxis-rule-1', 'praxis-rule-2']);
     const result = await readSettings(settingsJson);
     expect(result.permissions?.deny).toEqual(['user-rule', 'another-user-rule']);
+  });
+});
+
+describe('attributionState', () => {
+  it('is absent when the key is missing', () => {
+    expect(attributionState({ model: 'opus' })).toBe('absent');
+  });
+
+  it('is enforced when commit and pr are both empty strings', () => {
+    expect(attributionState({ attribution: { commit: '', pr: '' } })).toBe('enforced');
+  });
+
+  it('is custom when commit carries text', () => {
+    expect(attributionState({ attribution: { commit: 'Made with tools', pr: '' } })).toBe('custom');
+  });
+
+  it('is custom when pr is missing, because Claude Code then falls back to its default footer', () => {
+    expect(attributionState({ attribution: { commit: '' } })).toBe('custom');
+  });
+
+  it('is custom when the value is not an object', () => {
+    expect(attributionState({ attribution: 'nope' })).toBe('custom');
+    expect(attributionState({ attribution: null })).toBe('custom');
+  });
+});
+
+describe('applyEmptyAttribution', () => {
+  it('writes empty commit and pr when the key is absent', () => {
+    const result = applyEmptyAttribution({ model: 'opus' }, {});
+    expect(result.outcome).toBe('written');
+    expect(result.settings.attribution).toEqual({ commit: '', pr: '' });
+    expect(result.previous).toEqual({ present: false });
+  });
+
+  it('preserves every unrelated key', () => {
+    const input: ClaudeSettings = {
+      model: 'opus',
+      enabledPlugins: { 'engram@engram': true },
+      permissions: { defaultMode: 'bypassPermissions', deny: ['Read(.env)'] },
+    };
+    const result = applyEmptyAttribution(input, {});
+    expect(result.settings.model).toBe('opus');
+    expect(result.settings.enabledPlugins).toEqual({ 'engram@engram': true });
+    expect(result.settings.permissions).toEqual(input.permissions);
+  });
+
+  it('is a no-op when the setting is already empty', () => {
+    const input: ClaudeSettings = { attribution: { commit: '', pr: '' } };
+    const result = applyEmptyAttribution(input, {});
+    expect(result.outcome).toBe('unchanged');
+    expect(result.settings).toEqual(input);
+  });
+
+  it('keeps unknown sibling fields of an already-empty attribution', () => {
+    const input: ClaudeSettings = { attribution: { commit: '', pr: '', future: 'x' } };
+    const result = applyEmptyAttribution(input, {});
+    expect(result.outcome).toBe('unchanged');
+    expect(result.settings.attribution).toEqual({ commit: '', pr: '', future: 'x' });
+  });
+
+  it('keeps a custom value untouched without force and reports it', () => {
+    const input: ClaudeSettings = { attribution: { commit: 'Co-Authored-By: me', pr: 'hi' } };
+    const result = applyEmptyAttribution(input, {});
+    expect(result.outcome).toBe('kept-custom');
+    expect(result.settings.attribution).toEqual({ commit: 'Co-Authored-By: me', pr: 'hi' });
+  });
+
+  it('replaces a custom value with force and remembers the previous one', () => {
+    const input: ClaudeSettings = { attribution: { commit: 'Co-Authored-By: me', pr: 'hi' } };
+    const result = applyEmptyAttribution(input, { force: true });
+    expect(result.outcome).toBe('written');
+    expect(result.settings.attribution).toEqual({ commit: '', pr: '' });
+    expect(result.previous).toEqual({
+      present: true,
+      value: { commit: 'Co-Authored-By: me', pr: 'hi' },
+    });
+  });
+
+  it('with force keeps unknown sibling fields while emptying commit and pr', () => {
+    const input: ClaudeSettings = { attribution: { commit: 'x', pr: 'y', future: 'keep' } };
+    const result = applyEmptyAttribution(input, { force: true });
+    expect(result.settings.attribution).toEqual({ commit: '', pr: '', future: 'keep' });
+  });
+
+  it('does not mutate the input', () => {
+    const input: ClaudeSettings = { attribution: { commit: 'x', pr: 'y' } };
+    applyEmptyAttribution(input, { force: true });
+    expect(input.attribution).toEqual({ commit: 'x', pr: 'y' });
+  });
+
+  it('never writes the deprecated includeCoAuthoredBy flag', () => {
+    const result = applyEmptyAttribution({}, {});
+    expect('includeCoAuthoredBy' in result.settings).toBe(false);
+  });
+});
+
+describe('revertEmptyAttribution', () => {
+  it('removes the key when it was absent before', () => {
+    const input: ClaudeSettings = { model: 'opus', attribution: { commit: '', pr: '' } };
+    const result = revertEmptyAttribution(input, { present: false });
+    expect(result.reverted).toBe(true);
+    expect('attribution' in result.settings).toBe(false);
+    expect(result.settings.model).toBe('opus');
+  });
+
+  it('restores the previous value when there was one', () => {
+    const input: ClaudeSettings = { attribution: { commit: '', pr: '' } };
+    const result = revertEmptyAttribution(input, {
+      present: true,
+      value: { commit: 'old', pr: 'older' },
+    });
+    expect(result.reverted).toBe(true);
+    expect(result.settings.attribution).toEqual({ commit: 'old', pr: 'older' });
+  });
+
+  it('leaves a value the user changed after install alone', () => {
+    const input: ClaudeSettings = { attribution: { commit: 'edited later', pr: '' } };
+    const result = revertEmptyAttribution(input, { present: false });
+    expect(result.reverted).toBe(false);
+    expect(result.settings.attribution).toEqual({ commit: 'edited later', pr: '' });
+  });
+
+  it('does nothing when the key is already gone', () => {
+    const result = revertEmptyAttribution({ model: 'opus' }, { present: false });
+    expect(result.reverted).toBe(false);
+    expect(result.settings).toEqual({ model: 'opus' });
   });
 });

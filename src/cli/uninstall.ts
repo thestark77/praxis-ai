@@ -47,6 +47,7 @@ export function uninstallCommand(): Command {
           );
         }
         console.log(`  AST PreToolUse hook removed: ${result.removedAstHook}`);
+        console.log(`  Claude Code attribution setting restored: ${result.attributionReverted}`);
         if (result.opencode) {
           const oc = result.opencode;
           console.log('');

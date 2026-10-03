@@ -3,7 +3,12 @@ import { spawn } from 'node:child_process';
 import { detect, installModeFor } from '../lib/detector.js';
 import { resolvePaths, resolveOpenCodePaths } from '../lib/paths.js';
 import { listBackups } from '../lib/backup.js';
-import { readSettings, PRAXIS_AST_HOOK_MARKER } from '../lib/settings-patcher.js';
+import {
+  readSettings,
+  attributionState,
+  PRAXIS_AST_HOOK_MARKER,
+  type AttributionState,
+} from '../lib/settings-patcher.js';
 import { parseAgentSelector, resolveAgents } from '../lib/agents.js';
 import { detectOpenCode } from '../lib/opencode/install.js';
 
@@ -59,6 +64,34 @@ async function verifyOpenCodePlugin(engineUrl: string | null): Promise<VerifyRes
       passed: false,
       reason: `Could not load the firewall engine the plugin imports: ${message}`,
     };
+  }
+}
+
+/**
+ * One doctor line for the Claude Code `attribution` setting. `unreadable`
+ * covers a settings.json that is not valid JSON: doctor reports it instead
+ * of dying on it.
+ */
+export function describeAttribution(state: AttributionState | 'unreadable'): string {
+  switch (state) {
+    case 'enforced':
+      return 'empty (no commit or PR attribution)';
+    case 'absent':
+      return 'not set (Claude Code adds its attribution). Run `praxis install`.';
+    case 'custom':
+      return 'custom (left as is; `praxis install --force` replaces it with empty)';
+    case 'unreadable':
+      return 'unknown (settings.json is not valid JSON)';
+  }
+}
+
+async function readAttributionState(
+  settingsPath: string,
+): Promise<AttributionState | 'unreadable'> {
+  try {
+    return attributionState(await readSettings(settingsPath));
+  } catch {
+    return 'unreadable';
   }
 }
 
@@ -248,6 +281,9 @@ export function doctorCommand(): Command {
       console.log(`    config dir present: ${report.claude.configDirExists}`);
       console.log(`    CLAUDE.md present:  ${report.claude.claudeMdExists}`);
       console.log(`    settings.json:      ${report.claude.settingsJsonExists}`);
+      console.log(
+        `    attribution:        ${describeAttribution(await readAttributionState(paths.settingsJson))}`,
+      );
       console.log('');
       console.log('  gentle-ai');
       console.log(`    binary on PATH:     ${report.gentleAi.binaryPresent}`);

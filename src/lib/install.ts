@@ -20,8 +20,12 @@ import {
   unpatchSettings,
   addPraxisAstHook,
   removePraxisAstHook,
+  applyEmptyAttribution,
+  revertEmptyAttribution,
   readSettings,
   writeSettings,
+  type AttributionOutcome,
+  type PreviousAttribution,
 } from './settings-patcher.js';
 import {
   installSkeleton,
@@ -97,6 +101,13 @@ export interface InstallResult {
   firewallEntriesAdded: number;
   claudeMdPatched: boolean;
   astHookRegistered: boolean;
+  /**
+   * What happened to the Claude Code `attribution` setting: `written`
+   * (praxis emptied it), `unchanged` (already empty) or `kept-custom` (the
+   * user's own value, left alone without `--force`). `null` when Claude
+   * Code was not written to (dry run, or OpenCode only).
+   */
+  attribution: AttributionOutcome | null;
   /** Present only when OpenCode was one of the targets. */
   opencode: OpenCodeInstallResult | null;
   gentleAiBootstrap: GentleAiBootstrapResult | null;
@@ -225,6 +236,7 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
       firewallEntriesAdded: 0,
       claudeMdPatched: false,
       astHookRegistered: false,
+      attribution: null,
       opencode: null,
       gentleAiBootstrap: null,
       warnings,
@@ -314,6 +326,8 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
     report.praxis.overlayInstalled && (await readOwnership(paths.praxisDir)) === null;
 
   let claudeEntriesAdded: string[] = [];
+  let attribution: AttributionOutcome | null = null;
+  let attributionBefore: PreviousAttribution | undefined;
   if (wantsClaudeCode) {
     await patchClaudeMd(paths.claudeMd, importPath);
     claudeEntriesAdded = await patchSettings(paths.settingsJson, firewallEntries);
@@ -321,7 +335,21 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
     const astHookCommand = opts.astHookCommand ?? (await resolveAstHookCommand());
     const settingsBeforeHook = await readSettings(paths.settingsJson);
     const settingsWithHook = addPraxisAstHook(settingsBeforeHook, astHookCommand);
-    await writeSettings(paths.settingsJson, settingsWithHook);
+
+    // Make "no AI attribution" a setting instead of a sentence in CLAUDE.md.
+    // A custom value is the user's own and survives unless --force, the
+    // same rule the skeleton and the skills follow above.
+    const applied = applyEmptyAttribution(settingsWithHook, { force: opts.force });
+    attribution = applied.outcome;
+    if (applied.outcome === 'written') attributionBefore = applied.previous;
+    if (applied.outcome === 'kept-custom') {
+      warnings.push(
+        'settings.json already sets a custom `attribution`; left as is, so Claude Code may still ' +
+          'add attribution to commits and PRs. Re-run `praxis install --force` to replace it ' +
+          'with empty commit and pr.',
+      );
+    }
+    await writeSettings(paths.settingsJson, applied.settings);
   }
 
   let opencode: OpenCodeInstallResult | null = null;
@@ -341,6 +369,7 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
     claudeCode: claudeEntriesAdded,
     opencode: opencode?.rulesAdded ?? [],
     inheritedPreLedgerInstall,
+    attribution: attributionBefore,
   });
 
   return {
@@ -355,6 +384,7 @@ export async function runInstall(opts: InstallOptions = {}): Promise<InstallResu
     firewallEntriesAdded: claudeEntriesAdded.length,
     claudeMdPatched: wantsClaudeCode,
     astHookRegistered: wantsClaudeCode,
+    attribution,
     opencode,
     gentleAiBootstrap,
     warnings,
@@ -398,6 +428,12 @@ export interface UninstallResult {
    */
   claudeSkillsSkippedNotOwned: string[];
   removedAstHook: boolean;
+  /**
+   * True when praxis put the `attribution` setting back (restored the value
+   * it replaced, or removed the key it added). False when praxis had not
+   * written it, or the user changed it since.
+   */
+  attributionReverted: boolean;
   /** Present only when OpenCode was one of the targets. */
   opencode: OpenCodeUninstallResult | null;
   restoredFromBackup: string | null;
@@ -420,6 +456,7 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<Uninsta
 
   let removedClaudeMdBlock = false;
   let removedAstHook = false;
+  let attributionReverted = false;
   if (wantsClaudeCode) {
     removedClaudeMdBlock = await unpatchClaudeMd(paths.claudeMd);
     await unpatchSettings(paths.settingsJson, claudeEntriesRemoved);
@@ -430,7 +467,17 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<Uninsta
     removedAstHook =
       JSON.stringify(settingsBeforeHook.hooks ?? {}) !==
       JSON.stringify(settingsWithoutHook.hooks ?? {});
-    await writeSettings(paths.settingsJson, settingsWithoutHook);
+
+    // Give back the attribution setting only if the ledger says praxis wrote
+    // it. No record means the user's own value (or a pre-ledger install that
+    // never wrote one), and neither is praxis's to remove.
+    let settingsToWrite = settingsWithoutHook;
+    if (ledger?.attribution) {
+      const reverted = revertEmptyAttribution(settingsWithoutHook, ledger.attribution);
+      settingsToWrite = reverted.settings;
+      attributionReverted = reverted.reverted;
+    }
+    await writeSettings(paths.settingsJson, settingsToWrite);
   }
 
   const opencode = agents.includes('opencode')
@@ -478,6 +525,7 @@ export async function runUninstall(opts: UninstallOptions = {}): Promise<Uninsta
     removedClaudeSkills: claudeSkillsResult.removed,
     claudeSkillsSkippedNotOwned: claudeSkillsResult.skippedNotOwned,
     removedAstHook,
+    attributionReverted,
     opencode,
     restoredFromBackup: null,
   };

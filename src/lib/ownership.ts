@@ -20,6 +20,7 @@
 
 import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import type { PreviousAttribution } from './settings-patcher.js';
 
 export const OWNERSHIP_FILENAME = 'owned-permissions.json';
 
@@ -49,6 +50,14 @@ export interface OwnershipLedger {
   claudeCode: string[];
   /** Permission rules praxis added to opencode.json. */
   opencode: OwnedOpenCodeRule[];
+  /**
+   * What the Claude Code `attribution` setting held before praxis emptied
+   * it. Present only when praxis wrote the setting; a value that was
+   * already empty on arrival is the user's own and is not recorded, so
+   * uninstall leaves it alone. Ledgers from before this field existed
+   * simply lack it, which uninstall reads as "praxis wrote nothing here".
+   */
+  attribution?: PreviousAttribution;
 }
 
 export function ownershipPath(praxisDir: string): string {
@@ -76,12 +85,14 @@ export async function readOwnership(praxisDir: string): Promise<OwnershipLedger 
   try {
     const parsed = JSON.parse(raw) as Partial<OwnershipLedger>;
     if (parsed.version !== 1) return null;
-    return {
+    const ledger: OwnershipLedger = {
       version: 1,
       claudeCode: Array.isArray(parsed.claudeCode) ? parsed.claudeCode.filter(isString) : [],
       opencode: Array.isArray(parsed.opencode) ? parsed.opencode.filter(isOpenCodeRule) : [],
       inheritedPreLedgerInstall: parsed.inheritedPreLedgerInstall === true,
     };
+    if (isPreviousAttribution(parsed.attribution)) ledger.attribution = parsed.attribution;
+    return ledger;
   } catch {
     return null;
   }
@@ -89,6 +100,11 @@ export async function readOwnership(praxisDir: string): Promise<OwnershipLedger 
 
 function isString(value: unknown): value is string {
   return typeof value === 'string';
+}
+
+function isPreviousAttribution(value: unknown): value is PreviousAttribution {
+  if (typeof value !== 'object' || value === null) return false;
+  return typeof (value as Record<string, unknown>).present === 'boolean';
 }
 
 function isOpenCodeRule(value: unknown): value is OwnedOpenCodeRule {
@@ -112,6 +128,13 @@ export async function recordOwnership(
     opencode?: OwnedOpenCodeRule[];
     /** Set by an install that found praxis present but no ledger. */
     inheritedPreLedgerInstall?: boolean;
+    /**
+     * The value the attribution setting held before this install wrote it.
+     * Replaces any earlier record: the install that overwrites a value is
+     * the one whose "before" uninstall must restore. Omit it when the
+     * install wrote nothing, so the first record survives re-runs.
+     */
+    attribution?: PreviousAttribution;
   },
 ): Promise<OwnershipLedger> {
   const existing = (await readOwnership(praxisDir)) ?? emptyLedger();
@@ -142,6 +165,8 @@ export async function recordOwnership(
     inheritedPreLedgerInstall:
       existing.inheritedPreLedgerInstall === true || added.inheritedPreLedgerInstall === true,
   };
+  const attribution = added.attribution ?? existing.attribution;
+  if (attribution) ledger.attribution = attribution;
   const path = ownershipPath(praxisDir);
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(ledger, null, 2) + '\n', 'utf8');

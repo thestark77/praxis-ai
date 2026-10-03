@@ -1,6 +1,6 @@
 ---
 name: praxis-firewall-protocol
-description: Use when a permission deny rule or the praxis AST hook blocks a command or file access. Holds the block-report protocol (what you tried, why, why it was blocked, what the user should do) and the ban on retries and creative bypasses until the user authorises.
+description: Use when a permission deny rule or the praxis AST hook blocks a command or file access, before reporting it or retrying.
 invocation: contextual
 praxis-native: true
 ---

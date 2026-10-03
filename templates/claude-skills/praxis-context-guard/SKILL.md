@@ -1,6 +1,6 @@
 ---
 name: praxis-context-guard
-description: Use when context usage is in the 50-60% window, when the user asks to save progress before /compact, or when a user turn begins with `[IRIS CONTEXT GUARD]` (prepare-compact or restore handoff=<path>). Holds the poll procedure, guard protocol, trust boundary, handoff path rules and exact reply strings.
+description: Use when context usage is at 50-60%, when asked to save progress before /compact, or when a user turn starts with `[IRIS CONTEXT GUARD]` (prepare-compact or restore handoff=<path>).
 invocation: contextual
 praxis-native: true
 ---

@@ -136,9 +136,12 @@ describe('integration: bundled templates resolve at runtime', () => {
     expect(entries).toContain('irreversibility-firewall.md');
     expect(entries).toContain('skill-invocation-policy.md');
     expect(entries).toContain('precedence-rules.md');
-    expect(entries).toContain('grilling.md');
-    expect(entries).toContain('context-conventions.md');
+    expect(entries).toContain('engineering-discipline.md');
     expect(entries).toContain('presets');
+    // Procedures moved to on-demand skills (templates/claude-skills); they
+    // must not ship as always-loaded modules any more.
+    expect(entries).not.toContain('grilling.md');
+    expect(entries).not.toContain('context-conventions.md');
   });
 });
 

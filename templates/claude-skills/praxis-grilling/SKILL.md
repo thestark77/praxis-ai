@@ -1,6 +1,6 @@
 ---
 name: praxis-grilling
-description: Use when the user accepts or invokes /grill-with-docs (how the grilling session runs), or when creating or updating CONTEXT.md, docs/adr/*.md or RTK.md in a project. Holds the question procedure, stop conditions and the CONTEXT.md and ADR formats.
+description: Use when the user accepts or invokes /grill-with-docs, or when creating or updating CONTEXT.md, docs/adr/*.md or RTK.md in a project.
 invocation: contextual
 praxis-native: true
 ---

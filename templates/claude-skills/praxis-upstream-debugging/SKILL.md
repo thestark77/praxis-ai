@@ -1,6 +1,6 @@
 ---
 name: praxis-upstream-debugging
-description: Use when a third-party open-source tool fails or behaves unexpectedly and the cause is not obvious: search its upstream issues and PRs (open and closed) and check whether the fix is installed before debugging locally. Also when filing or commenting upstream, which needs the user's OK.
+description: Use when a third-party open-source tool fails or behaves unexpectedly and the cause is not obvious: check its upstream issues and PRs before debugging locally, and before filing or commenting upstream.
 invocation: contextual
 praxis-native: true
 ---

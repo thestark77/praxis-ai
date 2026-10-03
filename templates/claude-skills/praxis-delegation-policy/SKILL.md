@@ -1,6 +1,6 @@
 ---
 name: praxis-delegation-policy
-description: Use when launching parallel subagents, worktrees or a workflow batch, or when choosing the reasoning effort or model for a task or subagent. Holds the disjoint-files, single-owner, never-deliver and max-4-writers rules and the effort ladder (medium default, high, rare xhigh/max).
+description: Use when launching parallel subagents, worktrees or a workflow batch, or when choosing the reasoning effort or model for a task or subagent.
 invocation: contextual
 praxis-native: true
 ---

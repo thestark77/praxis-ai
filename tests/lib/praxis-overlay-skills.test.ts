@@ -78,13 +78,13 @@ describe('overlay skills: manifest and shape', () => {
     expect(description).toMatch(/^Use when /);
   });
 
-  it('the skills the model can auto-load add at most 3 KB of listing text in total', async () => {
+  it('the skills the model can auto-load add at most 2 KB of listing text in total', async () => {
     let bytes = 0;
     for (const name of OVERLAY_SKILLS) {
       const { description } = frontmatter(await readSkill(name));
       bytes += Buffer.byteLength(`- ${name}: ${description}\n`);
     }
-    expect(bytes).toBeLessThanOrEqual(3000);
+    expect(bytes).toBeLessThanOrEqual(2000);
   });
 });
 

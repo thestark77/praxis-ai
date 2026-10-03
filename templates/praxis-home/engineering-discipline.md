@@ -21,7 +21,7 @@ the diff it refers to.
 
 Before calling a UI change done, try to break it: empty input, invalid input,
 double submit, refresh mid-flow, and back navigation. Use the tools named in
-`browser-testing-policy.md`.
+the `praxis-browser-testing` skill.
 
 ## 4. Close substantive work with a short report
 

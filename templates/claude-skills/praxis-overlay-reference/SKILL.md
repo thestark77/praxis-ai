@@ -1,6 +1,6 @@
 ---
 name: praxis-overlay-reference
-description: Use when installing, debugging or editing the praxis overlay, or when praxis and gentle-ai instructions seem to conflict: why the praxis block is last, what praxis never modifies in gentle-ai, standalone mode without gentle-ai, and the full balanced preset.
+description: Use when installing, debugging or editing the praxis overlay, or when praxis and gentle-ai instructions seem to conflict (placement rationale, standalone mode, the full balanced preset).
 invocation: contextual
 praxis-native: true
 ---

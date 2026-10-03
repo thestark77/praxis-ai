@@ -86,5 +86,12 @@ Owner decision (2026-10-03): deterministic, empty for commits and PRs.
   `77acb6a` (PR #27 merged).
 - 2026-10-03 — T1 implemented and verified (see TDD evidence). Not pushed.
 
+- 2026-10-03 09:20 — Native review of `77acb6a..02b5a35` (assessed `high`): four lenses,
+  approved, acknowledged, authority burned (lineage `review-3e5b2f57bd2ddb38`). Parent
+  spot check: `pnpm exec vitest run tests/lib/settings-patcher.test.ts` -> 36 passed.
+  Advisory (not fixed): the ledger records the previous value after the settings write,
+  so a crash between both leaves no record and `uninstall` would not restore it; two
+  readability/reliability suggestions.
+
 ## Next step
-Native review / PR decision by the orchestrator (no push or PR from the writer).
+Merge, then ship in release 0.1.0-alpha.29 and run `praxis install --force` on the VPS.

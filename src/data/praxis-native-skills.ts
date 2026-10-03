@@ -31,6 +31,19 @@ export const PRAXIS_NATIVE_SKILLS: PraxisNativeSkill[] = [
     invocation: 'explicit',
     files: ['SKILL.md'],
   },
+  // On-demand overlay skills. These carry procedures that used to be
+  // @-imported into every turn (templates/praxis-home). They are
+  // `contextual`: the description is the only always-loaded part, the body
+  // loads when the situation matches. See templates/praxis-home/main.md for
+  // the index of what lives where.
+  { name: 'praxis-command-handoff', invocation: 'contextual', files: ['SKILL.md'] },
+  { name: 'praxis-context-guard', invocation: 'contextual', files: ['SKILL.md'] },
+  { name: 'praxis-delegation-policy', invocation: 'contextual', files: ['SKILL.md'] },
+  { name: 'praxis-upstream-debugging', invocation: 'contextual', files: ['SKILL.md'] },
+  { name: 'praxis-browser-testing', invocation: 'contextual', files: ['SKILL.md'] },
+  { name: 'praxis-grilling', invocation: 'contextual', files: ['SKILL.md'] },
+  { name: 'praxis-firewall-protocol', invocation: 'contextual', files: ['SKILL.md'] },
+  { name: 'praxis-overlay-reference', invocation: 'contextual', files: ['SKILL.md'] },
 ];
 
 export const PRAXIS_NATIVE_SKILL_NAMES = PRAXIS_NATIVE_SKILLS.map((s) => s.name);

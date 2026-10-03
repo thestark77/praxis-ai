@@ -187,6 +187,9 @@ describe('runOpenCodeInstall', () => {
 
   it('refuses to write when OpenCode is not initialised and requireExisting is set', async () => {
     const home = await mkdtemp(join(tmpdir(), 'praxis-oc-missing-'));
+    // Pin the sandbox so an ambient XDG_CONFIG_HOME cannot point this test at an
+    // OpenCode dir that already exists outside it.
+    process.env.PRAXIS_HOME = home;
     const paths = resolveOpenCodePaths(home);
     await expect(
       runOpenCodeInstall({ paths, skillsTemplatesRoot, requireExisting: true }),

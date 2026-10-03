@@ -80,7 +80,14 @@ tooling:
    for architecture, sonnet for most phases, haiku for archiving).
 3. **Strict TDD** — `gentle-ai sync --agents claude-code --strict-tdd`.
    The `install` subcommand does not expose a TDD flag; `sync` owns it, so
-   praxis runs it as a second step.
+   praxis runs it as a second step. gentle-ai 4.0 retired the flag (its help
+   now reads `Retired (rejected); applicable test-first ODD is default` and
+   passing it exits 1), so praxis probes `gentle-ai sync --help` first and
+   passes `--strict-tdd` only while it is accepted. On a gentle-ai that retired
+   it, the step becomes a plain `gentle-ai sync --agents claude-code` with no
+   warning; if the probe is inconclusive, praxis tries the flag and retries once
+   without it on gentle-ai's own "--strict-tdd is retired" error. Every other
+   sync failure is still reported as a warning.
 
 ### Applied configuration
 
@@ -90,7 +97,7 @@ tooling:
 | Persona | `neutral` | `--persona` (override with `--ga-persona`) |
 | Preset | `full-gentleman` | `--preset` (override with `--ga-preset`) |
 | Models | `balanced` | gentle-ai default (no model flags) |
-| Strict TDD | enabled | `gentle-ai sync --strict-tdd` (disable with `--no-strict-tdd`) |
+| Strict TDD | enabled | `gentle-ai sync --strict-tdd` while accepted, built-in default on gentle-ai >= 4.0 (`--no-strict-tdd` skips the sync step; it cannot turn test-first off on >= 4.0) |
 
 ### Respecting an existing configuration
 

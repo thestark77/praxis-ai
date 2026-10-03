@@ -56,6 +56,11 @@ the whole stack and then layers its own overlay:
      — installs the 9 ecosystem components, including **engram** (persistent
      memory), with **balanced** model assignments (gentle-ai's default).
    - `gentle-ai sync --agents claude-code --strict-tdd` — enables Strict TDD.
+     gentle-ai 4.0 retired that flag (test-first development is now its
+     built-in default), so praxis probes `gentle-ai sync --help` and passes
+     `--strict-tdd` only while gentle-ai still accepts it; otherwise it runs
+     a plain `gentle-ai sync --agents claude-code`. The install summary then
+     reads `strict-tdd=retired-by-gentle-ai`.
    - If gentle-ai is already configured, this step is skipped to respect
      your existing choices (use `--force` to reapply praxis defaults).
 3. **praxis overlay** into `~/.claude/`:
@@ -256,7 +261,8 @@ re-running it updates each piece from its source.
 --ga-preset <p>         gentle-ai preset: full-gentleman | ecosystem-only | minimal | custom
                         (default full-gentleman)
 --ga-agents <csv>       gentle-ai agents                                  (default claude-code)
---no-strict-tdd         do not enable gentle-ai Strict TDD
+--no-strict-tdd         skip the gentle-ai Strict TDD sync step (no effect on gentle-ai >= 4.0,
+                        where test-first is the built-in default and cannot be switched off here)
 --dry-run               preview without writing (skips the bootstrap)
 ```
 

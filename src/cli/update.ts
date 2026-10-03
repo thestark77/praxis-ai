@@ -30,7 +30,9 @@ export function updateCommand(): Command {
           } else {
             console.log(
               `  gentle-ai: upgrade exit=${g.upgrade?.code ?? 'n/a'}, sync exit=${g.sync?.code ?? 'n/a'}` +
-                `, strict-tdd preserved=${g.strictTddPreserved}`,
+                (g.strictTddRetired
+                  ? ', strict-tdd=retired-by-gentle-ai (test-first is gentle-ai default)'
+                  : `, strict-tdd preserved=${g.strictTddPreserved}`),
             );
             if (g.claudeMdRepatched) {
               console.log('  CLAUDE.md: praxis block kept in last position');

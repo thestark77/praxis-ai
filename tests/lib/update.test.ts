@@ -21,13 +21,58 @@ beforeEach(async () => {
   await mkdir(join(home, '.claude'), { recursive: true });
 });
 
-function fakeRun(results: Record<string, CommandResult> = {}) {
+const HELP_FLAG_SUPPORTED = `USAGE
+  gentle-ai sync [flags]
+
+FLAGS
+  --agent, --agents <list>           Agents to sync
+  --strict-tdd                       Enable strict TDD mode for SDD agents
+  --dry-run                          Preview plan without executing
+`;
+
+const HELP_FLAG_RETIRED = `USAGE
+  gentle-ai sync [flags]
+
+FLAGS
+  --agent, --agents <list>           Agents to sync
+  --strict-tdd                       Retired (rejected); applicable test-first ODD is default
+  --dry-run                          Preview plan without executing
+`;
+
+const RETIRED_ERROR =
+  'Error: --strict-tdd is retired: ODD uses applicable test-first development by default; ' +
+  'rerun `gentle-ai sync` without --strict-tdd (retain any other flags)';
+
+const STRICT_TDD_ENABLED_BLOCK =
+  '<!-- gentle-ai:strict-tdd-mode -->\nStrict TDD Mode: enabled\n<!-- /gentle-ai:strict-tdd-mode -->\n';
+
+/** The real `gentle-ai sync` invocations (not the `--help` capability probe). */
+function syncInvocations(calls: Array<{ command: string; args: string[] }>): string[][] {
+  return calls
+    .filter((c) => c.command === 'gentle-ai' && c.args[0] === 'sync' && !c.args.includes('--help'))
+    .map((c) => c.args);
+}
+
+function fakeRun(
+  results: Record<string, CommandResult> = {},
+  syncHandler?: (args: string[]) => CommandResult | undefined,
+) {
   const calls: Array<{ command: string; args: string[] }> = [];
   const run = async (command: string, args: string[]): Promise<CommandResult> => {
     calls.push({ command, args });
+    // A scripted `sync` handler (real sync calls only) wins over the table.
+    if (syncHandler && args[0] === 'sync' && !args.includes('--help')) {
+      const scripted = syncHandler(args);
+      if (scripted) return scripted;
+    }
     // Most specific key wins: "<command> <subcommand>", then "<subcommand>".
     const specific = results[`${command} ${args[0]}`] ?? results[args[0] ?? command];
     if (specific) return specific;
+    // The strict-tdd capability probe answers like a gentle-ai that still
+    // accepts the flag, unless a test overrides `sync --help`.
+    if (args[0] === 'sync' && args.includes('--help')) {
+      return { code: 0, stdout: HELP_FLAG_SUPPORTED, stderr: '' };
+    }
     // Version probes default to the expected versions (no drift).
     if (args[0] === 'version') {
       const v = command === 'engram' ? EXPECTED_ENGRAM_VERSION : EXPECTED_GENTLE_AI_VERSION;
@@ -110,8 +155,9 @@ describe('runUpdate — both targets', () => {
 
     // gentle-ai: upgrade (scoped to gentle-ai only) then sync --strict-tdd.
     expect(calls[0]).toEqual({ command: 'gentle-ai', args: ['upgrade', 'gentle-ai'] });
-    expect(calls[1]).toEqual({ command: 'gentle-ai', args: ['sync', '--strict-tdd'] });
+    expect(syncInvocations(calls)).toEqual([['sync', '--strict-tdd']]);
     expect(result.gentleAi?.strictTddPreserved).toBe(true);
+    expect(result.gentleAi?.strictTddRetired).toBe(false);
 
     // skills: every lifted file fetched from the praxis-ai repo + written.
     expect(fetched.every((u) => u.startsWith(PRAXIS_SKILLS_BASE_URL))).toBe(true);
@@ -138,7 +184,83 @@ describe('runUpdate — both targets', () => {
     const { fetchFile } = fakeFetch();
     const result = await runUpdate({ paths, run, fetchFile, hasGentleAi: () => true });
     expect(result.gentleAi?.strictTddPreserved).toBe(false);
-    expect(calls.find((c) => c.args[0] === 'sync')!.args).toEqual(['sync']);
+    expect(syncInvocations(calls)).toEqual([['sync']]);
+    // Disabled: nothing to probe.
+    expect(calls.some((c) => c.args.includes('--help'))).toBe(false);
+  });
+});
+
+describe('runUpdate — gentle-ai retired --strict-tdd', () => {
+  async function enabledHome() {
+    const paths = resolvePaths(home);
+    await writeFile(paths.claudeMd, STRICT_TDD_ENABLED_BLOCK, 'utf8');
+    return paths;
+  }
+
+  it('does NOT pass --strict-tdd once gentle-ai retired it, with no warning', async () => {
+    const paths = await enabledHome();
+    const { run, calls } = fakeRun({
+      'gentle-ai sync': { code: 0, stdout: HELP_FLAG_RETIRED, stderr: '' },
+    });
+    const { fetchFile } = fakeFetch();
+    const result = await runUpdate({ paths, run, fetchFile, hasGentleAi: () => true });
+    // The managed block still says enabled (it predates the upgrade); the
+    // sync keeps going without the retired flag.
+    expect(syncInvocations(calls)).toEqual([['sync']]);
+    expect(result.gentleAi?.strictTddPreserved).toBe(true);
+    expect(result.gentleAi?.strictTddRetired).toBe(true);
+    expect(result.gentleAi?.sync?.code).toBe(0);
+    expect(result.gentleAi?.warnings).toEqual([]);
+  });
+
+  it('retries once without the flag when the help probe is unusable and sync says "is retired"', async () => {
+    const paths = await enabledHome();
+    const { run, calls } = fakeRun({}, (args) =>
+      args.includes('--strict-tdd') ? { code: 1, stdout: '', stderr: RETIRED_ERROR } : undefined,
+    );
+    // Unusable probe: nothing recognizable on stdout.
+    const probeBroken = async (command: string, args: string[]) => {
+      if (args[0] === 'sync' && args.includes('--help')) {
+        calls.push({ command, args });
+        return { code: 1, stdout: '', stderr: 'boom' };
+      }
+      return run(command, args);
+    };
+    const { fetchFile } = fakeFetch();
+    const result = await runUpdate({
+      paths,
+      run: probeBroken,
+      fetchFile,
+      hasGentleAi: () => true,
+    });
+    expect(syncInvocations(calls)).toEqual([['sync', '--strict-tdd'], ['sync']]);
+    expect(result.gentleAi?.strictTddRetired).toBe(true);
+    expect(result.gentleAi?.sync?.code).toBe(0);
+    expect(result.gentleAi?.warnings).toEqual([]);
+  });
+
+  it('still warns about any other sync failure', async () => {
+    const paths = await enabledHome();
+    const { run, calls } = fakeRun({}, () => ({ code: 3, stdout: '', stderr: 'disk full' }));
+    const { fetchFile } = fakeFetch();
+    const result = await runUpdate({ paths, run, fetchFile, hasGentleAi: () => true });
+    expect(syncInvocations(calls)).toEqual([['sync', '--strict-tdd']]);
+    expect(result.gentleAi?.strictTddRetired).toBe(false);
+    expect(result.gentleAi?.warnings.some((w) => /sync exited 3.*disk full/.test(w))).toBe(true);
+  });
+
+  it('keeps a disabled TDD block untouched: no flag, no probe, not retired', async () => {
+    const paths = resolvePaths(home);
+    await writeFile(
+      paths.claudeMd,
+      '<!-- gentle-ai:strict-tdd-mode -->\nStrict TDD Mode: disabled\n<!-- /gentle-ai:strict-tdd-mode -->\n',
+      'utf8',
+    );
+    const { run, calls } = fakeRun();
+    const { fetchFile } = fakeFetch();
+    const result = await runUpdate({ paths, run, fetchFile, hasGentleAi: () => true });
+    expect(syncInvocations(calls)).toEqual([['sync']]);
+    expect(result.gentleAi?.strictTddRetired).toBe(false);
   });
 });
 

@@ -168,6 +168,21 @@ describe('praxis-context-guard', () => {
     expect(content).toContain('COMPACT-FAILED - <short reason>');
   });
 
+  it('documents the Iris guard thresholds (40 soft, 52 hard cap, 58 native)', async () => {
+    const content = flatten(await readSkill('praxis-context-guard'));
+    expect(content).toContain('Guard thresholds');
+    expect(content).toContain('soft threshold (40%)');
+    expect(content).toContain('hard cap (52%)');
+    expect(content).toContain('native auto-compact (58%)');
+  });
+
+  it('requires a memory sweep to Engram before compacting, leaving only active work and pointers', async () => {
+    const content = flatten(await readSkill('praxis-context-guard'));
+    expect(content).toContain('Memory sweep');
+    expect(content).toContain('decisions, discoveries and conventions');
+    expect(content).toContain('only the active work and pointers to memory');
+  });
+
   it('validates the restore path is absolute and recognizably a handoff document before loading it', async () => {
     const content = flatten(await readSkill('praxis-context-guard'));
     expect(content).toContain('MUST be an absolute path');

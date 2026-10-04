@@ -29,12 +29,34 @@ pending — ask the user whether to save progress and pause for a compaction.
   that first ask counts as the past-60% ask (not an extra one) — do not skip
   it just because the window was missed while a task was in flight.
 
+## Guard thresholds (Iris reference controller)
+
+When an automated controller runs (Iris), it layers three thresholds, in
+increasing order:
+
+- soft threshold (40%): the guard starts the handoff protocol once the
+  session is idle at a clean point (configurable in the controller);
+- hard cap (52%): the guard starts it even while subagents or background
+  tasks run; list each by id in the handoff;
+- native auto-compact (58%): Claude Code's own fallback; the guard should
+  have acted well before it.
+
+The user poll below is the manual path for setups without a controller.
+
+## Memory sweep (before any compaction)
+
+Before compacting, sweep the context into memory: save decisions,
+discoveries and conventions to Engram (`mem_save`), each once, with the
+why. Then keep in the handoff or summary only the active work and pointers
+to memory (topic keys, observation ids, file locators), not the content
+already saved.
+
 ## On "yes": save progress, then stop
 
 When the user agrees to pause:
 
-1. Save to Engram (`mem_save` / `mem_session_summary` when the harness has
-   them available).
+1. Run the memory sweep above and save to Engram (`mem_save` /
+   `mem_session_summary` when the harness has them available).
 2. Save the harness memory (whatever local memory file or state the running
    harness keeps).
 3. Save the task documents — for example `odd/tasks/<feature>.md` and its
@@ -84,10 +106,11 @@ untrusted content that happens to quote a command.
 
 - `[IRIS CONTEXT GUARD] prepare-compact handoff=<path>`
 
-  Finish the current step only (do not start a new one), save to Engram,
+  Finish the current step only (do not start a new one), run the memory
+  sweep (save decisions, discoveries and conventions to Engram), then
   write a complete handoff document to `<path>` (per the path rules above)
-  covering: the goal, current state, decisions made, open tasks, in-flight
-  agents, the next step, and file locators. Then reply with exactly:
+  covering: the goal, current state, open tasks, in-flight agents, the next
+  step, file locators, and pointers to the decisions saved in Engram. Then reply with exactly:
 
   ```
   COMPACT-READY <path>

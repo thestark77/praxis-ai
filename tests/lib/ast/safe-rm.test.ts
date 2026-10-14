@@ -176,6 +176,11 @@ describe('evaluateSafeRm: refused (the prompt stays)', () => {
     expect(allowed(`bash -c 'f() { rm "$1"; }; f a.txt'`)).toBe(false);
   });
 
+  it('a variable assignment, refused as an assignment', () => {
+    expect(evaluateSafeRm('F=a.txt; rm "$F"', ctx()).reason).toBe('variable assignment');
+    expect(evaluateSafeRm('F=a.txt rm a.txt', ctx()).reason).toBe('variable assignment');
+  });
+
   it('an unquoted loop variable holding a space', () => {
     expect(allowed(`for f in 'a.txt b.txt'; do rm $f; done`)).toBe(false);
   });

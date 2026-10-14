@@ -377,15 +377,15 @@ function evalList(cmds: Cmd[], env: Env, depth: number, st: EvalState): void {
       }
       continue;
     }
+    // The lexer stores unquoted text one character per part, so read the
+    // leading unquoted run of the first word, not just its first part.
     const first = cmd.words[0];
-    if (
-      first.length > 0 &&
-      first[0].kind === 'lit' &&
-      !first[0].quoted &&
-      /^[A-Za-z_]\w*\+?=/.test(first[0].text)
-    ) {
-      refuse('variable assignment');
+    let lead = '';
+    for (const p of first) {
+      if (p.kind !== 'lit' || p.quoted) break;
+      lead += p.text;
     }
+    if (/^[A-Za-z_]\w*\+?=/.test(lead)) refuse('variable assignment');
     const argv = cmd.words.map((w) => expand(w, env, st.ctx.home));
     const prog = argv[0];
     if (prog === 'rm') {

@@ -4,6 +4,21 @@ All notable changes to praxis-ai are documented here.
 This project follows [Semantic Versioning](https://semver.org/) and
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added - unattended sessions can delete their own temp files
+
+Claude Code's built-in rm safety prompt ("This shell -c script runs rm and
+could not be checked") cannot be answered by a PreToolUse `allow`, so
+unattended sessions stalled on it until it auto-denied. `praxis install` now
+also registers `praxis-ast-hook` as a `PermissionRequest` hook on `Bash`. It
+approves the prompt only for a statically verified plain `rm` (no `-r`,
+`-f` or other flag but `-v`, no glob or unresolved variable) of existing
+files inside the session's own worktree under `~/worktrees/` or a
+`/tmp/claude-*/` directory, and stays silent for anything else, so the
+prompt is unchanged there. See "Narrow exception" in `docs/firewall.md`.
+`praxis uninstall` removes both entries. Upgrading needs `praxis install`.
+
 ## [0.1.0-alpha.31] - 2026-10-03
 
 ### Fixed - the claude.ai session link is hidden too (`attribution.sessionUrl`)

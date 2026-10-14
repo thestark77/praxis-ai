@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { execSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, realpathSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -60,5 +62,55 @@ describe('praxis-ast-hook binary', () => {
     const out = runHook('not json');
     expect(out.hookSpecificOutput.permissionDecision).toBe('allow');
     expect(out.hookSpecificOutput.permissionDecisionReason).toMatch(/not JSON/i);
+  });
+});
+
+describe('praxis-ast-hook binary: PermissionRequest (narrow rm exception)', () => {
+  const home = realpathSync(mkdtempSync(resolve(tmpdir(), 'praxis-pr-home-')));
+  const wt = resolve(home, 'worktrees', 'wt');
+  mkdirSync(resolve(wt, '.git'), { recursive: true });
+  writeFileSync(resolve(wt, 'a.txt'), 'x');
+
+  function runPermissionRequest(command: string, cwd = wt): string {
+    const input = JSON.stringify({
+      hook_event_name: 'PermissionRequest',
+      tool_name: 'Bash',
+      tool_input: { command },
+      cwd,
+    });
+    return execSync(`node ${hookBin}`, {
+      input,
+      encoding: 'utf8',
+      env: { ...process.env, HOME: home },
+    });
+  }
+
+  it('approves the unparseable shell -c rm of a worktree file', () => {
+    const out = JSON.parse(runPermissionRequest("bash -c $'rm a.txt\\necho ok'"));
+    expect(out).toEqual({
+      hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } },
+    });
+    // The hook only decides; it never deletes anything itself.
+    expect(existsSync(resolve(wt, 'a.txt'))).toBe(true);
+  });
+
+  it.each([
+    'rm -rf a.txt',
+    'rm -r -f a.txt',
+    'rm --force a.txt',
+    'sudo rm a.txt',
+    'rm $F',
+    'rm *.txt',
+    'rm /etc/hostname',
+  ])('stays silent (prompt kept) for %s', (command) => {
+    expect(runPermissionRequest(command)).toBe('');
+  });
+
+  it('stays silent outside ~/worktrees', () => {
+    expect(runPermissionRequest('rm a.txt', home)).toBe('');
+  });
+
+  it('cleans up', () => {
+    rmSync(home, { recursive: true, force: true });
   });
 });

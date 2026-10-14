@@ -117,3 +117,49 @@ describe('removePraxisAstHook', () => {
     expect(updated).toEqual(initial);
   });
 });
+
+describe('PermissionRequest registration (narrow rm exception)', () => {
+  it('registers the same tagged command for PermissionRequest on Bash', () => {
+    const updated = addPraxisAstHook({}, 'praxis-ast-hook');
+    const pr = updated.hooks?.PermissionRequest;
+    expect(pr).toHaveLength(1);
+    expect(pr![0].matcher).toBe('Bash');
+    expect(pr![0].hooks[0].command).toBe(`praxis-ast-hook ${PRAXIS_AST_HOOK_MARKER}`);
+    // The PreToolUse firewall entry is still there, unchanged.
+    expect(updated.hooks?.PreToolUse![0].hooks[0].command).toBe(
+      `praxis-ast-hook ${PRAXIS_AST_HOOK_MARKER}`,
+    );
+  });
+
+  it('is idempotent and keeps user PermissionRequest hooks', () => {
+    const initial: ClaudeSettings = {
+      hooks: {
+        PermissionRequest: [
+          { matcher: 'Bash', hooks: [{ type: 'command', command: 'user-pr-hook' }] },
+        ],
+      },
+    };
+    const twice = addPraxisAstHook(addPraxisAstHook(initial, 'praxis-ast-hook'), 'praxis-ast-hook');
+    const cmds = twice.hooks!.PermissionRequest!.flatMap((m) => m.hooks.map((h) => h.command));
+    expect(cmds.filter((c) => c.includes(PRAXIS_AST_HOOK_MARKER))).toHaveLength(1);
+    expect(cmds).toContain('user-pr-hook');
+  });
+
+  it('uninstall removes both entries and nothing else', () => {
+    const installed = addPraxisAstHook(
+      {
+        hooks: {
+          PermissionRequest: [
+            { matcher: 'Bash', hooks: [{ type: 'command', command: 'user-pr-hook' }] },
+          ],
+        },
+      },
+      'praxis-ast-hook',
+    );
+    const removed = removePraxisAstHook(installed);
+    expect(removed.hooks?.PreToolUse).toBeUndefined();
+    expect(removed.hooks?.PermissionRequest).toEqual([
+      { matcher: 'Bash', hooks: [{ type: 'command', command: 'user-pr-hook' }] },
+    ]);
+  });
+});

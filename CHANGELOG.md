@@ -4,7 +4,7 @@ All notable changes to praxis-ai are documented here.
 This project follows [Semantic Versioning](https://semver.org/) and
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [0.1.0-alpha.32] - 2026-10-14
 
 ### Added - unattended sessions can delete their own temp files
 
@@ -18,6 +18,7 @@ files inside the session's own worktree under `~/worktrees/` or a
 `/tmp/claude-*/` directory, and stays silent for anything else, so the
 prompt is unchanged there. See "Narrow exception" in `docs/firewall.md`.
 `praxis uninstall` removes both entries. Upgrading needs `praxis install`.
+The exception is POSIX-only: on Windows the hook never approves.
 
 ## [0.1.0-alpha.31] - 2026-10-03
 

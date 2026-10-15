@@ -20,8 +20,17 @@
 //       "permissionDecisionReason": "<string>"
 //     }
 //   }
+//
+// The same binary is also registered as a PermissionRequest hook. Claude
+// Code calls it when it is about to show a permission prompt. It answers
+// only one case, the narrow `rm` exception in `../lib/ast/safe-rm.ts`, with
+//   { "hookSpecificOutput": { "hookEventName": "PermissionRequest",
+//                             "decision": { "behavior": "allow" } } }
+// and otherwise prints nothing, so the prompt is shown as before.
 
+import { homedir } from 'node:os';
 import { inspectBashCommand } from '../lib/ast/inspect.js';
+import { evaluateSafeRm } from '../lib/ast/safe-rm.js';
 import { resolvePaths } from '../lib/paths.js';
 import { openDatabase, closeDatabase } from '../lib/telemetry/db.js';
 import { recordDenyHit } from '../lib/telemetry/events.js';
@@ -29,6 +38,8 @@ import type { RuleHit } from '../lib/ast/rules.js';
 
 interface HookInput {
   session_id?: string;
+  hook_event_name?: string;
+  cwd?: string;
   tool_name?: string;
   tool_input?: { command?: string };
 }
@@ -95,6 +106,35 @@ async function tryRecordDenyHit(
   }
 }
 
+/**
+ * PermissionRequest: approve a prompt only for the narrow `rm` exception.
+ * The command must also pass every AST rule, so this can never approve
+ * something the PreToolUse side would deny. No output means no decision.
+ */
+function handlePermissionRequest(parsed: HookInput): void {
+  if (parsed.tool_name !== 'Bash') return;
+  const command = parsed.tool_input?.command ?? '';
+  if (!command.trim() || typeof parsed.cwd !== 'string' || !parsed.cwd) return;
+  if (inspectBashCommand(command).decision !== 'allow') return;
+  let verdict;
+  try {
+    verdict = evaluateSafeRm(command, { cwd: parsed.cwd, home: homedir() });
+  } catch {
+    // An unexpected failure here must never approve anything: with no
+    // output the prompt is shown exactly as it would be without praxis.
+    return;
+  }
+  if (!verdict.allow) return;
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PermissionRequest',
+        decision: { behavior: 'allow' },
+      },
+    }),
+  );
+}
+
 export async function runAstHook(): Promise<void> {
   const raw = await readStdin();
   let parsed: HookInput;
@@ -105,6 +145,11 @@ export async function runAstHook(): Promise<void> {
     // when its own machinery is broken; the regex deny list still
     // applies as a baseline.
     emitDecision('allow', 'praxis-ai AST hook: input was not JSON; allowing by default.');
+    return;
+  }
+
+  if (parsed.hook_event_name === 'PermissionRequest') {
+    handlePermissionRequest(parsed);
     return;
   }
 

@@ -89,6 +89,50 @@ rule that hit and its reversibility class. The reason text is the same
 text Claude sees, so the agent gets explicit guidance about why the
 command was blocked and what reversibility class applies.
 
+## Narrow exception — `rm` of the session's own temporary files
+
+Owner decision (2026-10-13): an unattended session must be able to delete
+its own temporary files without a prompt.
+
+The exception is POSIX-only (Linux, macOS). On Windows the hook never
+approves and the prompt stays.
+
+Claude Code asks before some `rm` commands on its own, most often a
+`bash -c` script it cannot parse (*"This shell -c script runs rm and could
+not be checked"*). That ask is a built-in safety check, not a praxis rule:
+a PreToolUse `allow` does not answer it (verified against Claude Code
+2.1.299), so with nobody at the keyboard it auto-denies after a timeout and
+the session stalls. Only a `PermissionRequest` hook can answer it, so
+`praxis install` also registers `praxis-ast-hook` for `PermissionRequest`
+on the `Bash` matcher. On that event the hook answers `allow` only when
+`src/lib/ast/safe-rm.ts` proves all of the following, and otherwise prints
+nothing, so the prompt is shown exactly as before:
+
+- the command passes every Layer 2 rule above;
+- the command is built only from `rm`, `echo`, `printf`, `true`, `:`, nested
+  `sh -c`/`bash -c` scripts (up to 3 levels), `for NAME in WORDS; do ...;
+  done` over literal words, the `;` `&&` `||` newline separators, and output
+  sent to `/dev/null` or `2>&1`;
+- every `rm` has no flag other than `-v` and `--` (so no `-r`, `-R`, `-f`,
+  `-d`, `-i`, `--recursive`, `--force`, in any spelling or combination);
+- every target is a literal path (no glob, brace expansion, `$VAR` other
+  than the loop variable, `$(...)` or backticks) naming an existing file or
+  symlink, not a directory, outside any `.git` directory, that resolves with
+  `realpath(3)` (symlinks and `..` resolved as the kernel does) inside
+  either the git worktree that contains the session's `cwd`, when that
+  worktree sits under `~/worktrees/`, or a `/tmp/claude-*/` directory owned
+  by the current user; a symlink target must resolve inside them too.
+
+Still prompted (never auto-approved): `rm -rf` and every recursive or force
+spelling (which Layer 1 and `rm-recursive-force` also deny), `sudo rm`, any
+path outside those roots (including another worktree), a directory, a file
+that does not exist, and anything the hook cannot resolve statically. The
+hook never denies on this event and never deletes anything itself. Claude
+Code's deny rules are evaluated before `PermissionRequest`, so this
+exception cannot override Layer 1. The blanket switch
+`CLAUDE_CODE_DISABLE_INLINE_SHELL_RM_PROMPT` is deliberately not used: it
+would drop the check for every path.
+
 ## Fail-open policy
 
 If the hook receives malformed input or otherwise crashes, it emits an

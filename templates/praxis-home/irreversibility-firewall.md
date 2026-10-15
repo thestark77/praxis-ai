@@ -34,6 +34,13 @@ Full report format: skill `praxis-firewall-protocol`.
   (`git branch --merged`). Never use `-D`, `-d --force`/`-f`, or any
   combined-flag spelling of force-delete.
 
+## Narrow exception: deleting your own temp files
+
+The hook auto-approves Claude Code's `rm` prompt only for a plain `rm` (no
+`-r`/`-f`, no glob, no variable) of existing files inside your own worktree
+under `~/worktrees/` or a `/tmp/claude-*/` dir. Everything else still asks;
+do not reshape a command to fit the exception for anything else.
+
 ## Anticipatory pauses (no deny block needed)
 
 Even when the permission layer does NOT block, pause and confirm before any

@@ -18,6 +18,7 @@ export interface ClaudeSettings {
   };
   hooks?: {
     PreToolUse?: ClaudeHookMatcher[];
+    PermissionRequest?: ClaudeHookMatcher[];
     [key: string]: unknown;
   };
   [key: string]: unknown;
@@ -93,59 +94,77 @@ export async function unpatchSettings(path: string, denyAdditions: string[]): Pr
 }
 
 /**
- * Register the praxis-ai AST PreToolUse hook in settings.json. The hook
- * is marker-tagged so subsequent installs are idempotent and uninstall
- * can find its entry to remove. Existing user hooks are preserved.
+ * The hook events the praxis AST hook binary is registered for, both on the
+ * `Bash` matcher. PreToolUse runs the firewall rules; PermissionRequest
+ * answers Claude Code's own rm safety prompt for the narrow `rm` exception
+ * (see src/lib/ast/safe-rm.ts) and stays silent for everything else.
+ */
+export const PRAXIS_AST_HOOK_EVENTS = ['PreToolUse', 'PermissionRequest'] as const;
+
+/**
+ * Register the praxis-ai AST hook in settings.json for every event in
+ * `PRAXIS_AST_HOOK_EVENTS`. Each entry is marker-tagged so subsequent
+ * installs are idempotent and uninstall can find it to remove. Existing
+ * user hooks are preserved.
  */
 export function addPraxisAstHook(settings: ClaudeSettings, hookCommand: string): ClaudeSettings {
   const result: ClaudeSettings = { ...settings };
   const hooks = { ...(result.hooks ?? {}) };
-  const preList: ClaudeHookMatcher[] = Array.isArray(hooks.PreToolUse) ? [...hooks.PreToolUse] : [];
-
   const taggedCommand = `${hookCommand} ${PRAXIS_AST_HOOK_MARKER}`;
 
-  // If any praxis-tagged entry already exists, replace its command; do
-  // not duplicate. Otherwise append a new matcher block.
-  let replaced = false;
-  for (let i = 0; i < preList.length; i++) {
-    const entry = preList[i];
-    if (entry.matcher !== 'Bash') continue;
-    const idx = entry.hooks.findIndex((h) => h.command.includes(PRAXIS_AST_HOOK_MARKER));
-    if (idx >= 0) {
-      const newHooks = [...entry.hooks];
-      newHooks[idx] = { type: 'command', command: taggedCommand };
-      preList[i] = { ...entry, hooks: newHooks };
-      replaced = true;
-      break;
+  for (const event of PRAXIS_AST_HOOK_EVENTS) {
+    const list: ClaudeHookMatcher[] = Array.isArray(hooks[event]) ? [...hooks[event]] : [];
+
+    // If any praxis-tagged entry already exists, replace its command; do
+    // not duplicate. Otherwise append a new matcher block.
+    let replaced = false;
+    for (let i = 0; i < list.length; i++) {
+      const entry = list[i];
+      if (entry.matcher !== 'Bash') continue;
+      const idx = entry.hooks.findIndex((h) => h.command.includes(PRAXIS_AST_HOOK_MARKER));
+      if (idx >= 0) {
+        const newHooks = [...entry.hooks];
+        newHooks[idx] = { type: 'command', command: taggedCommand };
+        list[i] = { ...entry, hooks: newHooks };
+        replaced = true;
+        break;
+      }
     }
-  }
-  if (!replaced) {
-    preList.push({
-      matcher: 'Bash',
-      hooks: [{ type: 'command', command: taggedCommand }],
-    });
+    if (!replaced) {
+      list.push({
+        matcher: 'Bash',
+        hooks: [{ type: 'command', command: taggedCommand }],
+      });
+    }
+    hooks[event] = list;
   }
 
-  hooks.PreToolUse = preList;
   result.hooks = hooks;
   return result;
 }
 
 export function removePraxisAstHook(settings: ClaudeSettings): ClaudeSettings {
   const result: ClaudeSettings = { ...settings };
-  if (!result.hooks?.PreToolUse) return result;
-  const hooks = { ...result.hooks };
-  const filteredMatchers: ClaudeHookMatcher[] = [];
-  for (const matcher of hooks.PreToolUse ?? []) {
-    const filteredHooks = matcher.hooks.filter((h) => !h.command.includes(PRAXIS_AST_HOOK_MARKER));
-    if (filteredHooks.length > 0) {
-      filteredMatchers.push({ ...matcher, hooks: filteredHooks });
-    }
+  if (!result.hooks || !PRAXIS_AST_HOOK_EVENTS.some((e) => Array.isArray(result.hooks?.[e]))) {
+    return result;
   }
-  if (filteredMatchers.length > 0) {
-    hooks.PreToolUse = filteredMatchers;
-  } else {
-    delete hooks.PreToolUse;
+  const hooks = { ...result.hooks };
+  for (const event of PRAXIS_AST_HOOK_EVENTS) {
+    if (!Array.isArray(hooks[event])) continue;
+    const filteredMatchers: ClaudeHookMatcher[] = [];
+    for (const matcher of hooks[event]) {
+      const filteredHooks = matcher.hooks.filter(
+        (h) => !h.command.includes(PRAXIS_AST_HOOK_MARKER),
+      );
+      if (filteredHooks.length > 0) {
+        filteredMatchers.push({ ...matcher, hooks: filteredHooks });
+      }
+    }
+    if (filteredMatchers.length > 0) {
+      hooks[event] = filteredMatchers;
+    } else {
+      delete hooks[event];
+    }
   }
   if (Object.keys(hooks).length === 0) {
     delete result.hooks;

@@ -85,14 +85,18 @@ describe('praxis-ast-hook binary: PermissionRequest (narrow rm exception)', () =
     });
   }
 
-  it('approves the unparseable shell -c rm of a worktree file', () => {
-    const out = JSON.parse(runPermissionRequest("bash -c $'rm a.txt\\necho ok'"));
-    expect(out).toEqual({
-      hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } },
-    });
-    // The hook only decides; it never deletes anything itself.
-    expect(existsSync(resolve(wt, 'a.txt'))).toBe(true);
-  });
+  // The rm exception is POSIX-only: on Windows the hook stays silent.
+  it.skipIf(process.platform === 'win32')(
+    'approves the unparseable shell -c rm of a worktree file',
+    () => {
+      const out = JSON.parse(runPermissionRequest("bash -c $'rm a.txt\\necho ok'"));
+      expect(out).toEqual({
+        hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } },
+      });
+      // The hook only decides; it never deletes anything itself.
+      expect(existsSync(resolve(wt, 'a.txt'))).toBe(true);
+    },
+  );
 
   it.each([
     'rm -rf a.txt',
@@ -104,6 +108,10 @@ describe('praxis-ast-hook binary: PermissionRequest (narrow rm exception)', () =
     'rm /etc/hostname',
   ])('stays silent (prompt kept) for %s', (command) => {
     expect(runPermissionRequest(command)).toBe('');
+  });
+
+  it.runIf(process.platform === 'win32')('stays silent on Windows', () => {
+    expect(runPermissionRequest("bash -c $'rm a.txt\\necho ok'")).toBe('');
   });
 
   it('stays silent outside ~/worktrees', () => {

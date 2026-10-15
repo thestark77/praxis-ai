@@ -16,6 +16,10 @@ import { evaluateSafeRm, type SafeRmContext } from '../../../src/lib/ast/safe-rm
 //   tmp/claude-test/x.txt        <- Claude temp root
 //   tmp/other/x.txt              <- temp dir that is not claude-*
 //   outside/secret.txt outside/nested/
+// The exception is POSIX-only (see the win32 case at the end), so the
+// fixture suites below, which rely on POSIX paths, symlinks and uids, are
+// skipped on Windows.
+const posix = process.platform !== 'win32';
 let base: string;
 let home: string;
 let wt: string;
@@ -31,6 +35,7 @@ function allowed(command: string, over: Partial<SafeRmContext> = {}): boolean {
 }
 
 beforeAll(() => {
+  if (!posix) return;
   base = realpathSync(mkdtempSync(join(tmpdir(), 'praxis-safe-rm-')));
   home = join(base, 'home');
   wt = join(home, 'worktrees', 'wt');
@@ -57,10 +62,11 @@ beforeAll(() => {
 });
 
 afterAll(() => {
+  if (!posix) return;
   rmSync(base, { recursive: true, force: true });
 });
 
-describe('evaluateSafeRm: approved', () => {
+describe.skipIf(!posix)('evaluateSafeRm: approved', () => {
   it('a plain rm of a file in the session worktree', () => {
     const v = evaluateSafeRm('rm a.txt', ctx());
     expect(v.allow).toBe(true);
@@ -103,7 +109,7 @@ describe('evaluateSafeRm: approved', () => {
   });
 });
 
-describe('evaluateSafeRm: refused (the prompt stays)', () => {
+describe.skipIf(!posix)('evaluateSafeRm: refused (the prompt stays)', () => {
   it.each([
     'rm -rf a.txt',
     'rm -fr a.txt',
@@ -219,5 +225,16 @@ describe('evaluateSafeRm: refused (the prompt stays)', () => {
   it('rm with no target', () => {
     expect(allowed('rm')).toBe(false);
     expect(allowed('echo hi')).toBe(false);
+  });
+});
+
+describe('evaluateSafeRm: Windows', () => {
+  it('never approves on win32', () => {
+    const v = evaluateSafeRm('rm a.txt', {
+      cwd: join('home', 'worktrees', 'wt'),
+      home: 'home',
+      platform: 'win32',
+    });
+    expect(v).toEqual({ allow: false, reason: 'the rm exception is POSIX-only', targets: [] });
   });
 });

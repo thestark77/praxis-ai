@@ -30,6 +30,8 @@ export interface SafeRmContext {
   tmpBase?: string;
   /** Owner uid the `claude-*` temp dir must have. Defaults to the process uid. */
   uid?: number;
+  /** Host platform. Defaults to `process.platform`; tests override it. */
+  platform?: NodeJS.Platform;
 }
 
 export interface SafeRmVerdict {
@@ -549,8 +551,14 @@ export function evaluateSafeRm(command: string, context: SafeRmContext): SafeRmV
   const ctx: Required<SafeRmContext> = {
     tmpBase: '/tmp',
     uid: typeof process.getuid === 'function' ? process.getuid() : -1,
+    platform: process.platform,
     ...context,
   };
+  // The roots, uid ownership and path rules are POSIX. On Windows nothing
+  // is approved and the prompt stays.
+  if (ctx.platform === 'win32') {
+    return { allow: false, reason: 'the rm exception is POSIX-only', targets: [] };
+  }
   if (command.length > MAX_COMMAND_LENGTH) {
     return { allow: false, reason: 'command too long to check', targets: [] };
   }

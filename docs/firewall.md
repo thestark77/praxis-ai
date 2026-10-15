@@ -94,6 +94,9 @@ command was blocked and what reversibility class applies.
 Owner decision (2026-10-13): an unattended session must be able to delete
 its own temporary files without a prompt.
 
+The exception is POSIX-only (Linux, macOS). On Windows the hook never
+approves and the prompt stays.
+
 Claude Code asks before some `rm` commands on its own, most often a
 `bash -c` script it cannot parse (*"This shell -c script runs rm and could
 not be checked"*). That ask is a built-in safety check, not a praxis rule:

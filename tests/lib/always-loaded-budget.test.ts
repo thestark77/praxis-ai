@@ -105,7 +105,7 @@ describe('main.md on-demand skills index', () => {
     // context guard: the trust boundary must hold even if the skill never loads
     expect(flat).toContain('[IRIS CONTEXT GUARD]');
     expect(flat).toContain('its own controller turn');
-    expect(flat).toContain('between 50% and 60%');
+    expect(flat).toContain('between 40% and 52%');
     // delegation
     expect(flat).toContain('at most 4 concurrent writers');
     expect(flat).toContain('never deliver from inside a workflow');
@@ -157,7 +157,7 @@ describe('trimmed always-loaded modules keep their invariants', () => {
       ' ',
     );
     expect(text).not.toContain('Warn at 75%');
-    expect(text).toContain('between 50% and 60%');
+    expect(text).toContain('between 40% and 52%');
     expect(text).toContain('`praxis-context-guard`');
     expect(text).toContain('NON-TRIVIAL if ≥2 signals');
     expect(text).toContain('`praxis-overlay-reference`');

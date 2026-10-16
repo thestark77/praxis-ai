@@ -139,7 +139,7 @@ document before they leave:
   applies in full during away mode; away mode changes who answers a
   blocking question, never whether one gets asked for an irreversible
   action.
-- **No context-budget poll.** Polling a window between 50-60% assumes
+- **No context-budget poll.** Polling a window between 40-52% assumes
   someone is there to answer (see `~/.praxis/context-budget.md`); nobody
   is. Away mode replaces that poll with an automatic save-and-continue at
   the next clean point: save to Engram, save the task document, then keep

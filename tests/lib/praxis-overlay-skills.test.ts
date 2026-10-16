@@ -104,11 +104,12 @@ describe('praxis-command-handoff', () => {
 });
 
 describe('praxis-context-guard', () => {
-  it('documents the 50-60% poll window and the native question tool', async () => {
+  it('documents the 40-52% poll window (the guard ladder) and the native question tool', async () => {
     const content = await readSkill('praxis-context-guard');
     expect(content).toContain('# Praxis-ai — Context Budget');
-    expect(content).toContain('50%');
-    expect(content).toContain('60%');
+    expect(content).toContain('## Poll window (40-52%)');
+    expect(content).not.toContain('50-60%');
+    expect(content).not.toContain('60%');
     expect(content).toContain('AskUserQuestion');
   });
 
@@ -174,6 +175,24 @@ describe('praxis-context-guard', () => {
     expect(content).toContain('soft threshold (40%)');
     expect(content).toContain('hard cap (52%)');
     expect(content).toContain('native auto-compact (58%)');
+  });
+
+  it('carries compact instructions, the /clear rule and the cache-warmth note', async () => {
+    const content = flatten(await readSkill('praxis-context-guard'));
+    expect(content).toContain('## Compact instructions');
+    for (const keyword of ['decisions', 'owner rules', 'pending owner asks', 'wake chain', 'handoff']) {
+      expect(content).toContain(keyword);
+    }
+    expect(content).toContain('unrelated task');
+    expect(content).toContain('`/clear`');
+    expect(content).toContain('cache is warm');
+  });
+
+  it('stays well under the 5K-token budget kept for re-injected skills after compaction', async () => {
+    const content = await readSkill('praxis-context-guard');
+    // ~4 bytes per token: 16 KB keeps a wide margin under 5K tokens, so the
+    // truncation that keeps only the start of a skill never cuts the protocol.
+    expect(Buffer.byteLength(content, 'utf8')).toBeLessThan(16_000);
   });
 
   it('requires a memory sweep to Engram before compacting, leaving only active work and pointers', async () => {

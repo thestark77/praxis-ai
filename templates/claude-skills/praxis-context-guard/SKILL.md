@@ -1,6 +1,6 @@
 ---
 name: praxis-context-guard
-description: Use when context usage is at 50-60%, when asked to save progress before /compact, or when a user turn starts with `[IRIS CONTEXT GUARD]` (prepare-compact or restore handoff=<path>).
+description: Use when context usage reaches 40% (the soft threshold; poll window 40-52%), when asked to save progress before /compact or /clear, or when a user turn starts with `[IRIS CONTEXT GUARD]` (prepare-compact or restore handoff=<path>).
 invocation: contextual
 praxis-native: true
 ---
@@ -11,37 +11,64 @@ Context is a binding resource (P4). Instead of a single hard warning
 threshold, praxis-ai polls the user at a clean point inside a window and
 defines a small automated protocol for harness controllers that need to force a handoff.
 
-## Poll window (50-60%)
+## Guard thresholds (one ladder)
 
-When context usage is between 50% and 60% of the effective window, at the
-next CLEAN point — between tasks, or at a resumable checkpoint; never
-mid-task, never mid-edit, and never while a tool call or a subagent result is
-pending — ask the user whether to save progress and pause for a compaction.
+Praxis and the Iris guard share one ladder. The Iris installer owns the
+defaults (`IRIS_CONTEXT_GUARD_THRESHOLD_PCT`, `IRIS_CONTEXT_GUARD_HARD_CAP_PCT`,
+`IRIS_CONTEXT_GUARD_AUTOCOMPACT_PCT`); this skill quotes them.
+
+- soft threshold (40%): the guard starts the handoff protocol once the
+  session is idle at a clean point; without a controller, the first poll;
+- hard cap (52%): the guard starts it even while subagents or background
+  tasks run (list each by id in the handoff); without a controller, the
+  second and last poll;
+- native auto-compact (58%): Claude Code's own fallback
+  (`CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`, which can only lower its default); the
+  guard or the poll should have acted well before it.
+
+## Poll window (40-52%)
+
+The manual path for setups without a controller, on the same ladder. When
+context usage is between 40% and 52% of the effective
+window, at the next CLEAN point — between tasks, or at a resumable
+checkpoint; never mid-task, never mid-edit, and never while a tool call or a
+subagent result is pending — ask the user whether to save progress and pause
+for a compaction.
 
 - Use the native question tool where one exists (`AskUserQuestion` in Claude
   Code); elsewhere, ask as a plain-text question and wait for the answer.
 - Ask at most twice per session phase: once at the first clean point inside
-  50-60%, and, if declined, once more at the first clean point past 60%.
+  40-52%, and, if declined, once more at the first clean point past 52%.
   After a second decline, do not ask again — the user will ask when ready.
   A later compaction resets the cycle, so a fresh crossing gets its own two
   chances.
-- If usage already exceeds 60% by the time the first clean point is reached,
-  that first ask counts as the past-60% ask (not an extra one) — do not skip
+- If usage already exceeds 52% by the time the first clean point is reached,
+  that first ask counts as the past-52% ask (not an extra one) — do not skip
   it just because the window was missed while a task was in flight.
 
-## Guard thresholds (Iris reference controller)
+## Compact instructions
 
-When an automated controller runs (Iris), it layers three thresholds, in
-increasing order:
+Native auto-compact and a bare `/compact` summarize with no focus unless the
+always-loaded instructions give one. When compacting (by a guard, by hand or
+natively), keep: decisions and their why, owner rules and corrections,
+pending owner asks and approvals, open task IDs, worktrees and branches,
+running subagents and background tasks, the wake chain (scheduled wakeups,
+`/loop`, cron tasks), the handoff path and every file modified this session.
+Drop raw tool output and logs. A manual `/compact <focus>` names the same
+items.
 
-- soft threshold (40%): the guard starts the handoff protocol once the
-  session is idle at a clean point (configurable in the controller);
-- hard cap (52%): the guard starts it even while subagents or background
-  tasks run; list each by id in the handoff;
-- native auto-compact (58%): Claude Code's own fallback; the guard should
-  have acted well before it.
+## /clear or /compact
 
-The user poll below is the manual path for setups without a controller.
+- When the user switches to an unrelated task, suggest `/rename` then
+  `/clear` instead of `/compact`: a fresh session carries no stale context,
+  and the state lives in Engram, the task documents and the handoff.
+- Suggest a manual `/compact` while the prompt cache is warm (right after a
+  turn, within the cache TTL: 1 hour on a subscription, 5 minutes on API
+  credits). A compaction is a full request over the history; after a long
+  idle it reprocesses everything at full price, so prefer saving state and
+  `/clear` then.
+- An edit to `CLAUDE.md` reaches a running session only after `/clear` or
+  `/compact`.
 
 ## Memory sweep (before any compaction)
 
@@ -167,6 +194,6 @@ path.
 ## CLI surface
 
 `praxis context-usage` surfaces the same poll window from recorded samples:
-no notice below 50%, a poll-window notice between 50% and 60% inclusive, and
-a past-window notice above 60%. See `presets/balanced.md` for how this
+no notice below 40%, a poll-window notice between 40% and 52% inclusive, and
+a past-window notice above 52%. See `presets/balanced.md` for how this
 window fits into the default preset.

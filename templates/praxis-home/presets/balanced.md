@@ -11,7 +11,7 @@ sprint-mode classifier from `phase-flow.md` enabled.
   active; retry cap and spec-diff critic apply.
 - **F3 Review**: human gate; the user reviews the diff before merge.
 
-Context budget: poll the user between 50% and 60% of effective context
+Context budget: poll the user between 40% and 52% of effective context
 capacity, not at a single fixed threshold (skill `praxis-context-guard`).
 Firewall: full default deny list and AST hook, plus the anticipatory pauses in
 `irreversibility-firewall.md`.

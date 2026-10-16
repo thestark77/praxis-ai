@@ -10,13 +10,15 @@ interface ContextUsageOpts {
   json?: boolean;
 }
 
-// Praxis-ai balanced preset polls the user between 50% and 60% of effective
-// context capacity at the next clean point (see templates/praxis-home/context-budget.md).
+// Praxis-ai balanced preset polls the user between 40% and 52% of effective
+// context capacity at the next clean point: the same ladder the Iris context
+// guard uses (soft threshold 40%, hard cap 52%, native auto-compact 58%; see
+// templates/claude-skills/praxis-context-guard/SKILL.md).
 // Below the window: no notice. Inside it: poll-window notice. Above it: a
 // past-window notice — unless the user already declined twice, poll at the
 // next clean point and do not start new work before asking.
-const POLL_WINDOW_START_PCT = 50;
-const POLL_WINDOW_END_PCT = 60;
+const POLL_WINDOW_START_PCT = 40;
+const POLL_WINDOW_END_PCT = 52;
 const PAST_WINDOW_NOTICE =
   `Past the poll window (>${POLL_WINDOW_END_PCT}%) — unless the user already ` +
   'declined twice, poll at the next clean point and do not start new work before asking.';

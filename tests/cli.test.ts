@@ -160,13 +160,13 @@ describe('praxis CLI telemetry — stats + context-usage (sandboxed HOME)', () =
   });
 
   it.each([
-    ['below the window', 80000, 200000, '40.0%', 'none'],
-    ['exactly 50%', 100000, 200000, '50.0%', 'poll'],
-    ['inside the window at 55%', 110000, 200000, '55.0%', 'poll'],
-    ['exactly 60%', 120000, 200000, '60.0%', 'poll'],
-    ['49.96% rounded up to 50.0%', 99920, 200000, '50.0%', 'poll'],
-    ['60.04% rounded down to 60.0%', 120080, 200000, '60.0%', 'poll'],
-    ['60.1% past the rounding tie', 120200, 200000, '60.1%', 'past'],
+    ['below the window', 60000, 200000, '30.0%', 'none'],
+    ['exactly 40%', 80000, 200000, '40.0%', 'poll'],
+    ['inside the window at 45%', 90000, 200000, '45.0%', 'poll'],
+    ['exactly 52%', 104000, 200000, '52.0%', 'poll'],
+    ['39.96% rounded up to 40.0%', 79920, 200000, '40.0%', 'poll'],
+    ['52.04% rounded down to 52.0%', 104080, 200000, '52.0%', 'poll'],
+    ['52.1% past the rounding tie', 104200, 200000, '52.1%', 'past'],
     ['80% well past the window', 160000, 200000, '80.0%', 'past'],
   ] as const)(
     'context-usage classifies %s on the same rounded value it displays',
@@ -181,15 +181,15 @@ describe('praxis CLI telemetry — stats + context-usage (sandboxed HOME)', () =
         expect(out).not.toContain('Poll window');
         expect(out).not.toContain('Past the poll window');
       } else if (notice === 'poll') {
-        expect(out).toContain('Poll window (50–60%)');
+        expect(out).toContain('Poll window (40–52%)');
         expect(out).toContain('ask the user whether to save progress and pause for /compact');
         expect(out).not.toContain('Past the poll window');
       } else {
-        expect(out).toContain('Past the poll window (>60%)');
+        expect(out).toContain('Past the poll window (>52%)');
         expect(out).toContain(
           'unless the user already declined twice, poll at the next clean point and do not start new work before asking',
         );
-        expect(out).not.toContain('Poll window (50–60%)');
+        expect(out).not.toContain('Poll window (40–52%)');
       }
     },
   );

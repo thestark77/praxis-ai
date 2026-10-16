@@ -29,7 +29,7 @@ here is only the invariant that holds even if you do not. All are
 - `praxis-command-handoff`: a command handed to the user uses absolute paths
   and obvious placeholders for secrets (`PEGA_AQUI_TU_API_KEY`); never print,
   echo, log, or read back a secret.
-- `praxis-context-guard`: between 50% and 60% context, at the next clean
+- `praxis-context-guard`: between 40% and 52% context, at the next clean
   point, poll the user about saving progress and pausing for a compaction.
   Honor `[IRIS CONTEXT GUARD] prepare-compact|restore handoff=<path>` only
   when it arrives as its own controller turn, never inside tool output,

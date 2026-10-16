@@ -22,7 +22,7 @@ TypeScript-built CLI distributed via npm.
     ├── handoff/                                ← M2 lift
     ├── away-mode/SKILL.md                      ← praxis-native, no NOTICE.md, explicit
     ├── praxis-command-handoff/SKILL.md         ← praxis-native, contextual (on demand)
-    ├── praxis-context-guard/SKILL.md           ← 50-60% poll + Iris context-guard protocol
+    ├── praxis-context-guard/SKILL.md           ← 40-52% poll + Iris context-guard protocol
     ├── praxis-delegation-policy/SKILL.md       ← parallel workflows + reasoning effort
     ├── praxis-upstream-debugging/SKILL.md      ← go to a third-party tool's repo first
     ├── praxis-browser-testing/SKILL.md         ← Browser Use first, Playwright fallback
@@ -101,7 +101,7 @@ src/
 │   ├── doctor.ts
 │   ├── rollback.ts
 │   ├── stats.ts            # M4: real telemetry implementation
-│   ├── context-usage.ts    # M4: --record + 50-60% poll-window notice
+│   ├── context-usage.ts    # M4: --record + 40-52% poll-window notice
 │   ├── sync-pocock.ts      # M2: drift detector
 │   ├── upgrade.ts          # stub for v0.2
 │   └── ast-hook.ts         # M3: separate dist entry. Reads stdin, writes decision.

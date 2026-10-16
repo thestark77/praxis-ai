@@ -61,9 +61,10 @@ detected from the lists in `phase-flow.md`.
 
 ### Context-budget warnings
 
-Poll the user between 50% and 60% of effective context capacity (typically
-~20k-24k tokens for common Claude Code session shapes) instead of warning at
-a single fixed threshold. See the `praxis-context-guard` skill for the full poll-window
+Poll the user between 40% and 52% of effective context capacity (80k-104k
+tokens of a 200k window), the same ladder as the Iris context guard (soft 40%,
+hard cap 52%, native auto-compact 58%), instead of warning at a single fixed
+threshold. See the `praxis-context-guard` skill for the full poll-window
 and context-guard protocol.
 
 ### Firewall

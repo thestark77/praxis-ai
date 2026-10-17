@@ -6,8 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
-  ci:
+  test:
+    name: test (${{ matrix.os }}, node ${{ matrix.node-version }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -91,3 +95,22 @@ jobs:
         # CI annotations.
         run: ./scripts/bench-hook.sh 30
         shell: bash
+
+  # The one check branch protection should require (SEB-119). It stays stable
+  # while the matrix above grows or shrinks.
+  ci:
+    name: ci
+    if: always()
+    needs: [test]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: All required jobs passed
+        env:
+          RESULTS: ${{ toJSON(needs.*.result) }}
+        run: |
+          echo "job results: $RESULTS"
+          if ! jq -e 'all(. == "success")' <<<"$RESULTS" >/dev/null; then
+            echo "::error::at least one required job did not succeed"
+            exit 1
+          fi

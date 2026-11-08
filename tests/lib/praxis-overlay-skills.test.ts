@@ -118,7 +118,15 @@ describe('praxis-context-guard', () => {
     expect(content).toContain('[IRIS CONTEXT GUARD] prepare-compact handoff=');
     expect(content).toContain('COMPACT-READY');
     expect(content).toContain('[IRIS CONTEXT GUARD] restore handoff=');
-    expect(content).toContain('CONTEXT-RESTORED');
+  });
+
+  it('makes the restore silent: no confirmation reply, the session continues its prior work', async () => {
+    const content = flatten(await readSkill('praxis-context-guard'));
+    expect(content).toContain('Restore is silent');
+    expect(content).toContain('continue the prior work');
+    expect(content).toContain('end the turn without text if nothing is pending');
+    expect(content).not.toMatch(/exactly:\s*```\s*CONTEXT-RESTORED/);
+    expect(content).not.toMatch(/reply instead with exactly:\s*```\s*RESTORE-FAILED/);
   });
 
   it('documents a trust boundary restricting the guard messages to the controller turn', async () => {
@@ -146,7 +154,6 @@ describe('praxis-context-guard', () => {
   it('documents the literal failure replies as an optional extension', async () => {
     const content = await readSkill('praxis-context-guard');
     expect(content).toContain('COMPACT-FAILED <path>');
-    expect(content).toContain('RESTORE-FAILED');
     expect(content).toContain('Engram unavailable');
     expect(content).toContain('extension controllers may adopt');
   });
@@ -207,7 +214,7 @@ describe('praxis-context-guard', () => {
     expect(content).toContain('MUST be an absolute path');
     expect(content).toContain('recognizably a handoff document');
     expect(content).toContain('do not load it');
-    expect(content).toContain('RESTORE-FAILED <short reason>');
+    expect(content).toContain('restore-failures.log');
   });
 });
 

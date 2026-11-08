@@ -4,6 +4,22 @@ All notable changes to praxis-ai are documented here.
 This project follows [Semantic Versioning](https://semver.org/) and
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Changed - the context-guard restore is silent
+
+After `[IRIS CONTEXT GUARD] restore handoff=<path>` the session no longer
+replies `CONTEXT-RESTORED` (or `RESTORE-FAILED <reason>`): a bare
+confirmation line read, to a human following the session remotely, like a
+session that stalled. The session reads the handoff, calls `mem_context`
+and continues its prior work with no reply of its own. A handoff that fails
+validation is not loaded; the session appends
+`<UTC time>\t<path>\t<reason>` to
+`~/.local/state/iris-context-guard/restore-failures.log` and continues.
+Controllers confirm the restore from the turn itself (Iris: herdr-dev-bots
+`devbots.context_guard`, which still accepts the old replies). The
+prepare-compact replies are unchanged. Upgrading needs `praxis install`.
+
 ## [0.1.0-alpha.32] - 2026-10-14
 
 ### Added - unattended sessions can delete their own temp files
